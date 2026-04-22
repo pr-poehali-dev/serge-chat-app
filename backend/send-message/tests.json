@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "Send message",
+      "method": "POST",
+      "path": "/",
+      "body": {"chat_id": 1, "text": "Тест сообщение"},
+      "expectedStatus": 200,
+      "expectedBody": {"out": true},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Missing text returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {"chat_id": 1},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
+    }
+  ]
+}

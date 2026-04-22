@@ -1,48 +1,34 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
-const CONTACTS = [
-  { id: 1, name: "Алиса Морозова", avatar: "АМ", online: true, lastMsg: "Окей, увидимся вечером 🔥", time: "14:32", unread: 3, color: "#a855f7" },
-  { id: 2, name: "Дмитрий Ковалёв", avatar: "ДК", online: true, lastMsg: "Отправил файлы на почту", time: "13:15", unread: 0, color: "#ec4899" },
-  { id: 3, name: "Команда Серж 🚀", avatar: "КС", online: false, lastMsg: "Михаил: Встреча в 15:00", time: "12:00", unread: 12, color: "#38bdf8", isGroup: true },
-  { id: 4, name: "Мария Петрова", avatar: "МП", online: false, lastMsg: "Спасибо большое!", time: "Вт", unread: 0, color: "#34d399" },
-  { id: 5, name: "Иван Смирнов", avatar: "ИС", online: true, lastMsg: "Когда будет готово?", time: "Пн", unread: 1, color: "#f59e0b" },
-  { id: 6, name: "Дизайн отдел", avatar: "ДО", online: false, lastMsg: "Новые макеты загружены", time: "Вс", unread: 0, color: "#6366f1", isGroup: true },
-];
+const API_CHATS = "https://functions.poehali.dev/02006132-fa5e-4fd7-9d61-402c7deef46a";
+const API_SEND = "https://functions.poehali.dev/a624a32e-0a00-444a-84ab-7edd26fc13a5";
 
-const MESSAGES: Record<number, { id: number; text: string; out: boolean; time: string; read?: boolean }[]> = {
-  1: [
-    { id: 1, text: "Привет! Как дела с проектом? 👋", out: false, time: "14:20" },
-    { id: 2, text: "Всё идёт по плану, закончим к пятнице", out: true, time: "14:22", read: true },
-    { id: 3, text: "Отлично! Можешь прислать превью?", out: false, time: "14:25" },
-    { id: 4, text: "Конечно, сейчас пришлю", out: true, time: "14:28", read: true },
-    { id: 5, text: "Окей, увидимся вечером 🔥", out: false, time: "14:32" },
-  ],
-  2: [
-    { id: 1, text: "Дима, привет! Как по задаче?", out: true, time: "13:00", read: true },
-    { id: 2, text: "Сделал, отправил файлы на почту", out: false, time: "13:15" },
-  ],
-  3: [
-    { id: 1, text: "Всем привет! Напоминаю — встреча сегодня", out: false, time: "11:45" },
-    { id: 2, text: "Подтверждаю участие ✅", out: true, time: "11:50", read: true },
-    { id: 3, text: "Михаил: Встреча в 15:00", out: false, time: "12:00" },
-  ],
-  4: [
-    { id: 1, text: "Маша, отправил документы", out: true, time: "Вт 10:00", read: true },
-    { id: 2, text: "Спасибо большое!", out: false, time: "Вт 10:05" },
-  ],
-  5: [
-    { id: 1, text: "Привет! Когда будет готово?", out: false, time: "Пн 09:30" },
-  ],
-  6: [
-    { id: 1, text: "Новые макеты загружены в облако", out: false, time: "Вс 18:00" },
-  ],
-};
+interface Chat {
+  id: number;
+  name: string;
+  isGroup: boolean;
+  color: string;
+  lastMsg: string;
+  time: string;
+  unread: number;
+  online: boolean;
+  avatar: string;
+}
+
+interface Message {
+  id: number;
+  text: string;
+  out: boolean;
+  read: boolean;
+  time: string;
+  sender_id: number;
+}
 
 type Tab = "chats" | "contacts" | "notifications" | "gallery" | "search" | "profile";
 
 const NOTIFICATIONS = [
-  { id: 1, icon: "MessageCircle", text: "Алиса прислала 3 новых сообщения", time: "14:32", color: "#a855f7" },
+  { id: 1, icon: "MessageCircle", text: "Алиса прислала 3 новых сообщения", time: "сейчас", color: "#a855f7" },
   { id: 2, icon: "Users", text: "Дмитрий добавил вас в группу «Проект Альфа»", time: "13:00", color: "#38bdf8" },
   { id: 3, icon: "Heart", text: "Мария отреагировала на ваше сообщение", time: "Вт", color: "#ec4899" },
   { id: 4, icon: "Shield", text: "Сквозное шифрование активно для всех чатов 🔒", time: "Вс", color: "#34d399" },
@@ -62,47 +48,107 @@ const GALLERY_ITEMS = [
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<Tab>("chats");
-  const [activeChatId, setActiveChatId] = useState<number | null>(1);
+  const [activeChatId, setActiveChatId] = useState<number | null>(null);
   const [inputText, setInputText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [messages, setMessages] = useState(MESSAGES);
   const [showEncryptBadge, setShowEncryptBadge] = useState(true);
 
-  const activeChat = CONTACTS.find((c) => c.id === activeChatId);
-  const chatMessages = activeChatId ? messages[activeChatId] || [] : [];
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loadingChats, setLoadingChats] = useState(true);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  const sendMessage = () => {
-    if (!inputText.trim() || !activeChatId) return;
-    const newMsg = {
-      id: Date.now(),
-      text: inputText,
-      out: true,
-      time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
-      read: false,
-    };
-    setMessages((prev) => ({
-      ...prev,
-      [activeChatId]: [...(prev[activeChatId] || []), newMsg],
-    }));
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const activeChat = chats.find((c) => c.id === activeChatId);
+
+  // Load chats
+  useEffect(() => {
+    setLoadingChats(true);
+    fetch(API_CHATS)
+      .then((r) => r.json())
+      .then((data) => {
+        setChats(data.chats || []);
+        if (data.chats?.length > 0 && !activeChatId) {
+          setActiveChatId(data.chats[0].id);
+        }
+      })
+      .finally(() => setLoadingChats(false));
+  }, []);
+
+  // Load messages when chat changes
+  useEffect(() => {
+    if (!activeChatId) return;
+    setLoadingMsgs(true);
+    setMessages([]);
+    fetch(`${API_CHATS}?action=messages&chat_id=${activeChatId}`)
+      .then((r) => r.json())
+      .then((data) => setMessages(data.messages || []))
+      .finally(() => setLoadingMsgs(false));
+  }, [activeChatId]);
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const sendMessage = async () => {
+    if (!inputText.trim() || !activeChatId || sending) return;
+    const text = inputText.trim();
     setInputText("");
+    setSending(true);
+
+    // Optimistic update
+    const optimistic: Message = {
+      id: Date.now(),
+      text,
+      out: true,
+      read: false,
+      time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      sender_id: 1,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+
+    try {
+      const res = await fetch(API_SEND, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: activeChatId, text }),
+      });
+      const data = await res.json();
+      // Replace optimistic with real
+      setMessages((prev) =>
+        prev.map((m) => (m.id === optimistic.id ? { ...data } : m))
+      );
+      // Update chat last message
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === activeChatId
+            ? { ...c, lastMsg: text, time: data.time }
+            : c
+        )
+      );
+    } finally {
+      setSending(false);
+    }
   };
 
-  const filteredContacts = CONTACTS.filter((c) =>
+  const filteredChats = chats.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const tabs: { id: Tab; icon: string; label: string; badge?: number }[] = [
-    { id: "chats", icon: "MessageCircle", label: "Чаты", badge: 16 },
-    { id: "contacts", icon: "Users", label: "Контакты" },
-    { id: "notifications", icon: "Bell", label: "Уведомления", badge: 4 },
-    { id: "gallery", icon: "Image", label: "Галерея" },
-    { id: "search", icon: "Search", label: "Поиск" },
-    { id: "profile", icon: "User", label: "Профиль" },
+  const tabs: { id: Tab; icon: string; badge?: number }[] = [
+    { id: "chats", icon: "MessageCircle", badge: chats.reduce((s, c) => s + c.unread, 0) || undefined },
+    { id: "contacts", icon: "Users" },
+    { id: "notifications", icon: "Bell", badge: 4 },
+    { id: "gallery", icon: "Image" },
+    { id: "search", icon: "Search" },
+    { id: "profile", icon: "User" },
   ];
 
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-background font-golos">
-      {/* Ambient orbs */}
       <div className="orb orb-1" />
       <div className="orb orb-2" />
       <div className="orb orb-3" />
@@ -152,11 +198,11 @@ export default function Index() {
                 }`}
               >
                 <Icon name={tab.icon} size={16} />
-                {tab.badge && (
+                {tab.badge ? (
                   <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full gradient-btn text-[9px] font-bold text-white px-1">
                     {tab.badge}
                   </span>
-                )}
+                ) : null}
               </button>
             ))}
           </nav>
@@ -164,54 +210,68 @@ export default function Index() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-3 pb-4">
 
+            {/* CHATS */}
             {activeTab === "chats" && (
               <div className="space-y-1">
-                {filteredContacts.map((contact, i) => (
-                  <button
-                    key={contact.id}
-                    onClick={() => { setActiveChatId(contact.id); }}
-                    className={`w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all ${
-                      activeChatId === contact.id
-                        ? "bg-white/[0.08] border border-white/[0.08]"
-                        : "hover:bg-white/[0.04]"
-                    }`}
-                    style={{ animationDelay: `${i * 40}ms` }}
-                  >
-                    <div className="relative shrink-0">
-                      <div
-                        className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white shadow-lg"
-                        style={{ background: `linear-gradient(135deg, ${contact.color}cc, ${contact.color}66)`, border: `1px solid ${contact.color}33` }}
-                      >
-                        {contact.avatar}
+                {loadingChats ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 px-3 py-3 rounded-2xl">
+                      <div className="h-11 w-11 rounded-2xl bg-white/[0.06] animate-pulse shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 w-2/3 rounded-full bg-white/[0.06] animate-pulse" />
+                        <div className="h-2.5 w-1/2 rounded-full bg-white/[0.04] animate-pulse" />
                       </div>
-                      {contact.online && (
-                        <span className="online-pulse absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-background" />
-                      )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-white/90 truncate">{contact.name}</span>
-                        <span className="text-[11px] text-white/30 ml-2 shrink-0">{contact.time}</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-xs text-white/40 truncate">{contact.lastMsg}</span>
-                        {contact.unread > 0 && (
-                          <span className="ml-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full gradient-btn text-[10px] font-bold text-white px-1">
-                            {contact.unread}
-                          </span>
+                  ))
+                ) : (
+                  filteredChats.map((chat, i) => (
+                    <button
+                      key={chat.id}
+                      onClick={() => setActiveChatId(chat.id)}
+                      className={`w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all animate-fade-in ${
+                        activeChatId === chat.id
+                          ? "bg-white/[0.08] border border-white/[0.08]"
+                          : "hover:bg-white/[0.04]"
+                      }`}
+                      style={{ animationDelay: `${i * 40}ms` }}
+                    >
+                      <div className="relative shrink-0">
+                        <div
+                          className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white shadow-lg"
+                          style={{ background: `linear-gradient(135deg, ${chat.color}cc, ${chat.color}66)`, border: `1px solid ${chat.color}33` }}
+                        >
+                          {chat.avatar}
+                        </div>
+                        {chat.online && !chat.isGroup && (
+                          <span className="online-pulse absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-background" />
                         )}
                       </div>
-                    </div>
-                  </button>
-                ))}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-white/90 truncate">{chat.name}</span>
+                          <span className="text-[11px] text-white/30 ml-2 shrink-0">{chat.time}</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <span className="text-xs text-white/40 truncate">{chat.lastMsg}</span>
+                          {chat.unread > 0 && (
+                            <span className="ml-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full gradient-btn text-[10px] font-bold text-white px-1">
+                              {chat.unread}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
             )}
 
+            {/* CONTACTS */}
             {activeTab === "contacts" && (
               <div className="animate-fade-in">
-                <p className="text-xs text-white/30 font-medium mb-3 px-1">КОНТАКТЫ · {CONTACTS.length}</p>
+                <p className="text-xs text-white/30 font-medium mb-3 px-1">КОНТАКТЫ · {chats.length}</p>
                 <div className="space-y-1">
-                  {CONTACTS.map((c) => (
+                  {chats.map((c) => (
                     <div key={c.id} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/[0.04] transition-all group">
                       <div
                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-bold text-white"
@@ -239,6 +299,7 @@ export default function Index() {
               </div>
             )}
 
+            {/* NOTIFICATIONS */}
             {activeTab === "notifications" && (
               <div className="animate-fade-in space-y-2">
                 <p className="text-xs text-white/30 font-medium mb-3 px-1">УВЕДОМЛЕНИЯ</p>
@@ -259,6 +320,7 @@ export default function Index() {
               </div>
             )}
 
+            {/* GALLERY */}
             {activeTab === "gallery" && (
               <div className="animate-fade-in">
                 <div className="flex items-center justify-between mb-3 px-1">
@@ -285,6 +347,7 @@ export default function Index() {
               </div>
             )}
 
+            {/* SEARCH */}
             {activeTab === "search" && (
               <div className="animate-fade-in">
                 <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-3 mb-4">
@@ -295,15 +358,8 @@ export default function Index() {
                     autoFocus
                   />
                 </div>
-                <p className="text-xs text-white/25 px-1 mb-3">НЕДАВНИЕ ЗАПРОСЫ</p>
-                {["Алиса", "Команда Серж", "встреча"].map((q) => (
-                  <div key={q} className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-white/[0.04] cursor-pointer transition-all">
-                    <Icon name="Clock" size={14} className="text-white/25" />
-                    <span className="text-sm text-white/50">{q}</span>
-                  </div>
-                ))}
-                <p className="text-xs text-white/25 px-1 mt-4 mb-3">РЕКОМЕНДАЦИИ</p>
-                {CONTACTS.slice(0, 3).map((c) => (
+                <p className="text-xs text-white/25 px-1 mb-3">РЕКОМЕНДАЦИИ</p>
+                {chats.slice(0, 4).map((c) => (
                   <div
                     key={c.id}
                     className="flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-white/[0.04] cursor-pointer transition-all"
@@ -321,6 +377,7 @@ export default function Index() {
               </div>
             )}
 
+            {/* PROFILE */}
             {activeTab === "profile" && (
               <div className="animate-fade-in">
                 <div className="flex flex-col items-center pt-2 pb-5">
@@ -333,7 +390,7 @@ export default function Index() {
                     </button>
                   </div>
                   <h2 className="text-base font-bold text-white/90">Ваше Имя</h2>
-                  <p className="text-xs text-white/35 mt-0.5">@username</p>
+                  <p className="text-xs text-white/35 mt-0.5">@me</p>
                   <div className="mt-2 flex items-center gap-1.5 rounded-full bg-emerald-400/10 border border-emerald-400/20 px-3 py-1">
                     <Icon name="Shield" size={12} className="text-emerald-400" />
                     <span className="text-[11px] text-emerald-400 font-medium">E2E шифрование активно</span>
@@ -366,7 +423,7 @@ export default function Index() {
       <main className="relative z-10 flex flex-1 flex-col">
         {activeChat ? (
           <>
-            {/* Chat header */}
+            {/* Header */}
             <header className="glass-strong border-b border-white/[0.06] px-6 py-4">
               <div className="flex items-center gap-4">
                 <div className="relative">
@@ -376,14 +433,14 @@ export default function Index() {
                   >
                     {activeChat.avatar}
                   </div>
-                  {activeChat.online && (
+                  {activeChat.online && !activeChat.isGroup && (
                     <span className="online-pulse absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-background" />
                   )}
                 </div>
                 <div>
                   <h2 className="font-bold text-white/95">{activeChat.name}</h2>
                   <p className="text-xs text-white/35">
-                    {activeChat.isGroup ? "групповой чат · 5 участников" : activeChat.online ? "в сети" : "был(а) недавно"}
+                    {activeChat.isGroup ? "групповой чат" : activeChat.online ? "в сети" : "был(а) недавно"}
                   </p>
                 </div>
 
@@ -398,16 +455,12 @@ export default function Index() {
                 )}
 
                 <div className="ml-auto flex items-center gap-2">
-                  {[
-                    { icon: "Phone" },
-                    { icon: "Video" },
-                    { icon: "MoreVertical" },
-                  ].map((btn) => (
+                  {["Phone", "Video", "MoreVertical"].map((icon) => (
                     <button
-                      key={btn.icon}
+                      key={icon}
                       className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
                     >
-                      <Icon name={btn.icon} size={16} />
+                      <Icon name={icon} size={16} />
                     </button>
                   ))}
                 </div>
@@ -416,33 +469,48 @@ export default function Index() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
-              {chatMessages.map((msg, i) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.out ? "justify-end" : "justify-start"} animate-fade-in`}
-                  style={{ animationDelay: `${i * 30}ms` }}
-                >
-                  {!msg.out && (
-                    <div
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white mr-2 self-end mb-1"
-                      style={{ background: `linear-gradient(135deg, ${activeChat.color}cc, ${activeChat.color}55)` }}
-                    >
-                      {activeChat.avatar[0]}
-                    </div>
-                  )}
-                  <div className="max-w-[65%]">
-                    <div className={`px-4 py-2.5 ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-white/85"}`}>
-                      <p className="text-sm leading-relaxed">{msg.text}</p>
-                    </div>
-                    <div className={`flex items-center gap-1 mt-1 px-1 ${msg.out ? "justify-end" : "justify-start"}`}>
-                      <span className="text-[10px] text-white/25">{msg.time}</span>
-                      {msg.out && (
-                        <Icon name={msg.read ? "CheckCheck" : "Check"} size={12} className={msg.read ? "text-purple-400" : "text-white/25"} />
-                      )}
-                    </div>
+              {loadingMsgs ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="flex gap-1.5">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="h-2 w-2 rounded-full bg-purple-400/50 animate-pulse"
+                        style={{ animationDelay: `${i * 150}ms` }}
+                      />
+                    ))}
                   </div>
                 </div>
-              ))}
+              ) : (
+                messages.map((msg, i) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.out ? "justify-end" : "justify-start"} animate-fade-in`}
+                    style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
+                  >
+                    {!msg.out && (
+                      <div
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white mr-2 self-end mb-1"
+                        style={{ background: `linear-gradient(135deg, ${activeChat.color}cc, ${activeChat.color}55)` }}
+                      >
+                        {activeChat.avatar[0]}
+                      </div>
+                    )}
+                    <div className="max-w-[65%]">
+                      <div className={`px-4 py-2.5 ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-white/85"}`}>
+                        <p className="text-sm leading-relaxed">{msg.text}</p>
+                      </div>
+                      <div className={`flex items-center gap-1 mt-1 px-1 ${msg.out ? "justify-end" : "justify-start"}`}>
+                        <span className="text-[10px] text-white/25">{msg.time}</span>
+                        {msg.out && (
+                          <Icon name={msg.read ? "CheckCheck" : "Check"} size={12} className={msg.read ? "text-purple-400" : "text-white/25"} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}
@@ -479,10 +547,10 @@ export default function Index() {
 
                 <button
                   onClick={sendMessage}
-                  disabled={!inputText.trim()}
+                  disabled={!inputText.trim() || sending}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl gradient-btn text-white shadow-lg shadow-purple-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:-translate-y-0.5"
                 >
-                  <Icon name="Send" size={16} />
+                  <Icon name={sending ? "Loader" : "Send"} size={16} className={sending ? "animate-spin" : ""} />
                 </button>
               </div>
             </div>
