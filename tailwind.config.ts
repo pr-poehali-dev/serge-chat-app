@@ -87,6 +87,10 @@ export default {
 					from: { opacity: '0', transform: 'scale(0.85) translateY(10px)' },
 					to: { opacity: '1', transform: 'scale(1) translateY(0)' }
 				},
+				'slide-up': {
+					from: { opacity: '0', transform: 'translateY(60px)' },
+					to: { opacity: '1', transform: 'translateY(0)' }
+				},
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
@@ -95,6 +99,7 @@ export default {
 				'slide-right': 'slide-right 0.25s ease-out',
 				'scale-in': 'scale-in 0.2s ease-out',
 				'msg-pop': 'msg-pop 0.25s cubic-bezier(0.34,1.56,0.64,1)',
+				'slide-up': 'slide-up 0.4s cubic-bezier(0.34,1.56,0.64,1)',
 			}
 		}
 	},

@@ -1,6 +1,107 @@
 import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
+// ─── Incoming Call ──────────────────────────────────────────────────────────
+interface IncomingCallProps {
+  caller: { name: string; avatar: string; color: string };
+  isVideo: boolean;
+  onAccept: () => void;
+  onDecline: () => void;
+}
+
+function IncomingCall({ caller, isVideo, onAccept, onDecline }: IncomingCallProps) {
+  const [ring, setRing] = useState(0);
+
+  useEffect(() => {
+    const iv = setInterval(() => setRing((r) => r + 1), 600);
+    return () => clearInterval(iv);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center pb-10 px-4"
+      style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(12px)" }}>
+
+      {/* Card */}
+      <div
+        className="w-full max-w-sm rounded-3xl overflow-hidden animate-slide-up"
+        style={{ background: "linear-gradient(160deg, #1a0d35 0%, #0e1a2e 100%)", border: "1px solid rgba(255,255,255,0.1)" }}
+      >
+        {/* Glow */}
+        <div className="relative h-48 flex flex-col items-center justify-center gap-3 overflow-hidden">
+          <div className="absolute inset-0 opacity-30"
+            style={{ background: `radial-gradient(circle at 50% 60%, ${caller.color} 0%, transparent 70%)` }} />
+
+          {/* Pulsing rings */}
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="absolute rounded-full border border-white/[0.06]"
+              style={{
+                width: `${140 + i * 50}px`,
+                height: `${140 + i * 50}px`,
+                opacity: ring % 3 === i ? 0.4 : 0.08,
+                transition: "opacity 0.3s ease",
+              }} />
+          ))}
+
+          {/* Avatar */}
+          <div
+            className="relative z-10 flex h-20 w-20 items-center justify-center rounded-3xl text-2xl font-black text-white shadow-2xl"
+            style={{
+              background: `linear-gradient(135deg, ${caller.color}cc, ${caller.color}66)`,
+              boxShadow: `0 0 30px ${caller.color}44`,
+            }}
+          >
+            {caller.avatar}
+          </div>
+
+          <div className="relative z-10 text-center">
+            <p className="text-lg font-bold text-white">{caller.name}</p>
+            <p className="text-sm text-white/40 mt-0.5 flex items-center justify-center gap-1.5">
+              {isVideo ? <><Icon name="Video" size={13} />Входящий видеозвонок</> : <><Icon name="Phone" size={13} />Входящий звонок</>}
+            </p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-4 px-6 py-6">
+          {/* Decline */}
+          <button
+            onClick={onDecline}
+            className="flex flex-1 flex-col items-center gap-2 rounded-2xl bg-red-500/15 border border-red-500/30 py-4 text-red-400 hover:bg-red-500/25 transition-all active:scale-95"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500 shadow-lg shadow-red-500/30">
+              <Icon name="PhoneOff" size={22} className="text-white" />
+            </div>
+            <span className="text-xs font-medium">Отклонить</span>
+          </button>
+
+          {/* Message */}
+          <button
+            onClick={onDecline}
+            className="flex flex-1 flex-col items-center gap-2 rounded-2xl bg-white/[0.05] border border-white/[0.08] py-4 text-white/50 hover:bg-white/[0.08] transition-all active:scale-95"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.08]">
+              <Icon name="MessageCircle" size={22} />
+            </div>
+            <span className="text-xs font-medium">Сообщение</span>
+          </button>
+
+          {/* Accept */}
+          <button
+            onClick={onAccept}
+            className="flex flex-1 flex-col items-center gap-2 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 py-4 text-emerald-400 hover:bg-emerald-500/25 transition-all active:scale-95"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/30"
+              style={{ animation: "callRing 1s ease-in-out infinite" }}>
+              <Icon name={isVideo ? "Video" : "Phone"} size={22} className="text-white" />
+            </div>
+            <span className="text-xs font-medium">Принять</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Call Screen ────────────────────────────────────────────────────────────
 interface CallScreenProps {
   chat: { name: string; avatar: string; color: string; isGroup: boolean };
@@ -235,10 +336,25 @@ export default function Index() {
   const [sending, setSending] = useState(false);
 
   const [call, setCall] = useState<{ isVideo: boolean } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{
+    caller: { name: string; avatar: string; color: string };
+    isVideo: boolean;
+  } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
+
+  // Simulate incoming call after chats load
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setIncomingCall({
+        caller: { name: "Алиса Морозова", avatar: "АМ", color: "#a855f7" },
+        isVideo: false,
+      });
+    }, 4000);
+    return () => clearTimeout(t);
+  }, []);
 
   // Load chats
   useEffect(() => {
@@ -760,6 +876,19 @@ export default function Index() {
           </div>
         )}
       </main>
+
+      {/* Incoming call overlay */}
+      {incomingCall && (
+        <IncomingCall
+          caller={incomingCall.caller}
+          isVideo={incomingCall.isVideo}
+          onAccept={() => {
+            setIncomingCall(null);
+            setCall({ isVideo: incomingCall.isVideo });
+          }}
+          onDecline={() => setIncomingCall(null)}
+        />
+      )}
     </div>
   );
 }
