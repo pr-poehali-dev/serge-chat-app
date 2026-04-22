@@ -1,6 +1,181 @@
 import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
+// ─── Call Screen ────────────────────────────────────────────────────────────
+interface CallScreenProps {
+  chat: { name: string; avatar: string; color: string; isGroup: boolean };
+  isVideo: boolean;
+  onEnd: () => void;
+}
+
+const GROUP_PARTICIPANTS = [
+  { name: "Алиса", avatar: "АМ", color: "#a855f7", muted: false },
+  { name: "Дмитрий", avatar: "ДК", color: "#ec4899", muted: true },
+  { name: "Вы", avatar: "ВА", color: "#6366f1", muted: false },
+];
+
+function CallScreen({ chat, isVideo, onEnd }: CallScreenProps) {
+  const [muted, setMuted] = useState(false);
+  const [camOff, setCamOff] = useState(!isVideo);
+  const [speakerOff, setSpeakerOff] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [status, setStatus] = useState<"connecting" | "ringing" | "active">("connecting");
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setStatus("ringing"), 800);
+    const t2 = setTimeout(() => setStatus("active"), 2800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  useEffect(() => {
+    if (status !== "active") return;
+    const iv = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(iv);
+  }, [status]);
+
+  const fmt = (s: number) => {
+    const m = Math.floor(s / 60).toString().padStart(2, "0");
+    const ss = (s % 60).toString().padStart(2, "0");
+    return `${m}:${ss}`;
+  };
+
+  const statusLabel =
+    status === "connecting" ? "Соединение..." :
+    status === "ringing" ? "Вызов..." :
+    fmt(seconds);
+
+  return (
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-between overflow-hidden"
+      style={{ background: "linear-gradient(160deg, #0f0720 0%, #130a2a 40%, #0a1520 100%)" }}>
+
+      {/* Orb bg */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-[500px] w-[500px] rounded-full opacity-20"
+          style={{ background: `radial-gradient(circle, ${chat.color} 0%, transparent 70%)`, filter: "blur(60px)" }} />
+        <div className="absolute bottom-0 left-0 h-64 w-64 rounded-full opacity-10"
+          style={{ background: "radial-gradient(circle, #ec4899 0%, transparent 70%)", filter: "blur(40px)" }} />
+        <div className="absolute bottom-0 right-0 h-64 w-64 rounded-full opacity-10"
+          style={{ background: "radial-gradient(circle, #38bdf8 0%, transparent 70%)", filter: "blur(40px)" }} />
+      </div>
+
+      {/* Header */}
+      <div className="relative z-10 w-full flex items-center justify-between px-6 pt-5">
+        <button onClick={onEnd}
+          className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/[0.08] border border-white/[0.1] text-white/60 hover:text-white transition-all">
+          <Icon name="ChevronDown" size={18} />
+        </button>
+        <span className="text-sm font-medium text-white/40">
+          {isVideo ? "Видеозвонок" : "Голосовой звонок"}
+          {chat.isGroup && " · группа"}
+        </span>
+        <button className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/[0.08] border border-white/[0.1] text-white/60 hover:text-white transition-all">
+          <Icon name="MoreHorizontal" size={18} />
+        </button>
+      </div>
+
+      {/* Main content */}
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center w-full px-6 gap-6">
+        {chat.isGroup ? (
+          /* Group tiles */
+          <div className="grid grid-cols-3 gap-3 w-full max-w-sm">
+            {GROUP_PARTICIPANTS.map((p, i) => (
+              <div key={i} className="flex flex-col items-center gap-2 rounded-2xl bg-white/[0.05] border border-white/[0.07] p-4 animate-fade-in"
+                style={{ animationDelay: `${i * 100}ms` }}>
+                <div className="relative">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl text-base font-bold text-white"
+                    style={{ background: `linear-gradient(135deg, ${p.color}cc, ${p.color}55)`, boxShadow: status === "active" ? `0 0 20px ${p.color}44` : "none" }}>
+                    {p.avatar}
+                  </div>
+                  {p.muted && (
+                    <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500/80 border border-background">
+                      <Icon name="MicOff" size={10} className="text-white" />
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-white/60">{p.name}</span>
+              </div>
+            ))}
+            <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.1] p-4 cursor-pointer hover:border-purple-400/30 transition-all">
+              <Icon name="UserPlus" size={20} className="text-white/30" />
+              <span className="text-[10px] text-white/30">Добавить</span>
+            </div>
+          </div>
+        ) : (
+          /* Personal avatar */
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div
+                className="flex h-28 w-28 items-center justify-center rounded-3xl text-3xl font-black text-white"
+                style={{
+                  background: `linear-gradient(135deg, ${chat.color}cc, ${chat.color}66)`,
+                  boxShadow: status === "active"
+                    ? `0 0 0 0 ${chat.color}00, 0 0 40px ${chat.color}44`
+                    : "none",
+                  animation: status === "ringing" ? "callRing 1.2s ease-in-out infinite" : "none",
+                }}
+              >
+                {chat.avatar}
+              </div>
+              {status === "active" && (
+                <div className="absolute -inset-3 rounded-[2rem] border border-white/[0.08] animate-ping" style={{ animationDuration: "2s" }} />
+              )}
+            </div>
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-white mb-1">{chat.name}</h2>
+              <p className={`text-sm font-medium transition-colors ${status === "active" ? "text-emerald-400" : "text-white/40"}`}>
+                {statusLabel}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {chat.isGroup && (
+          <p className={`text-sm font-medium ${status === "active" ? "text-emerald-400" : "text-white/40"}`}>
+            {statusLabel}
+          </p>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="relative z-10 w-full px-6 pb-10">
+        <div className="flex items-center justify-center gap-4">
+          {/* Mute */}
+          <button onClick={() => setMuted(!muted)}
+            className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-2xl border transition-all ${
+              muted ? "bg-red-500/20 border-red-500/40 text-red-400" : "bg-white/[0.08] border-white/[0.1] text-white/70 hover:text-white"
+            }`}>
+            <Icon name={muted ? "MicOff" : "Mic"} size={22} />
+          </button>
+
+          {/* Camera (only for video) */}
+          {isVideo && (
+            <button onClick={() => setCamOff(!camOff)}
+              className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-2xl border transition-all ${
+                camOff ? "bg-red-500/20 border-red-500/40 text-red-400" : "bg-white/[0.08] border-white/[0.1] text-white/70 hover:text-white"
+              }`}>
+              <Icon name={camOff ? "VideoOff" : "Video"} size={22} />
+            </button>
+          )}
+
+          {/* Speaker */}
+          <button onClick={() => setSpeakerOff(!speakerOff)}
+            className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-2xl border transition-all ${
+              speakerOff ? "bg-red-500/20 border-red-500/40 text-red-400" : "bg-white/[0.08] border-white/[0.1] text-white/70 hover:text-white"
+            }`}>
+            <Icon name={speakerOff ? "VolumeX" : "Volume2"} size={22} />
+          </button>
+
+          {/* End call */}
+          <button onClick={onEnd}
+            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500 hover:bg-red-600 text-white shadow-xl shadow-red-500/30 transition-all hover:scale-105 active:scale-95">
+            <Icon name="PhoneOff" size={26} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const API_CHATS = "https://functions.poehali.dev/02006132-fa5e-4fd7-9d61-402c7deef46a";
 const API_SEND = "https://functions.poehali.dev/a624a32e-0a00-444a-84ab-7edd26fc13a5";
 
@@ -58,6 +233,8 @@ export default function Index() {
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [sending, setSending] = useState(false);
+
+  const [call, setCall] = useState<{ isVideo: boolean } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -421,6 +598,15 @@ export default function Index() {
 
       {/* Chat area */}
       <main className="relative z-10 flex flex-1 flex-col">
+        {/* Call overlay */}
+        {call && activeChat && (
+          <CallScreen
+            chat={activeChat}
+            isVideo={call.isVideo}
+            onEnd={() => setCall(null)}
+          />
+        )}
+
         {activeChat ? (
           <>
             {/* Header */}
@@ -455,14 +641,21 @@ export default function Index() {
                 )}
 
                 <div className="ml-auto flex items-center gap-2">
-                  {["Phone", "Video", "MoreVertical"].map((icon) => (
-                    <button
-                      key={icon}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
-                    >
-                      <Icon name={icon} size={16} />
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => setCall({ isVideo: false })}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+                  >
+                    <Icon name="Phone" size={16} />
+                  </button>
+                  <button
+                    onClick={() => setCall({ isVideo: true })}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+                  >
+                    <Icon name="Video" size={16} />
+                  </button>
+                  <button className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all">
+                    <Icon name="MoreVertical" size={16} />
+                  </button>
                 </div>
               </div>
             </header>

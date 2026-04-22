@@ -185,6 +185,18 @@
   }
 }
 
+@keyframes callRing {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.5);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 0 0 20px rgba(168, 85, 247, 0);
+  }
+}
+
 @keyframes floatOrb {
   0%,
   100% {
