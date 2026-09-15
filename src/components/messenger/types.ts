@@ -34,6 +34,7 @@ export interface Topic {
   id: number;
   name: string;
   color: string;
+  pinned?: boolean;
 }
 
 export interface BotInfo {

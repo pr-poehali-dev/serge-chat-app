@@ -11,8 +11,8 @@ import { Chat, Message, Tab, BotInfo, Topic } from "@/components/messenger/types
 
 const CROCODILE_USERNAME = "crocodile_game_bot";
 
-const API_CHATS = "https://functions.poehali.dev/02006132-fa5e-4fd7-9d61-402c7deef46a";
-const API_SEND = "https://functions.poehali.dev/a624a32e-0a00-444a-84ab-7edd26fc13a5";
+const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
+const API_SEND = "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6";
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<Tab>("chats");
@@ -277,6 +277,16 @@ export default function Index() {
     setActiveTopicId(id);
   };
 
+  const togglePinTopic = (topicId: number) => {
+    if (!activeChatId) return;
+    setGroupTopics((prev) => ({
+      ...prev,
+      [activeChatId]: (prev[activeChatId] || []).map((t) =>
+        t.id === topicId ? { ...t, pinned: !t.pinned } : t
+      ),
+    }));
+  };
+
   const sendBotMessage = () => {
     const hasText = inputText.trim();
     const hasAttachments = attachments.length > 0;
@@ -515,10 +525,15 @@ export default function Index() {
         setInputText={setInputText}
         sendMessage={sendMessage}
         sending={isBotChat ? false : sending}
-        topics={activeChatId ? groupTopics[activeChatId] || [] : []}
+        topics={
+          activeChatId
+            ? [...(groupTopics[activeChatId] || [])].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
+            : []
+        }
         activeTopicId={activeTopicId}
         onSelectTopic={setActiveTopicId}
         onOpenCreateTopic={() => setCreateTopicOpen(true)}
+        onTogglePinTopic={togglePinTopic}
       />
 
       {/* Bot store modal */}

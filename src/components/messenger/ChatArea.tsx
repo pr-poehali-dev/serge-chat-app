@@ -59,6 +59,7 @@ interface ChatAreaProps {
   activeTopicId?: number | null;
   onSelectTopic?: (id: number | null) => void;
   onOpenCreateTopic?: () => void;
+  onTogglePinTopic?: (topicId: number) => void;
 }
 
 export default function ChatArea({
@@ -97,6 +98,7 @@ export default function ChatArea({
   activeTopicId,
   onSelectTopic,
   onOpenCreateTopic,
+  onTogglePinTopic,
 }: ChatAreaProps) {
   return (
     <main className="relative z-10 flex flex-1 flex-col">
@@ -177,19 +179,35 @@ export default function ChatArea({
                 Общий
               </button>
               {topics.map((topic) => (
-                <button
+                <div
                   key={topic.id}
-                  onClick={() => onSelectTopic?.(topic.id)}
-                  className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
+                  className={`group/topic shrink-0 flex items-center gap-1 rounded-xl pl-3 pr-1.5 py-1.5 text-xs font-medium transition-all ${
                     activeTopicId === topic.id
                       ? "text-white"
                       : "text-white/40 hover:text-white/70 hover:bg-white/[0.05]"
                   }`}
                   style={activeTopicId === topic.id ? { background: `${topic.color}33`, border: `1px solid ${topic.color}55` } : undefined}
                 >
-                  <Icon name="Hash" size={12} style={{ color: activeTopicId === topic.id ? topic.color : undefined }} />
-                  {topic.name}
-                </button>
+                  <button
+                    onClick={() => onSelectTopic?.(topic.id)}
+                    className="flex items-center gap-1.5"
+                  >
+                    {topic.pinned && <Icon name="Pin" size={10} className="text-amber-400 fill-amber-400" />}
+                    <Icon name="Hash" size={12} style={{ color: activeTopicId === topic.id ? topic.color : undefined }} />
+                    {topic.name}
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onTogglePinTopic?.(topic.id); }}
+                    title={topic.pinned ? "Открепить тему" : "Закрепить тему"}
+                    className={`flex h-5 w-5 items-center justify-center rounded-lg transition-all ${
+                      topic.pinned
+                        ? "text-amber-400 opacity-100"
+                        : "text-white/30 opacity-0 group-hover/topic:opacity-100 hover:text-amber-400"
+                    }`}
+                  >
+                    <Icon name="Pin" size={11} className={topic.pinned ? "fill-amber-400" : ""} />
+                  </button>
+                </div>
               ))}
               <button
                 onClick={onOpenCreateTopic}
@@ -525,7 +543,7 @@ export default function ChatArea({
             <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl gradient-btn shadow-2xl shadow-purple-500/30">
               <Icon name="MessageCircle" size={36} className="text-white" />
             </div>
-            <h2 className="text-xl font-bold gradient-text mb-2">Серж мессенджер</h2>
+            <h2 className="text-xl font-bold gradient-text mb-2">Трынделка</h2>
             <p className="text-sm text-white/30">Выберите чат для начала общения</p>
           </div>
         </div>
