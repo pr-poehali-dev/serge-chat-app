@@ -30,6 +30,12 @@ export interface Attachment {
   color: string;
 }
 
+export interface Topic {
+  id: number;
+  name: string;
+  color: string;
+}
+
 export interface BotInfo {
   username: string;
   name: string;

@@ -35,6 +35,7 @@ interface SidebarProps {
   onOpenBotStore: () => void;
   onDeleteBot: (id: number) => void;
   onOpenCreateGroup: () => void;
+  onLeaveGroup: (id: number) => void;
 }
 
 export default function Sidebar({
@@ -51,8 +52,10 @@ export default function Sidebar({
   onOpenBotStore,
   onDeleteBot,
   onOpenCreateGroup,
+  onLeaveGroup,
 }: SidebarProps) {
   const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
+  const [groupToLeave, setGroupToLeave] = useState<Chat | null>(null);
   const tabs: { id: Tab; icon: string; badge?: number }[] = [
     { id: "chats", icon: "MessageCircle", badge: chats.reduce((s, c) => s + c.unread, 0) || undefined },
     { id: "contacts", icon: "Users" },
@@ -139,42 +142,55 @@ export default function Sidebar({
                 ))
               ) : (
                 filteredChats.map((chat, i) => (
-                  <button
+                  <div
                     key={chat.id}
-                    onClick={() => setActiveChatId(chat.id)}
-                    className={`w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all animate-fade-in ${
+                    className={`group w-full flex items-center gap-3 rounded-2xl px-3 py-3 transition-all animate-fade-in ${
                       activeChatId === chat.id
                         ? "bg-white/[0.08] border border-white/[0.08]"
                         : "hover:bg-white/[0.04]"
                     }`}
                     style={{ animationDelay: `${i * 40}ms` }}
                   >
-                    <div className="relative shrink-0">
-                      <div
-                        className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white shadow-lg"
-                        style={{ background: `linear-gradient(135deg, ${chat.color}cc, ${chat.color}66)`, border: `1px solid ${chat.color}33` }}
-                      >
-                        {chat.avatar}
-                      </div>
-                      {chat.online && !chat.isGroup && (
-                        <span className="online-pulse absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-background" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-white/90 truncate">{chat.name}</span>
-                        <span className="text-[11px] text-white/30 ml-2 shrink-0">{chat.time}</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-xs text-white/40 truncate">{chat.lastMsg}</span>
-                        {chat.unread > 0 && (
-                          <span className="ml-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full gradient-btn text-[10px] font-bold text-white px-1">
-                            {chat.unread}
-                          </span>
+                    <button
+                      onClick={() => setActiveChatId(chat.id)}
+                      className="flex flex-1 items-center gap-3 min-w-0 text-left"
+                    >
+                      <div className="relative shrink-0">
+                        <div
+                          className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white shadow-lg"
+                          style={{ background: `linear-gradient(135deg, ${chat.color}cc, ${chat.color}66)`, border: `1px solid ${chat.color}33` }}
+                        >
+                          {chat.avatar}
+                        </div>
+                        {chat.online && !chat.isGroup && (
+                          <span className="online-pulse absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-background" />
                         )}
                       </div>
-                    </div>
-                  </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-white/90 truncate">{chat.name}</span>
+                          <span className="text-[11px] text-white/30 ml-2 shrink-0">{chat.time}</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <span className="text-xs text-white/40 truncate">{chat.lastMsg}</span>
+                          {chat.unread > 0 && (
+                            <span className="ml-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full gradient-btn text-[10px] font-bold text-white px-1">
+                              {chat.unread}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                    {chat.isGroup && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setGroupToLeave(chat); }}
+                        title="Выйти из группы"
+                        className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-white/20 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                      >
+                        <Icon name="LogOut" size={14} />
+                      </button>
+                    )}
+                  </div>
                 ))
               )}
             </div>
@@ -434,6 +450,53 @@ export default function Sidebar({
                 className="flex-1 rounded-xl bg-red-500/20 border border-red-500/30 py-2.5 text-sm text-red-400 hover:bg-red-500/30 transition-all"
               >
                 Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave group confirmation */}
+      {groupToLeave && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
+          onClick={() => setGroupToLeave(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl overflow-hidden animate-fade-in p-5"
+            style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center text-center gap-3">
+              <div
+                className="flex h-12 w-12 items-center justify-center rounded-2xl text-sm font-bold text-white"
+                style={{ background: `linear-gradient(135deg, ${groupToLeave.color}cc, ${groupToLeave.color}55)` }}
+              >
+                {groupToLeave.avatar}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white/90">Выйти из группы?</p>
+                <p className="text-xs text-white/40 mt-1">
+                  «{groupToLeave.name}» будет удалена из списка чатов вместе с историей переписки
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setGroupToLeave(null)}
+                className="flex-1 rounded-xl bg-white/[0.06] py-2.5 text-sm text-white/60 hover:bg-white/[0.1] transition-all"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={() => {
+                  onLeaveGroup(groupToLeave.id);
+                  setGroupToLeave(null);
+                }}
+                className="flex-1 rounded-xl bg-red-500/20 border border-red-500/30 py-2.5 text-sm text-red-400 hover:bg-red-500/30 transition-all"
+              >
+                Выйти
               </button>
             </div>
           </div>

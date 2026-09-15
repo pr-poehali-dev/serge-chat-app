@@ -4,9 +4,10 @@ import Sidebar from "@/components/messenger/Sidebar";
 import ChatArea from "@/components/messenger/ChatArea";
 import BotStore from "@/components/messenger/BotStore";
 import CreateGroupModal from "@/components/messenger/CreateGroupModal";
+import CreateTopicModal from "@/components/messenger/CreateTopicModal";
 import { generateBotReply } from "@/components/messenger/botReplies";
 import { crocodileWelcome, handleCrocodileMessage, CrocodileState } from "@/components/messenger/crocodileGame";
-import { Chat, Message, Tab, BotInfo } from "@/components/messenger/types";
+import { Chat, Message, Tab, BotInfo, Topic } from "@/components/messenger/types";
 
 const CROCODILE_USERNAME = "crocodile_game_bot";
 
@@ -52,6 +53,10 @@ export default function Index() {
   const [botTyping, setBotTyping] = useState(false);
   const crocodileStateRef = useRef<Record<number, CrocodileState>>({});
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [groupTopics, setGroupTopics] = useState<Record<number, Topic[]>>({});
+  const [activeTopicId, setActiveTopicId] = useState<number | null>(null);
+  const [topicMessages, setTopicMessages] = useState<Record<number, Message[]>>({});
+  const [createTopicOpen, setCreateTopicOpen] = useState(false);
 
   // Close attach menu on outside click
   useEffect(() => {
@@ -152,7 +157,12 @@ export default function Index() {
 
   const activeChat = chats.find((c) => c.id === activeChatId) || bots.find((b) => b.id === activeChatId);
   const isBotChat = bots.some((b) => b.id === activeChatId);
-  const displayMessages = isBotChat ? (botMessages[activeChatId as number] || []) : messages;
+  const isGroupChat = !!activeChat?.isGroup;
+  const displayMessages = isBotChat
+    ? (botMessages[activeChatId as number] || [])
+    : isGroupChat && activeTopicId
+    ? (topicMessages[activeTopicId] || [])
+    : messages;
 
   const GROUP_COLORS = ["#a855f7", "#ec4899", "#38bdf8", "#34d399", "#f59e0b", "#6366f1"];
 
@@ -173,6 +183,7 @@ export default function Index() {
     };
     setChats((prev) => [newChat, ...prev]);
     setMessages([]);
+    setActiveTopicId(null);
     setCreateGroupOpen(false);
     setActiveChatId(id);
     setActiveTab("chats");
@@ -232,6 +243,38 @@ export default function Index() {
     if (activeChatId === id) {
       setActiveChatId(null);
     }
+  };
+
+  const leaveGroup = (id: number) => {
+    setChats((prev) => prev.filter((c) => c.id !== id));
+    setGroupTopics((prev) => {
+      const next = { ...prev };
+      const topicIds = (next[id] || []).map((t) => t.id);
+      delete next[id];
+      setTopicMessages((tm) => {
+        const nextTm = { ...tm };
+        topicIds.forEach((tid) => delete nextTm[tid]);
+        return nextTm;
+      });
+      return next;
+    });
+    if (activeChatId === id) {
+      setActiveChatId(null);
+      setActiveTopicId(null);
+    }
+  };
+
+  const createTopic = (name: string, color: string) => {
+    if (!activeChatId) return;
+    const id = -(Date.now());
+    const topic: Topic = { id, name, color };
+    setGroupTopics((prev) => ({
+      ...prev,
+      [activeChatId]: [...(prev[activeChatId] || []), topic],
+    }));
+    setTopicMessages((prev) => ({ ...prev, [id]: [] }));
+    setCreateTopicOpen(false);
+    setActiveTopicId(id);
   };
 
   const sendBotMessage = () => {
@@ -315,6 +358,11 @@ export default function Index() {
       .finally(() => setLoadingChats(false));
   }, []);
 
+  // Reset active topic when switching chats
+  useEffect(() => {
+    setActiveTopicId(null);
+  }, [activeChatId]);
+
   // Load messages when chat changes
   useEffect(() => {
     if (!activeChatId || isBotChat || activeChatId < 0) return;
@@ -329,7 +377,7 @@ export default function Index() {
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, botMessages]);
+  }, [messages, botMessages, topicMessages]);
 
   const sendMessage = async () => {
     if (isBotChat) {
@@ -360,6 +408,16 @@ export default function Index() {
       time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
       sender_id: 1,
     };
+
+    // Messages inside a group topic are kept fully local
+    if (isGroupChat && activeTopicId) {
+      setTopicMessages((prev) => ({
+        ...prev,
+        [activeTopicId]: [...(prev[activeTopicId] || []), optimistic],
+      }));
+      return;
+    }
+
     setMessages((prev) => [...prev, optimistic]);
 
     // Locally created chats (e.g. new groups) don't exist in the backend — keep messages local
@@ -422,6 +480,7 @@ export default function Index() {
         onOpenBotStore={() => setBotStoreOpen(true)}
         onDeleteBot={deleteBot}
         onOpenCreateGroup={() => setCreateGroupOpen(true)}
+        onLeaveGroup={leaveGroup}
       />
 
       <ChatArea
@@ -456,6 +515,10 @@ export default function Index() {
         setInputText={setInputText}
         sendMessage={sendMessage}
         sending={isBotChat ? false : sending}
+        topics={activeChatId ? groupTopics[activeChatId] || [] : []}
+        activeTopicId={activeTopicId}
+        onSelectTopic={setActiveTopicId}
+        onOpenCreateTopic={() => setCreateTopicOpen(true)}
       />
 
       {/* Bot store modal */}
@@ -473,6 +536,14 @@ export default function Index() {
           contacts={chats}
           onCreate={createGroup}
           onClose={() => setCreateGroupOpen(false)}
+        />
+      )}
+
+      {/* Create topic modal */}
+      {createTopicOpen && (
+        <CreateTopicModal
+          onCreate={createTopic}
+          onClose={() => setCreateTopicOpen(false)}
         />
       )}
 

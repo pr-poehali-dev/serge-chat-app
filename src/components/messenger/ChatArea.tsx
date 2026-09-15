@@ -1,7 +1,7 @@
 import { RefObject, Dispatch, SetStateAction } from "react";
 import Icon from "@/components/ui/icon";
 import { CallScreen } from "./CallOverlays";
-import { Chat, Message, Attachment } from "./types";
+import { Chat, Message, Attachment, Topic } from "./types";
 
 interface EmojiCategory {
   label: string;
@@ -54,6 +54,11 @@ interface ChatAreaProps {
   setInputText: Dispatch<SetStateAction<string>>;
   sendMessage: () => void;
   sending: boolean;
+
+  topics?: Topic[];
+  activeTopicId?: number | null;
+  onSelectTopic?: (id: number | null) => void;
+  onOpenCreateTopic?: () => void;
 }
 
 export default function ChatArea({
@@ -88,6 +93,10 @@ export default function ChatArea({
   setInputText,
   sendMessage,
   sending,
+  topics,
+  activeTopicId,
+  onSelectTopic,
+  onOpenCreateTopic,
 }: ChatAreaProps) {
   return (
     <main className="relative z-10 flex flex-1 flex-col">
@@ -152,6 +161,45 @@ export default function ChatArea({
               </div>
             </div>
           </header>
+
+          {/* Topics bar (group chats only) */}
+          {activeChat.isGroup && topics && (
+            <div className="glass-strong border-b border-white/[0.06] px-4 py-2 flex items-center gap-2 overflow-x-auto">
+              <button
+                onClick={() => onSelectTopic?.(null)}
+                className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
+                  !activeTopicId
+                    ? "bg-white/[0.1] text-white"
+                    : "text-white/40 hover:text-white/70 hover:bg-white/[0.05]"
+                }`}
+              >
+                <Icon name="MessageCircle" size={12} />
+                Общий
+              </button>
+              {topics.map((topic) => (
+                <button
+                  key={topic.id}
+                  onClick={() => onSelectTopic?.(topic.id)}
+                  className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTopicId === topic.id
+                      ? "text-white"
+                      : "text-white/40 hover:text-white/70 hover:bg-white/[0.05]"
+                  }`}
+                  style={activeTopicId === topic.id ? { background: `${topic.color}33`, border: `1px solid ${topic.color}55` } : undefined}
+                >
+                  <Icon name="Hash" size={12} style={{ color: activeTopicId === topic.id ? topic.color : undefined }} />
+                  {topic.name}
+                </button>
+              ))}
+              <button
+                onClick={onOpenCreateTopic}
+                title="Создать тему"
+                className="shrink-0 flex h-7 w-7 items-center justify-center rounded-xl text-white/30 hover:text-purple-400 hover:bg-purple-400/[0.08] transition-all"
+              >
+                <Icon name="Plus" size={14} />
+              </button>
+            </div>
+          )}
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
