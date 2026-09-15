@@ -273,16 +273,7 @@ export default function Index() {
     );
   };
 
-  // Simulate incoming call after chats load
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setIncomingCall({
-        caller: { name: "Алиса Морозова", avatar: "АМ", color: "#a855f7" },
-        isVideo: false,
-      });
-    }, 4000);
-    return () => clearTimeout(t);
-  }, []);
+
 
   // Load chats
   useEffect(() => {
