@@ -182,6 +182,19 @@ export default function Index() {
     setActiveTab("chats");
   };
 
+  const deleteBot = (id: number) => {
+    setBots((prev) => prev.filter((b) => b.id !== id));
+    setBotMessages((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    delete botInfoRef.current[id];
+    if (activeChatId === id) {
+      setActiveChatId(null);
+    }
+  };
+
   const sendBotMessage = () => {
     const hasText = inputText.trim();
     const hasAttachments = attachments.length > 0;
@@ -359,6 +372,7 @@ export default function Index() {
         filteredChats={filteredChats}
         bots={bots}
         onOpenBotStore={() => setBotStoreOpen(true)}
+        onDeleteBot={deleteBot}
       />
 
       <ChatArea

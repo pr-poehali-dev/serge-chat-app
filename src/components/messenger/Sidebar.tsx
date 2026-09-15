@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Icon from "@/components/ui/icon";
 import { Chat, Tab } from "./types";
 
@@ -32,6 +33,7 @@ interface SidebarProps {
   filteredChats: Chat[];
   bots: Chat[];
   onOpenBotStore: () => void;
+  onDeleteBot: (id: number) => void;
 }
 
 export default function Sidebar({
@@ -46,7 +48,9 @@ export default function Sidebar({
   filteredChats,
   bots,
   onOpenBotStore,
+  onDeleteBot,
 }: SidebarProps) {
+  const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
   const tabs: { id: Tab; icon: string; badge?: number }[] = [
     { id: "chats", icon: "MessageCircle", badge: chats.reduce((s, c) => s + c.unread, 0) || undefined },
     { id: "contacts", icon: "Users" },
@@ -223,22 +227,32 @@ export default function Sidebar({
                   <p className="text-center text-xs text-white/25 py-6">У вас пока нет ботов</p>
                 ) : (
                   bots.map((bot) => (
-                    <button
+                    <div
                       key={bot.id}
-                      onClick={() => { setActiveChatId(bot.id); setActiveTab("chats"); }}
-                      className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left hover:bg-white/[0.04] transition-all"
+                      className="group w-full flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/[0.04] transition-all"
                     >
-                      <div
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg"
-                        style={{ background: `${bot.color}22`, border: `1px solid ${bot.color}33` }}
+                      <button
+                        onClick={() => { setActiveChatId(bot.id); setActiveTab("chats"); }}
+                        className="flex flex-1 items-center gap-3 min-w-0 text-left"
                       >
-                        {bot.avatar}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-semibold text-white/90 truncate block">{bot.name}</span>
-                        <span className="text-xs text-white/35 truncate block">{bot.lastMsg}</span>
-                      </div>
-                    </button>
+                        <div
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg"
+                          style={{ background: `${bot.color}22`, border: `1px solid ${bot.color}33` }}
+                        >
+                          {bot.avatar}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-semibold text-white/90 truncate block">{bot.name}</span>
+                          <span className="text-xs text-white/35 truncate block">{bot.lastMsg}</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setBotToDelete(bot); }}
+                        className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-white/20 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                      >
+                        <Icon name="Trash2" size={14} />
+                      </button>
+                    </div>
                   ))
                 )}
               </div>
@@ -363,6 +377,53 @@ export default function Sidebar({
           )}
         </div>
       </div>
+
+      {/* Delete bot confirmation */}
+      {botToDelete && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
+          onClick={() => setBotToDelete(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl overflow-hidden animate-fade-in p-5"
+            style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center text-center gap-3">
+              <div
+                className="flex h-12 w-12 items-center justify-center rounded-2xl text-lg"
+                style={{ background: `${botToDelete.color}22`, border: `1px solid ${botToDelete.color}33` }}
+              >
+                {botToDelete.avatar}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white/90">Удалить бота?</p>
+                <p className="text-xs text-white/40 mt-1">
+                  {botToDelete.name} и вся история переписки будут удалены безвозвратно
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setBotToDelete(null)}
+                className="flex-1 rounded-xl bg-white/[0.06] py-2.5 text-sm text-white/60 hover:bg-white/[0.1] transition-all"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={() => {
+                  onDeleteBot(botToDelete.id);
+                  setBotToDelete(null);
+                }}
+                className="flex-1 rounded-xl bg-red-500/20 border border-red-500/30 py-2.5 text-sm text-red-400 hover:bg-red-500/30 transition-all"
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
