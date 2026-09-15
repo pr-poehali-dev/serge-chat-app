@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { IncomingCall } from "@/components/messenger/CallOverlays";
 import Sidebar from "@/components/messenger/Sidebar";
 import ChatArea from "@/components/messenger/ChatArea";
-import { Chat, Message, Tab } from "@/components/messenger/types";
+import BotStore from "@/components/messenger/BotStore";
+import { generateBotReply } from "@/components/messenger/botReplies";
+import { Chat, Message, Tab, BotInfo } from "@/components/messenger/types";
 
 const API_CHATS = "https://functions.poehali.dev/02006132-fa5e-4fd7-9d61-402c7deef46a";
 const API_SEND = "https://functions.poehali.dev/a624a32e-0a00-444a-84ab-7edd26fc13a5";
@@ -38,6 +40,12 @@ export default function Index() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
+
+  const [bots, setBots] = useState<Chat[]>([]);
+  const [botMessages, setBotMessages] = useState<Record<number, Message[]>>({});
+  const [botStoreOpen, setBotStoreOpen] = useState(false);
+  const botInfoRef = useRef<Record<number, BotInfo>>({});
+  const [botTyping, setBotTyping] = useState(false);
 
   // Close attach menu on outside click
   useEffect(() => {
@@ -136,7 +144,101 @@ export default function Index() {
     e.target.value = "";
   };
 
-  const activeChat = chats.find((c) => c.id === activeChatId);
+  const activeChat = chats.find((c) => c.id === activeChatId) || bots.find((b) => b.id === activeChatId);
+  const isBotChat = bots.some((b) => b.id === activeChatId);
+  const displayMessages = isBotChat ? (botMessages[activeChatId as number] || []) : messages;
+
+  const installBot = (bot: BotInfo) => {
+    const id = -(Date.now());
+    const newChat: Chat = {
+      id,
+      name: bot.name,
+      isGroup: false,
+      color: bot.color,
+      lastMsg: "Нажмите, чтобы начать диалог",
+      time: "сейчас",
+      unread: 0,
+      online: true,
+      avatar: bot.avatar,
+      isBot: true,
+    };
+    botInfoRef.current[id] = bot;
+    setBots((prev) => [...prev, newChat]);
+    setBotMessages((prev) => ({
+      ...prev,
+      [id]: [
+        {
+          id: Date.now(),
+          text: `Привет! Я ${bot.name} 👋 ${bot.description}`,
+          out: false,
+          read: true,
+          time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+          sender_id: id,
+        },
+      ],
+    }));
+    setBotStoreOpen(false);
+    setActiveChatId(id);
+    setActiveTab("chats");
+  };
+
+  const sendBotMessage = () => {
+    const hasText = inputText.trim();
+    const hasAttachments = attachments.length > 0;
+    if ((!hasText && !hasAttachments) || !activeChatId) return;
+
+    const text = hasText
+      ? inputText.trim()
+      : attachments.map((a) => `📎 ${a.name} (${a.size})`).join("\n");
+
+    const fullText = hasText && hasAttachments
+      ? `${text}\n${attachments.map((a) => `📎 ${a.name} (${a.size})`).join("\n")}`
+      : text;
+
+    setInputText("");
+    setAttachments([]);
+
+    const userMsg: Message = {
+      id: Date.now(),
+      text: fullText,
+      out: true,
+      read: true,
+      time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      sender_id: 1,
+    };
+
+    const chatId = activeChatId as number;
+    setBotMessages((prev) => ({
+      ...prev,
+      [chatId]: [...(prev[chatId] || []), userMsg],
+    }));
+
+    const bot = botInfoRef.current[chatId];
+    setBotTyping(true);
+    setTimeout(() => {
+      const replyText = bot ? generateBotReply(bot, text) : "…";
+      const botMsg: Message = {
+        id: Date.now() + 1,
+        text: replyText,
+        out: false,
+        read: true,
+        time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+        sender_id: chatId,
+      };
+      setBotMessages((prev) => ({
+        ...prev,
+        [chatId]: [...(prev[chatId] || []), botMsg],
+      }));
+      setBots((prev) =>
+        prev.map((b) => (b.id === chatId ? { ...b, lastMsg: replyText, time: botMsg.time } : b))
+      );
+      setBotTyping(false);
+    }, 1000 + Math.random() * 800);
+
+    setBots((prev) =>
+      prev.map((b) => (b.id === chatId ? { ...b, lastMsg: text, time: userMsg.time } : b))
+    );
+  };
 
   // Simulate incoming call after chats load
   useEffect(() => {
@@ -165,21 +267,25 @@ export default function Index() {
 
   // Load messages when chat changes
   useEffect(() => {
-    if (!activeChatId) return;
+    if (!activeChatId || isBotChat) return;
     setLoadingMsgs(true);
     setMessages([]);
     fetch(`${API_CHATS}?action=messages&chat_id=${activeChatId}`)
       .then((r) => r.json())
       .then((data) => setMessages(data.messages || []))
       .finally(() => setLoadingMsgs(false));
-  }, [activeChatId]);
+  }, [activeChatId, isBotChat]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, botMessages]);
 
   const sendMessage = async () => {
+    if (isBotChat) {
+      sendBotMessage();
+      return;
+    }
     const hasText = inputText.trim();
     const hasAttachments = attachments.length > 0;
     if ((!hasText && !hasAttachments) || !activeChatId || sending) return;
@@ -251,6 +357,8 @@ export default function Index() {
         chats={chats}
         loadingChats={loadingChats}
         filteredChats={filteredChats}
+        bots={bots}
+        onOpenBotStore={() => setBotStoreOpen(true)}
       />
 
       <ChatArea
@@ -259,8 +367,9 @@ export default function Index() {
         setCall={setCall}
         showEncryptBadge={showEncryptBadge}
         setShowEncryptBadge={setShowEncryptBadge}
-        loadingMsgs={loadingMsgs}
-        messages={messages}
+        loadingMsgs={isBotChat ? false : loadingMsgs}
+        messages={displayMessages}
+        botTyping={isBotChat ? botTyping : false}
         messagesEndRef={messagesEndRef}
         attachments={attachments}
         setAttachments={setAttachments}
@@ -283,8 +392,17 @@ export default function Index() {
         inputText={inputText}
         setInputText={setInputText}
         sendMessage={sendMessage}
-        sending={sending}
+        sending={isBotChat ? false : sending}
       />
+
+      {/* Bot store modal */}
+      {botStoreOpen && (
+        <BotStore
+          installedUsernames={bots.map((b) => botInfoRef.current[b.id]?.username).filter(Boolean) as string[]}
+          onInstall={installBot}
+          onClose={() => setBotStoreOpen(false)}
+        />
+      )}
 
       {/* Incoming call overlay */}
       {incomingCall && (

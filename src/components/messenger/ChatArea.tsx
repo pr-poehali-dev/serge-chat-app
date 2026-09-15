@@ -27,6 +27,7 @@ interface ChatAreaProps {
   setShowEncryptBadge: Dispatch<SetStateAction<boolean>>;
   loadingMsgs: boolean;
   messages: Message[];
+  botTyping?: boolean;
   messagesEndRef: RefObject<HTMLDivElement>;
 
   attachments: Attachment[];
@@ -63,6 +64,7 @@ export default function ChatArea({
   setShowEncryptBadge,
   loadingMsgs,
   messages,
+  botTyping,
   messagesEndRef,
   attachments,
   setAttachments,
@@ -202,6 +204,25 @@ export default function ChatArea({
                   </div>
                 </div>
               ))
+            )}
+            {botTyping && (
+              <div className="flex justify-start animate-fade-in">
+                <div
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white mr-2 self-end mb-1"
+                  style={{ background: `linear-gradient(135deg, ${activeChat.color}cc, ${activeChat.color}55)` }}
+                >
+                  {activeChat.avatar[0]}
+                </div>
+                <div className="msg-bubble-in px-4 py-3 flex items-center gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="h-1.5 w-1.5 rounded-full bg-white/40 animate-pulse"
+                      style={{ animationDelay: `${i * 150}ms` }}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
             <div ref={messagesEndRef} />
           </div>

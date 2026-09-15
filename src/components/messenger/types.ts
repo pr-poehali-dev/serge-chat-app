@@ -8,6 +8,7 @@ export interface Chat {
   unread: number;
   online: boolean;
   avatar: string;
+  isBot?: boolean;
 }
 
 export interface Message {
@@ -19,7 +20,7 @@ export interface Message {
   sender_id: number;
 }
 
-export type Tab = "chats" | "contacts" | "notifications" | "gallery" | "search" | "profile";
+export type Tab = "chats" | "contacts" | "notifications" | "gallery" | "search" | "profile" | "bots";
 
 export interface Attachment {
   name: string;
@@ -27,4 +28,15 @@ export interface Attachment {
   type: string;
   icon: string;
   color: string;
+}
+
+export interface BotInfo {
+  username: string;
+  name: string;
+  avatar: string;
+  color: string;
+  description: string;
+  category: string;
+  users: string;
+  verified: boolean;
 }

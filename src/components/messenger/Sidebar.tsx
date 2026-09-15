@@ -30,6 +30,8 @@ interface SidebarProps {
   chats: Chat[];
   loadingChats: boolean;
   filteredChats: Chat[];
+  bots: Chat[];
+  onOpenBotStore: () => void;
 }
 
 export default function Sidebar({
@@ -42,10 +44,13 @@ export default function Sidebar({
   chats,
   loadingChats,
   filteredChats,
+  bots,
+  onOpenBotStore,
 }: SidebarProps) {
   const tabs: { id: Tab; icon: string; badge?: number }[] = [
     { id: "chats", icon: "MessageCircle", badge: chats.reduce((s, c) => s + c.unread, 0) || undefined },
     { id: "contacts", icon: "Users" },
+    { id: "bots", icon: "Bot", badge: bots.length || undefined },
     { id: "notifications", icon: "Bell", badge: 4 },
     { id: "gallery", icon: "Image" },
     { id: "search", icon: "Search" },
@@ -195,6 +200,48 @@ export default function Sidebar({
                 <Icon name="UserPlus" size={16} />
                 Добавить контакт
               </button>
+            </div>
+          )}
+
+          {/* BOTS */}
+          {activeTab === "bots" && (
+            <div className="animate-fade-in">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <p className="text-xs text-white/30 font-medium">БОТЫ · {bots.length}</p>
+              </div>
+              <button
+                onClick={onOpenBotStore}
+                className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 mb-2 border border-dashed border-purple-400/30 hover:border-purple-400/60 hover:bg-purple-400/[0.06] transition-all"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400">
+                  <Icon name="Plus" size={16} />
+                </div>
+                <span className="text-sm font-medium text-white/70">Добавить бота из Telegram</span>
+              </button>
+              <div className="space-y-1">
+                {bots.length === 0 ? (
+                  <p className="text-center text-xs text-white/25 py-6">У вас пока нет ботов</p>
+                ) : (
+                  bots.map((bot) => (
+                    <button
+                      key={bot.id}
+                      onClick={() => { setActiveChatId(bot.id); setActiveTab("chats"); }}
+                      className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left hover:bg-white/[0.04] transition-all"
+                    >
+                      <div
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg"
+                        style={{ background: `${bot.color}22`, border: `1px solid ${bot.color}33` }}
+                      >
+                        {bot.avatar}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-white/90 truncate block">{bot.name}</span>
+                        <span className="text-xs text-white/35 truncate block">{bot.lastMsg}</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
           )}
 
