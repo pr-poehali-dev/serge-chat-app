@@ -3,6 +3,7 @@ import { IncomingCall } from "@/components/messenger/CallOverlays";
 import Sidebar from "@/components/messenger/Sidebar";
 import ChatArea from "@/components/messenger/ChatArea";
 import BotStore from "@/components/messenger/BotStore";
+import CreateGroupModal from "@/components/messenger/CreateGroupModal";
 import { generateBotReply } from "@/components/messenger/botReplies";
 import { crocodileWelcome, handleCrocodileMessage, CrocodileState } from "@/components/messenger/crocodileGame";
 import { Chat, Message, Tab, BotInfo } from "@/components/messenger/types";
@@ -50,6 +51,7 @@ export default function Index() {
   const botInfoRef = useRef<Record<number, BotInfo>>({});
   const [botTyping, setBotTyping] = useState(false);
   const crocodileStateRef = useRef<Record<number, CrocodileState>>({});
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
 
   // Close attach menu on outside click
   useEffect(() => {
@@ -151,6 +153,30 @@ export default function Index() {
   const activeChat = chats.find((c) => c.id === activeChatId) || bots.find((b) => b.id === activeChatId);
   const isBotChat = bots.some((b) => b.id === activeChatId);
   const displayMessages = isBotChat ? (botMessages[activeChatId as number] || []) : messages;
+
+  const GROUP_COLORS = ["#a855f7", "#ec4899", "#38bdf8", "#34d399", "#f59e0b", "#6366f1"];
+
+  const createGroup = (name: string, memberIds: number[]) => {
+    const id = -(Date.now());
+    const color = GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
+    const memberNames = chats.filter((c) => memberIds.includes(c.id)).map((c) => c.name);
+    const newChat: Chat = {
+      id,
+      name,
+      isGroup: true,
+      color,
+      lastMsg: `Группа создана · ${memberNames.length} участник(ов)`,
+      time: "сейчас",
+      unread: 0,
+      online: true,
+      avatar: name.slice(0, 2).toUpperCase(),
+    };
+    setChats((prev) => [newChat, ...prev]);
+    setMessages([]);
+    setCreateGroupOpen(false);
+    setActiveChatId(id);
+    setActiveTab("chats");
+  };
 
   const installBot = (bot: BotInfo) => {
     const id = -(Date.now());
@@ -291,7 +317,7 @@ export default function Index() {
 
   // Load messages when chat changes
   useEffect(() => {
-    if (!activeChatId || isBotChat) return;
+    if (!activeChatId || isBotChat || activeChatId < 0) return;
     setLoadingMsgs(true);
     setMessages([]);
     fetch(`${API_CHATS}?action=messages&chat_id=${activeChatId}`)
@@ -324,7 +350,6 @@ export default function Index() {
 
     setInputText("");
     setAttachments([]);
-    setSending(true);
 
     // Optimistic update
     const optimistic: Message = {
@@ -336,6 +361,18 @@ export default function Index() {
       sender_id: 1,
     };
     setMessages((prev) => [...prev, optimistic]);
+
+    // Locally created chats (e.g. new groups) don't exist in the backend — keep messages local
+    if (activeChatId < 0) {
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === activeChatId ? { ...c, lastMsg: text, time: optimistic.time } : c
+        )
+      );
+      return;
+    }
+
+    setSending(true);
 
     try {
       const res = await fetch(API_SEND, {
@@ -384,6 +421,7 @@ export default function Index() {
         bots={bots}
         onOpenBotStore={() => setBotStoreOpen(true)}
         onDeleteBot={deleteBot}
+        onOpenCreateGroup={() => setCreateGroupOpen(true)}
       />
 
       <ChatArea
@@ -426,6 +464,15 @@ export default function Index() {
           installedUsernames={bots.map((b) => botInfoRef.current[b.id]?.username).filter(Boolean) as string[]}
           onInstall={installBot}
           onClose={() => setBotStoreOpen(false)}
+        />
+      )}
+
+      {/* Create group modal */}
+      {createGroupOpen && (
+        <CreateGroupModal
+          contacts={chats}
+          onCreate={createGroup}
+          onClose={() => setCreateGroupOpen(false)}
         />
       )}
 

@@ -34,6 +34,7 @@ interface SidebarProps {
   bots: Chat[];
   onOpenBotStore: () => void;
   onDeleteBot: (id: number) => void;
+  onOpenCreateGroup: () => void;
 }
 
 export default function Sidebar({
@@ -49,6 +50,7 @@ export default function Sidebar({
   bots,
   onOpenBotStore,
   onDeleteBot,
+  onOpenCreateGroup,
 }: SidebarProps) {
   const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
   const tabs: { id: Tab; icon: string; badge?: number }[] = [
@@ -74,7 +76,11 @@ export default function Sidebar({
             <p className="text-[11px] text-white/35 mt-0.5">мессенджер</p>
           </div>
           <div className="ml-auto">
-            <button className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all">
+            <button
+              onClick={onOpenCreateGroup}
+              title="Создать группу"
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+            >
               <Icon name="PenSquare" size={16} />
             </button>
           </div>
@@ -177,7 +183,16 @@ export default function Sidebar({
           {/* CONTACTS */}
           {activeTab === "contacts" && (
             <div className="animate-fade-in">
-              <p className="text-xs text-white/30 font-medium mb-3 px-1">КОНТАКТЫ · {chats.length}</p>
+              <div className="flex items-center justify-between mb-3 px-1">
+                <p className="text-xs text-white/30 font-medium">КОНТАКТЫ · {chats.length}</p>
+                <button
+                  onClick={onOpenCreateGroup}
+                  title="Создать группу"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-white/30 hover:text-purple-400 hover:bg-purple-400/[0.08] transition-all"
+                >
+                  <Icon name="Users" size={14} />
+                </button>
+              </div>
               <div className="space-y-1">
                 {chats.map((c) => (
                   <div key={c.id} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/[0.04] transition-all group">
