@@ -4,7 +4,10 @@ import Sidebar from "@/components/messenger/Sidebar";
 import ChatArea from "@/components/messenger/ChatArea";
 import BotStore from "@/components/messenger/BotStore";
 import { generateBotReply } from "@/components/messenger/botReplies";
+import { crocodileWelcome, handleCrocodileMessage, CrocodileState } from "@/components/messenger/crocodileGame";
 import { Chat, Message, Tab, BotInfo } from "@/components/messenger/types";
+
+const CROCODILE_USERNAME = "crocodile_game_bot";
 
 const API_CHATS = "https://functions.poehali.dev/02006132-fa5e-4fd7-9d61-402c7deef46a";
 const API_SEND = "https://functions.poehali.dev/a624a32e-0a00-444a-84ab-7edd26fc13a5";
@@ -46,6 +49,7 @@ export default function Index() {
   const [botStoreOpen, setBotStoreOpen] = useState(false);
   const botInfoRef = useRef<Record<number, BotInfo>>({});
   const [botTyping, setBotTyping] = useState(false);
+  const crocodileStateRef = useRef<Record<number, CrocodileState>>({});
 
   // Close attach menu on outside click
   useEffect(() => {
@@ -164,12 +168,20 @@ export default function Index() {
     };
     botInfoRef.current[id] = bot;
     setBots((prev) => [...prev, newChat]);
+
+    let welcomeText = `Привет! Я ${bot.name} 👋 ${bot.description}`;
+    if (bot.username === CROCODILE_USERNAME) {
+      const { state, reply } = crocodileWelcome();
+      crocodileStateRef.current[id] = state;
+      welcomeText = reply;
+    }
+
     setBotMessages((prev) => ({
       ...prev,
       [id]: [
         {
           id: Date.now(),
-          text: `Привет! Я ${bot.name} 👋 ${bot.description}`,
+          text: welcomeText,
           out: false,
           read: true,
           time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
@@ -190,6 +202,7 @@ export default function Index() {
       return next;
     });
     delete botInfoRef.current[id];
+    delete crocodileStateRef.current[id];
     if (activeChatId === id) {
       setActiveChatId(null);
     }
@@ -229,7 +242,14 @@ export default function Index() {
     const bot = botInfoRef.current[chatId];
     setBotTyping(true);
     setTimeout(() => {
-      const replyText = bot ? generateBotReply(bot, text) : "…";
+      let replyText: string;
+      if (bot?.username === CROCODILE_USERNAME) {
+        const { state, reply } = handleCrocodileMessage(crocodileStateRef.current[chatId], text);
+        crocodileStateRef.current[chatId] = state;
+        replyText = reply;
+      } else {
+        replyText = bot ? generateBotReply(bot, text) : "…";
+      }
       const botMsg: Message = {
         id: Date.now() + 1,
         text: replyText,

@@ -50,6 +50,16 @@ export const BOT_CATALOG: BotInfo[] = [
     verified: false,
   },
   {
+    username: "crocodile_game_bot",
+    name: "Крокодил",
+    avatar: "🐊",
+    color: "#22c55e",
+    description: "Классическая игра в слова: угадывай слово по подсказкам бота",
+    category: "Игры",
+    users: "1.5M",
+    verified: true,
+  },
+  {
     username: "reminder_bot",
     name: "Напоминалка",
     avatar: "⏰",
