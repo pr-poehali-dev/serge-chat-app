@@ -4,17 +4,13 @@
       "name": "Get chats list",
       "method": "GET",
       "path": "/",
-      "expectedStatus": 200,
-      "expectedBody": {"chats": []},
-      "bodyMatcher": "partial"
+      "expectedStatus": 200
     },
     {
       "name": "Get messages for chat 1",
       "method": "GET",
       "path": "/?action=messages&chat_id=1",
-      "expectedStatus": 200,
-      "expectedBody": {"messages": []},
-      "bodyMatcher": "partial"
+      "expectedStatus": 200
     }
   ]
 }

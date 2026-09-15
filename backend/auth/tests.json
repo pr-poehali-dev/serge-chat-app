@@ -1,0 +1,27 @@
+{
+  "tests": [
+    {
+      "name": "Get current user without session returns 401",
+      "method": "GET",
+      "path": "/?action=me",
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Login with wrong credentials returns 401",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "login", "email": "nonexistent@example.com", "password": "wrongpass"},
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Register with short password returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "register", "email": "test@example.com", "password": "123"},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
+    }
+  ]
+}

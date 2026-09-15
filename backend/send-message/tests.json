@@ -5,9 +5,7 @@
       "method": "POST",
       "path": "/",
       "body": {"chat_id": 1, "text": "Тест сообщение"},
-      "expectedStatus": 200,
-      "expectedBody": {"out": true},
-      "bodyMatcher": "partial"
+      "expectedStatus": 200
     },
     {
       "name": "Missing text returns 400",

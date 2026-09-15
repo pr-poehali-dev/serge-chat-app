@@ -5,14 +5,17 @@ import ChatArea from "@/components/messenger/ChatArea";
 import BotStore from "@/components/messenger/BotStore";
 import CreateGroupModal from "@/components/messenger/CreateGroupModal";
 import CreateTopicModal from "@/components/messenger/CreateTopicModal";
+import AuthScreen from "@/components/messenger/AuthScreen";
 import { generateBotReply } from "@/components/messenger/botReplies";
 import { crocodileWelcome, handleCrocodileMessage, CrocodileState } from "@/components/messenger/crocodileGame";
-import { Chat, Message, Tab, BotInfo, Topic } from "@/components/messenger/types";
+import { Chat, Message, Tab, BotInfo, Topic, AuthUser } from "@/components/messenger/types";
 
 const CROCODILE_USERNAME = "crocodile_game_bot";
 
 const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
 const API_SEND = "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6";
+const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
+const SESSION_STORAGE_KEY = "trindelka_session_id";
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<Tab>("chats");
@@ -57,6 +60,52 @@ export default function Index() {
   const [activeTopicId, setActiveTopicId] = useState<number | null>(null);
   const [topicMessages, setTopicMessages] = useState<Record<number, Message[]>>({});
   const [createTopicOpen, setCreateTopicOpen] = useState(false);
+
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Restore session on load
+  useEffect(() => {
+    const sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!sessionId) {
+      setAuthLoading(false);
+      return;
+    }
+    fetch(`${API_AUTH}?action=me`, { headers: { "X-Session-Id": sessionId } })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => setAuthUser(data.user))
+      .catch(() => localStorage.removeItem(SESSION_STORAGE_KEY))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  const handleAuthenticated = (user: AuthUser) => {
+    localStorage.setItem(SESSION_STORAGE_KEY, user.sessionId);
+    setAuthUser(user);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    setAuthUser(null);
+    setChats([]);
+    setActiveChatId(null);
+  };
+
+  const handleUpdateProfile = async (login: string, firstName: string, lastName: string): Promise<string | null> => {
+    if (!authUser) return "Не авторизован";
+    try {
+      const res = await fetch(API_AUTH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": authUser.sessionId },
+        body: JSON.stringify({ action: "update-profile", login, firstName, lastName }),
+      });
+      const data = await res.json();
+      if (!res.ok) return data.error || "Не удалось сохранить";
+      setAuthUser(data.user);
+      return null;
+    } catch {
+      return "Не удалось связаться с сервером";
+    }
+  };
 
   // Close attach menu on outside click
   useEffect(() => {
@@ -354,10 +403,14 @@ export default function Index() {
 
 
 
-  // Load chats
+  const authHeaders = (): Record<string, string> =>
+    authUser ? { "X-Session-Id": authUser.sessionId } : {};
+
+  // Load chats (once authenticated)
   useEffect(() => {
+    if (!authUser) return;
     setLoadingChats(true);
-    fetch(API_CHATS)
+    fetch(API_CHATS, { headers: authHeaders() })
       .then((r) => r.json())
       .then((data) => {
         setChats(data.chats || []);
@@ -366,7 +419,22 @@ export default function Index() {
         }
       })
       .finally(() => setLoadingChats(false));
-  }, []);
+  }, [authUser]);
+
+  const togglePinChat = (chatId: number) => {
+    const chat = chats.find((c) => c.id === chatId);
+    if (!chat) return;
+    const nextPinned = !chat.pinned;
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinned: nextPinned } : c)));
+    if (chatId < 0) return; // locally created chats have no backend record
+    fetch(`${API_CHATS}?action=pin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ chat_id: chatId, pinned: nextPinned }),
+    }).catch(() => {
+      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinned: !nextPinned } : c)));
+    });
+  };
 
   // Reset active topic when switching chats
   useEffect(() => {
@@ -375,14 +443,14 @@ export default function Index() {
 
   // Load messages when chat changes
   useEffect(() => {
-    if (!activeChatId || isBotChat || activeChatId < 0) return;
+    if (!activeChatId || isBotChat || activeChatId < 0 || !authUser) return;
     setLoadingMsgs(true);
     setMessages([]);
-    fetch(`${API_CHATS}?action=messages&chat_id=${activeChatId}`)
+    fetch(`${API_CHATS}?action=messages&chat_id=${activeChatId}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((data) => setMessages(data.messages || []))
       .finally(() => setLoadingMsgs(false));
-  }, [activeChatId, isBotChat]);
+  }, [activeChatId, isBotChat, authUser]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -445,7 +513,7 @@ export default function Index() {
     try {
       const res = await fetch(API_SEND, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ chat_id: activeChatId, text }),
       });
       const data = await res.json();
@@ -470,6 +538,26 @@ export default function Index() {
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (authLoading) {
+    return (
+      <div className="relative flex h-screen w-full items-center justify-center overflow-hidden bg-background font-golos">
+        <div className="flex gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="h-2 w-2 rounded-full bg-purple-400/50 animate-pulse"
+              style={{ animationDelay: `${i * 150}ms` }}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return <AuthScreen onAuthenticated={handleAuthenticated} />;
+  }
+
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-background font-golos">
       <div className="orb orb-1" />
@@ -491,6 +579,10 @@ export default function Index() {
         onDeleteBot={deleteBot}
         onOpenCreateGroup={() => setCreateGroupOpen(true)}
         onLeaveGroup={leaveGroup}
+        onTogglePinChat={togglePinChat}
+        authUser={authUser}
+        onUpdateProfile={handleUpdateProfile}
+        onLogout={handleLogout}
       />
 
       <ChatArea

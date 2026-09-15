@@ -9,6 +9,7 @@ export interface Chat {
   online: boolean;
   avatar: string;
   isBot?: boolean;
+  pinned?: boolean;
 }
 
 export interface Message {
@@ -35,6 +36,18 @@ export interface Topic {
   name: string;
   color: string;
   pinned?: boolean;
+}
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  login: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  avatarInitials: string;
+  avatarColor: string;
+  sessionId: string;
 }
 
 export interface BotInfo {

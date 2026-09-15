@@ -7,6 +7,7 @@ interface ChatsListProps {
   loadingChats: boolean;
   filteredChats: Chat[];
   onRequestLeaveGroup: (chat: Chat) => void;
+  onTogglePinChat: (chatId: number) => void;
 }
 
 export default function ChatsList({
@@ -15,7 +16,10 @@ export default function ChatsList({
   loadingChats,
   filteredChats,
   onRequestLeaveGroup,
+  onTogglePinChat,
 }: ChatsListProps) {
+  const sortedChats = [...filteredChats].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
   return (
     <div className="space-y-1">
       {loadingChats ? (
@@ -29,14 +33,14 @@ export default function ChatsList({
           </div>
         ))
       ) : (
-        filteredChats.map((chat, i) => (
+        sortedChats.map((chat, i) => (
           <div
             key={chat.id}
             className={`group w-full flex items-center gap-3 rounded-2xl px-3 py-3 transition-all animate-fade-in ${
               activeChatId === chat.id
                 ? "bg-white/[0.08] border border-white/[0.08]"
                 : "hover:bg-white/[0.04]"
-            }`}
+            } ${chat.pinned ? "bg-white/[0.03]" : ""}`}
             style={{ animationDelay: `${i * 40}ms` }}
           >
             <button
@@ -56,7 +60,10 @@ export default function ChatsList({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-white/90 truncate">{chat.name}</span>
+                  <span className="flex items-center gap-1 min-w-0">
+                    {chat.pinned && <Icon name="Pin" size={11} className="text-amber-400 fill-amber-400 shrink-0" />}
+                    <span className="text-sm font-semibold text-white/90 truncate">{chat.name}</span>
+                  </span>
                   <span className="text-[11px] text-white/30 ml-2 shrink-0">{chat.time}</span>
                 </div>
                 <div className="flex items-center justify-between mt-0.5">
@@ -68,6 +75,17 @@ export default function ChatsList({
                   )}
                 </div>
               </div>
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onTogglePinChat(chat.id); }}
+              title={chat.pinned ? "Открепить чат" : "Закрепить чат"}
+              className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
+                chat.pinned
+                  ? "text-amber-400 opacity-100"
+                  : "text-white/20 opacity-0 group-hover:opacity-100 hover:text-amber-400 hover:bg-amber-400/10"
+              }`}
+            >
+              <Icon name="Pin" size={14} className={chat.pinned ? "fill-amber-400" : ""} />
             </button>
             {chat.isGroup && (
               <button

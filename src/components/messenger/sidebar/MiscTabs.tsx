@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import Icon from "@/components/ui/icon";
-import { Chat, Tab } from "../types";
+import { Chat, Tab, AuthUser } from "../types";
 
 const NOTIFICATIONS = [
   { id: 1, icon: "MessageCircle", text: "Алиса прислала 3 новых сообщения", time: "сейчас", color: "#a855f7" },
@@ -25,9 +26,47 @@ interface MiscTabsProps {
   setActiveTab: (tab: Tab) => void;
   setActiveChatId: (id: number) => void;
   chats: Chat[];
+  authUser: AuthUser | null;
+  onUpdateProfile: (login: string, firstName: string, lastName: string) => Promise<string | null>;
+  onLogout: () => void;
 }
 
-export default function MiscTabs({ activeTab, setActiveTab, setActiveChatId, chats }: MiscTabsProps) {
+export default function MiscTabs({
+  activeTab,
+  setActiveTab,
+  setActiveChatId,
+  chats,
+  authUser,
+  onUpdateProfile,
+  onLogout,
+}: MiscTabsProps) {
+  const [login, setLogin] = useState(authUser?.login || "");
+  const [firstName, setFirstName] = useState(authUser?.firstName || "");
+  const [lastName, setLastName] = useState(authUser?.lastName || "");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setLogin(authUser?.login || "");
+    setFirstName(authUser?.firstName || "");
+    setLastName(authUser?.lastName || "");
+  }, [authUser]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError("");
+    setSaved(false);
+    const err = await onUpdateProfile(login.trim(), firstName.trim(), lastName.trim());
+    setSaving(false);
+    if (err) {
+      setSaveError(err);
+    } else {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  };
+
   return (
     <>
       {/* NOTIFICATIONS */}
@@ -114,19 +153,60 @@ export default function MiscTabs({ activeTab, setActiveTab, setActiveChatId, cha
           <div className="flex flex-col items-center pt-2 pb-5">
             <div className="relative mb-3">
               <div className="flex h-20 w-20 items-center justify-center rounded-3xl gradient-btn text-2xl font-black text-white shadow-xl shadow-purple-500/30">
-                ВА
+                {authUser?.avatarInitials || "ВА"}
               </div>
               <button className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-background border border-white/10 text-white/60 hover:text-white transition-all">
                 <Icon name="Camera" size={12} />
               </button>
             </div>
-            <h2 className="text-base font-bold text-white/90">Ваше Имя</h2>
-            <p className="text-xs text-white/35 mt-0.5">@me</p>
+            <h2 className="text-base font-bold text-white/90">{authUser?.displayName || "Ваше Имя"}</h2>
+            <p className="text-xs text-white/35 mt-0.5">{authUser?.email || "@me"}</p>
             <div className="mt-2 flex items-center gap-1.5 rounded-full bg-emerald-400/10 border border-emerald-400/20 px-3 py-1">
               <Icon name="Shield" size={12} className="text-emerald-400" />
               <span className="text-[11px] text-emerald-400 font-medium">E2E шифрование активно</span>
             </div>
           </div>
+
+          {/* Editable profile fields */}
+          <div className="space-y-2 mb-4">
+            <p className="text-xs text-white/30 font-medium mb-2 px-1">ДАННЫЕ ПРОФИЛЯ</p>
+            <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
+              <Icon name="AtSign" size={14} className="text-white/30 shrink-0" />
+              <input
+                className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none min-w-0"
+                placeholder="Логин"
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
+                <input
+                  className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none min-w-0"
+                  placeholder="Имя"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                />
+              </div>
+              <div className="flex-1 flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
+                <input
+                  className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none min-w-0"
+                  placeholder="Фамилия"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                />
+              </div>
+            </div>
+            {saveError && <p className="text-xs text-red-400 px-1">{saveError}</p>}
+            <button
+              onClick={handleSave}
+              disabled={saving || !authUser}
+              className="w-full rounded-2xl gradient-btn text-white text-sm font-medium py-2.5 transition-all disabled:opacity-40 hover:-translate-y-0.5"
+            >
+              {saving ? <Icon name="Loader" size={14} className="animate-spin mx-auto" /> : saved ? "Сохранено ✓" : "Сохранить профиль"}
+            </button>
+          </div>
+
           {[
             { icon: "Bell", label: "Уведомления", desc: "Настроить оповещения" },
             { icon: "Shield", label: "Приватность", desc: "Шифрование и безопасность" },
@@ -144,6 +224,16 @@ export default function MiscTabs({ activeTab, setActiveTab, setActiveChatId, cha
               <Icon name="ChevronRight" size={14} className="ml-auto text-white/20 group-hover:text-white/40 transition-colors" />
             </div>
           ))}
+
+          {authUser && (
+            <button
+              onClick={onLogout}
+              className="w-full mt-3 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-red-400/30 py-3 text-sm text-red-400/70 hover:text-red-400 hover:border-red-400/60 transition-all"
+            >
+              <Icon name="LogOut" size={14} />
+              Выйти из аккаунта
+            </button>
+          )}
         </div>
       )}
     </>

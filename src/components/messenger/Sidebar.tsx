@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Chat, Tab } from "./types";
+import { Chat, Tab, AuthUser } from "./types";
 import SidebarHeader from "./sidebar/SidebarHeader";
 import ChatsList from "./sidebar/ChatsList";
 import ContactsAndBots from "./sidebar/ContactsAndBots";
@@ -20,6 +20,10 @@ interface SidebarProps {
   onDeleteBot: (id: number) => void;
   onOpenCreateGroup: () => void;
   onLeaveGroup: (id: number) => void;
+  onTogglePinChat: (id: number) => void;
+  authUser: AuthUser | null;
+  onUpdateProfile: (login: string, firstName: string, lastName: string) => Promise<string | null>;
+  onLogout: () => void;
 }
 
 export default function Sidebar({
@@ -37,6 +41,10 @@ export default function Sidebar({
   onDeleteBot,
   onOpenCreateGroup,
   onLeaveGroup,
+  onTogglePinChat,
+  authUser,
+  onUpdateProfile,
+  onLogout,
 }: SidebarProps) {
   const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
   const [groupToLeave, setGroupToLeave] = useState<Chat | null>(null);
@@ -64,6 +72,7 @@ export default function Sidebar({
               loadingChats={loadingChats}
               filteredChats={filteredChats}
               onRequestLeaveGroup={setGroupToLeave}
+              onTogglePinChat={onTogglePinChat}
             />
           )}
 
@@ -83,6 +92,9 @@ export default function Sidebar({
             setActiveTab={setActiveTab}
             setActiveChatId={setActiveChatId}
             chats={chats}
+            authUser={authUser}
+            onUpdateProfile={onUpdateProfile}
+            onLogout={onLogout}
           />
         </div>
       </div>

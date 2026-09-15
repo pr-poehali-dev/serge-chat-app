@@ -4,17 +4,26 @@ import os
 import psycopg2
 
 SCHEMA = "t_p64541051_serge_chat_app"
-MY_USER_ID = 1
+DEFAULT_USER_ID = 1
 
 CORS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-Session-Id",
 }
 
 
 def get_conn():
     return psycopg2.connect(os.environ["DATABASE_URL"])
+
+
+def resolve_user_id(cur, headers: dict) -> int:
+    session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
+    if not session_id:
+        return DEFAULT_USER_ID
+    cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
+    row = cur.fetchone()
+    return row[0] if row else DEFAULT_USER_ID
 
 
 def handler(event: dict, context) -> dict:
@@ -35,11 +44,12 @@ def handler(event: dict, context) -> dict:
     conn = get_conn()
     cur = conn.cursor()
     try:
+        my_user_id = resolve_user_id(cur, event.get("headers") or {})
         cur.execute(f"""
             INSERT INTO {SCHEMA}.messages (chat_id, sender_id, text, is_read)
             VALUES (%s, %s, %s, false)
             RETURNING id, TO_CHAR(created_at, 'HH24:MI')
-        """, (chat_id, MY_USER_ID, text))
+        """, (chat_id, my_user_id, text))
         row = cur.fetchone()
         conn.commit()
 
@@ -52,7 +62,7 @@ def handler(event: dict, context) -> dict:
                 "out": True,
                 "read": False,
                 "text": text,
-                "sender_id": MY_USER_ID,
+                "sender_id": my_user_id,
             }),
         }
     finally:
