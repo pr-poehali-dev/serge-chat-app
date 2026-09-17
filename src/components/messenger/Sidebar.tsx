@@ -24,6 +24,7 @@ interface SidebarProps {
   authUser: AuthUser | null;
   onUpdateProfile: (login: string, firstName: string, lastName: string) => Promise<string | null>;
   onLogout: () => void;
+  onAvatarUpdated: (user: AuthUser) => void;
 }
 
 export default function Sidebar({
@@ -45,6 +46,7 @@ export default function Sidebar({
   authUser,
   onUpdateProfile,
   onLogout,
+  onAvatarUpdated,
 }: SidebarProps) {
   const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
   const [groupToLeave, setGroupToLeave] = useState<Chat | null>(null);
@@ -95,6 +97,7 @@ export default function Sidebar({
             authUser={authUser}
             onUpdateProfile={onUpdateProfile}
             onLogout={onLogout}
+            onAvatarUpdated={onAvatarUpdated}
           />
         </div>
       </div>

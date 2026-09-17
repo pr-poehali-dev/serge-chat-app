@@ -10,6 +10,7 @@ export interface Chat {
   avatar: string;
   isBot?: boolean;
   pinned?: boolean;
+  avatarUrl?: string | null;
 }
 
 export interface Message {
@@ -47,7 +48,17 @@ export interface AuthUser {
   displayName: string;
   avatarInitials: string;
   avatarColor: string;
+  avatarUrl?: string | null;
   sessionId: string;
+}
+
+export interface DirectoryUser {
+  id: number;
+  displayName: string;
+  avatarInitials: string;
+  avatarColor: string;
+  avatarUrl?: string | null;
+  login: string;
 }
 
 export interface BotInfo {

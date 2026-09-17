@@ -6,6 +6,7 @@ import BotStore from "@/components/messenger/BotStore";
 import CreateGroupModal from "@/components/messenger/CreateGroupModal";
 import CreateTopicModal from "@/components/messenger/CreateTopicModal";
 import AuthScreen from "@/components/messenger/AuthScreen";
+import GroupMembersModal from "@/components/messenger/GroupMembersModal";
 import { generateBotReply } from "@/components/messenger/botReplies";
 import { crocodileWelcome, handleCrocodileMessage, CrocodileState } from "@/components/messenger/crocodileGame";
 import { Chat, Message, Tab, BotInfo, Topic, AuthUser } from "@/components/messenger/types";
@@ -60,6 +61,7 @@ export default function Index() {
   const [activeTopicId, setActiveTopicId] = useState<number | null>(null);
   const [topicMessages, setTopicMessages] = useState<Record<number, Message[]>>({});
   const [createTopicOpen, setCreateTopicOpen] = useState(false);
+  const [groupMembersOpen, setGroupMembersOpen] = useState(false);
 
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -105,6 +107,10 @@ export default function Index() {
     } catch {
       return "Не удалось связаться с сервером";
     }
+  };
+
+  const handleAvatarUpdated = (user: AuthUser) => {
+    setAuthUser(user);
   };
 
   // Close attach menu on outside click
@@ -583,6 +589,7 @@ export default function Index() {
         authUser={authUser}
         onUpdateProfile={handleUpdateProfile}
         onLogout={handleLogout}
+        onAvatarUpdated={handleAvatarUpdated}
       />
 
       <ChatArea
@@ -626,6 +633,7 @@ export default function Index() {
         onSelectTopic={setActiveTopicId}
         onOpenCreateTopic={() => setCreateTopicOpen(true)}
         onTogglePinTopic={togglePinTopic}
+        onOpenGroupMembers={() => setGroupMembersOpen(true)}
       />
 
       {/* Bot store modal */}
@@ -651,6 +659,17 @@ export default function Index() {
         <CreateTopicModal
           onCreate={createTopic}
           onClose={() => setCreateTopicOpen(false)}
+        />
+      )}
+
+      {/* Group members modal */}
+      {groupMembersOpen && activeChat?.isGroup && (
+        <GroupMembersModal
+          chat={activeChat}
+          authUser={authUser}
+          installedBotUsernames={bots.map((b) => botInfoRef.current[b.id]?.username).filter(Boolean) as string[]}
+          onInstallBot={installBot}
+          onClose={() => setGroupMembersOpen(false)}
         />
       )}
 

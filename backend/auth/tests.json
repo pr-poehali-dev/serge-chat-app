@@ -22,6 +22,22 @@
       "body": {"action": "register", "email": "test@example.com", "password": "123"},
       "expectedStatus": 400,
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Forgot password with invalid email returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "forgot-password", "email": "not-an-email"},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Reset password without token returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "reset-password", "password": "newpass123"},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
     }
   ]
 }

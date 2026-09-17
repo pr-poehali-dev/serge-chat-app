@@ -48,12 +48,16 @@ export default function ChatsList({
               className="flex flex-1 items-center gap-3 min-w-0 text-left"
             >
               <div className="relative shrink-0">
-                <div
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white shadow-lg"
-                  style={{ background: `linear-gradient(135deg, ${chat.color}cc, ${chat.color}66)`, border: `1px solid ${chat.color}33` }}
-                >
-                  {chat.avatar}
-                </div>
+                {chat.avatarUrl ? (
+                  <img src={chat.avatarUrl} alt={chat.name} className="h-11 w-11 rounded-2xl object-cover shadow-lg" />
+                ) : (
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white shadow-lg"
+                    style={{ background: `linear-gradient(135deg, ${chat.color}cc, ${chat.color}66)`, border: `1px solid ${chat.color}33` }}
+                  >
+                    {chat.avatar}
+                  </div>
+                )}
                 {chat.online && !chat.isGroup && (
                   <span className="online-pulse absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-background" />
                 )}

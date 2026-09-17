@@ -60,6 +60,7 @@ interface ChatAreaProps {
   onSelectTopic?: (id: number | null) => void;
   onOpenCreateTopic?: () => void;
   onTogglePinTopic?: (topicId: number) => void;
+  onOpenGroupMembers?: () => void;
 }
 
 export default function ChatArea({
@@ -99,6 +100,7 @@ export default function ChatArea({
   onSelectTopic,
   onOpenCreateTopic,
   onTogglePinTopic,
+  onOpenGroupMembers,
 }: ChatAreaProps) {
   return (
     <main className="relative z-10 flex flex-1 flex-col">
@@ -117,12 +119,20 @@ export default function ChatArea({
           <header className="glass-strong border-b border-white/[0.06] px-6 py-4">
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white"
-                  style={{ background: `linear-gradient(135deg, ${activeChat.color}cc, ${activeChat.color}55)` }}
-                >
-                  {activeChat.avatar}
-                </div>
+                {activeChat.avatarUrl ? (
+                  <img
+                    src={activeChat.avatarUrl}
+                    alt={activeChat.name}
+                    className="h-11 w-11 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white"
+                    style={{ background: `linear-gradient(135deg, ${activeChat.color}cc, ${activeChat.color}55)` }}
+                  >
+                    {activeChat.avatar}
+                  </div>
+                )}
                 {activeChat.online && !activeChat.isGroup && (
                   <span className="online-pulse absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-background" />
                 )}
@@ -157,9 +167,19 @@ export default function ChatArea({
                 >
                   <Icon name="Video" size={16} />
                 </button>
-                <button className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all">
-                  <Icon name="MoreVertical" size={16} />
-                </button>
+                {activeChat.isGroup ? (
+                  <button
+                    onClick={onOpenGroupMembers}
+                    title="Участники группы"
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+                  >
+                    <Icon name="Users" size={16} />
+                  </button>
+                ) : (
+                  <button className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all">
+                    <Icon name="MoreVertical" size={16} />
+                  </button>
+                )}
               </div>
             </div>
           </header>

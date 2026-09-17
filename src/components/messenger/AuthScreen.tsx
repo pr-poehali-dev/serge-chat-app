@@ -8,18 +8,49 @@ interface AuthScreenProps {
   onAuthenticated: (user: AuthUser) => void;
 }
 
+type Mode = "login" | "register" | "forgot";
+
 export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [login, setLogin] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
     setError("");
+    setInfo("");
+
+    if (mode === "forgot") {
+      if (!email.trim()) {
+        setError("Введите email");
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await fetch(API_AUTH, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "forgot-password", email: email.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Что-то пошло не так");
+          return;
+        }
+        setInfo("Если такой email зарегистрирован, мы отправили на него ссылку для восстановления пароля");
+      } catch {
+        setError("Не удалось связаться с сервером");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!email.trim() || !password) {
       setError("Заполните email и пароль");
       return;
@@ -48,6 +79,12 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     }
   };
 
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setError("");
+    setInfo("");
+  };
+
   return (
     <div className="relative flex h-screen w-full items-center justify-center overflow-hidden bg-background font-golos px-4">
       <div className="orb orb-1" />
@@ -64,28 +101,42 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           </div>
           <h1 className="text-lg font-bold gradient-text">Трынделка</h1>
           <p className="text-xs text-white/35 mt-0.5">
-            {mode === "login" ? "Войдите в свой аккаунт" : "Создайте новый аккаунт"}
+            {mode === "login" && "Войдите в свой аккаунт"}
+            {mode === "register" && "Создайте новый аккаунт"}
+            {mode === "forgot" && "Восстановление пароля"}
           </p>
         </div>
 
-        <div className="flex gap-1 mb-5 rounded-2xl bg-white/[0.05] p-1">
+        {mode !== "forgot" && (
+          <div className="flex gap-1 mb-5 rounded-2xl bg-white/[0.05] p-1">
+            <button
+              onClick={() => switchMode("login")}
+              className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
+                mode === "login" ? "bg-white/[0.1] text-white" : "text-white/40 hover:text-white/60"
+              }`}
+            >
+              Вход
+            </button>
+            <button
+              onClick={() => switchMode("register")}
+              className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
+                mode === "register" ? "bg-white/[0.1] text-white" : "text-white/40 hover:text-white/60"
+              }`}
+            >
+              Регистрация
+            </button>
+          </div>
+        )}
+
+        {mode === "forgot" && (
           <button
-            onClick={() => { setMode("login"); setError(""); }}
-            className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
-              mode === "login" ? "bg-white/[0.1] text-white" : "text-white/40 hover:text-white/60"
-            }`}
+            onClick={() => switchMode("login")}
+            className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors mb-4"
           >
-            Вход
+            <Icon name="ArrowLeft" size={13} />
+            Назад ко входу
           </button>
-          <button
-            onClick={() => { setMode("register"); setError(""); }}
-            className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
-              mode === "register" ? "bg-white/[0.1] text-white" : "text-white/40 hover:text-white/60"
-            }`}
-          >
-            Регистрация
-          </button>
-        </div>
+        )}
 
         <div className="space-y-3">
           <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
@@ -97,20 +148,23 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoFocus
+              onKeyDown={(e) => e.key === "Enter" && mode === "forgot" && submit()}
             />
           </div>
 
-          <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
-            <Icon name="Lock" size={14} className="text-white/30" />
-            <input
-              type="password"
-              className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none"
-              placeholder="Пароль"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && mode === "login" && submit()}
-            />
-          </div>
+          {mode !== "forgot" && (
+            <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
+              <Icon name="Lock" size={14} className="text-white/30" />
+              <input
+                type="password"
+                className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none"
+                placeholder="Пароль"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && mode === "login" && submit()}
+              />
+            </div>
+          )}
 
           {mode === "register" && (
             <>
@@ -145,8 +199,20 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           )}
         </div>
 
+        {mode === "login" && (
+          <button
+            onClick={() => switchMode("forgot")}
+            className="mt-3 text-xs text-purple-400/80 hover:text-purple-400 transition-colors"
+          >
+            Забыли пароль?
+          </button>
+        )}
+
         {error && (
           <p className="mt-3 text-xs text-red-400 text-center">{error}</p>
+        )}
+        {info && (
+          <p className="mt-3 text-xs text-emerald-400 text-center">{info}</p>
         )}
 
         <button
@@ -158,8 +224,10 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             <Icon name="Loader" size={16} className="animate-spin mx-auto" />
           ) : mode === "login" ? (
             "Войти"
-          ) : (
+          ) : mode === "register" ? (
             "Зарегистрироваться"
+          ) : (
+            "Отправить ссылку"
           )}
         </button>
       </div>

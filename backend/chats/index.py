@@ -76,6 +76,51 @@ def handler(event: dict, context) -> dict:
             conn.commit()
             return {"statusCode": 200, "headers": CORS, "body": json.dumps({"pinned": pinned})}
 
+        # GET /chats?action=members&chat_id=X — список участников группы
+        if method == "GET" and params.get("action") == "members":
+            chat_id = int(params["chat_id"])
+            cur.execute(f"""
+                SELECT u.id, u.display_name, u.avatar_initials, u.avatar_color, u.avatar_url
+                FROM {SCHEMA}.users u
+                JOIN {SCHEMA}.chat_members cm ON cm.user_id = u.id
+                WHERE cm.chat_id = %s
+                ORDER BY u.display_name
+            """, (chat_id,))
+            rows = cur.fetchall()
+            members = [{
+                "id": r[0], "displayName": r[1], "avatarInitials": r[2],
+                "avatarColor": r[3], "avatarUrl": r[4],
+            } for r in rows]
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"members": members})}
+
+        # POST /chats?action=add-member — добавить участника в группу
+        if method == "POST" and params.get("action") == "add-member":
+            body = json.loads(event.get("body") or "{}")
+            chat_id = body.get("chat_id")
+            user_id = body.get("user_id")
+            cur.execute(f"SELECT is_group FROM {SCHEMA}.chats WHERE id = %s", (chat_id,))
+            chat_row = cur.fetchone()
+            if not chat_row or not chat_row[0]:
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Чат не найден или не является группой"})}
+            cur.execute(f"""
+                INSERT INTO {SCHEMA}.chat_members (chat_id, user_id)
+                VALUES (%s, %s)
+                ON CONFLICT (chat_id, user_id) DO NOTHING
+            """, (chat_id, user_id))
+            conn.commit()
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True})}
+
+        # POST /chats?action=remove-member — удалить участника из группы
+        if method == "POST" and params.get("action") == "remove-member":
+            body = json.loads(event.get("body") or "{}")
+            chat_id = body.get("chat_id")
+            user_id = body.get("user_id")
+            cur.execute(f"""
+                DELETE FROM {SCHEMA}.chat_members WHERE chat_id = %s AND user_id = %s
+            """, (chat_id, user_id))
+            conn.commit()
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True})}
+
         # GET /chats — список чатов
         cur.execute(f"""
             SELECT
@@ -109,7 +154,13 @@ def handler(event: dict, context) -> dict:
                     WHERE cm.chat_id = c.id AND u.id != %s
                     LIMIT 1
                 ) as contact_initials,
-                cm_me.pinned as pinned
+                cm_me.pinned as pinned,
+                (
+                    SELECT u.avatar_url FROM {SCHEMA}.users u
+                    JOIN {SCHEMA}.chat_members cm ON cm.user_id = u.id
+                    WHERE cm.chat_id = c.id AND u.id != %s
+                    LIMIT 1
+                ) as contact_avatar_url
             FROM {SCHEMA}.chats c
             JOIN {SCHEMA}.chat_members cm_me ON cm_me.chat_id = c.id AND cm_me.user_id = %s
             ORDER BY (
@@ -117,7 +168,7 @@ def handler(event: dict, context) -> dict:
                 WHERE m.chat_id = c.id
                 ORDER BY m.created_at DESC LIMIT 1
             ) DESC NULLS LAST
-        """, (my_user_id, my_user_id, my_user_id, my_user_id))
+        """, (my_user_id, my_user_id, my_user_id, my_user_id, my_user_id))
 
         rows = cur.fetchall()
         chats = []
@@ -133,6 +184,7 @@ def handler(event: dict, context) -> dict:
                 "online": bool(r[7]) if r[7] is not None else False,
                 "avatar": r[8] or r[1][:2].upper() if r[1] else "??",
                 "pinned": bool(r[9]) if r[9] is not None else False,
+                "avatarUrl": r[10] if not r[2] else None,
             })
 
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({"chats": chats})}

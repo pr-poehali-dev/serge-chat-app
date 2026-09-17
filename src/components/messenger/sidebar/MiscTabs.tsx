@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 import { Chat, Tab, AuthUser } from "../types";
+
+const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
 
 const NOTIFICATIONS = [
   { id: 1, icon: "MessageCircle", text: "Алиса прислала 3 новых сообщения", time: "сейчас", color: "#a855f7" },
@@ -29,6 +31,7 @@ interface MiscTabsProps {
   authUser: AuthUser | null;
   onUpdateProfile: (login: string, firstName: string, lastName: string) => Promise<string | null>;
   onLogout: () => void;
+  onAvatarUpdated: (user: AuthUser) => void;
 }
 
 export default function MiscTabs({
@@ -39,6 +42,7 @@ export default function MiscTabs({
   authUser,
   onUpdateProfile,
   onLogout,
+  onAvatarUpdated,
 }: MiscTabsProps) {
   const [login, setLogin] = useState(authUser?.login || "");
   const [firstName, setFirstName] = useState(authUser?.firstName || "");
@@ -46,6 +50,9 @@ export default function MiscTabs({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setLogin(authUser?.login || "");
@@ -64,6 +71,48 @@ export default function MiscTabs({
     } else {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    }
+  };
+
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !authUser) return;
+
+    if (!file.type.startsWith("image/")) {
+      setAvatarError("Выберите файл изображения");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError("Изображение должно быть меньше 5 МБ");
+      return;
+    }
+
+    setAvatarError("");
+    setAvatarUploading(true);
+    try {
+      const base64: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch(API_AUTH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": authUser.sessionId },
+        body: JSON.stringify({ action: "upload-avatar", imageBase64: base64, contentType: file.type }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAvatarError(data.error || "Не удалось загрузить фото");
+        return;
+      }
+      onAvatarUpdated(data.user);
+    } catch {
+      setAvatarError("Не удалось загрузить фото");
+    } finally {
+      setAvatarUploading(false);
     }
   };
 
@@ -152,13 +201,27 @@ export default function MiscTabs({
         <div className="animate-fade-in">
           <div className="flex flex-col items-center pt-2 pb-5">
             <div className="relative mb-3">
-              <div className="flex h-20 w-20 items-center justify-center rounded-3xl gradient-btn text-2xl font-black text-white shadow-xl shadow-purple-500/30">
-                {authUser?.avatarInitials || "ВА"}
-              </div>
-              <button className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-background border border-white/10 text-white/60 hover:text-white transition-all">
-                <Icon name="Camera" size={12} />
+              {authUser?.avatarUrl ? (
+                <img
+                  src={authUser.avatarUrl}
+                  alt={authUser.displayName}
+                  className="h-20 w-20 rounded-3xl object-cover shadow-xl shadow-purple-500/30"
+                />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-3xl gradient-btn text-2xl font-black text-white shadow-xl shadow-purple-500/30">
+                  {authUser?.avatarInitials || "ВА"}
+                </div>
+              )}
+              <button
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarUploading}
+                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-background border border-white/10 text-white/60 hover:text-white transition-all disabled:opacity-50"
+              >
+                <Icon name={avatarUploading ? "Loader" : "Camera"} size={12} className={avatarUploading ? "animate-spin" : ""} />
               </button>
+              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarSelect} />
             </div>
+            {avatarError && <p className="text-xs text-red-400 mb-1">{avatarError}</p>}
             <h2 className="text-base font-bold text-white/90">{authUser?.displayName || "Ваше Имя"}</h2>
             <p className="text-xs text-white/35 mt-0.5">{authUser?.email || "@me"}</p>
             <div className="mt-2 flex items-center gap-1.5 rounded-full bg-emerald-400/10 border border-emerald-400/20 px-3 py-1">
