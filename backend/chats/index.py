@@ -52,6 +52,16 @@ def handler(event: dict, context) -> dict:
                 ORDER BY m.created_at ASC
             """, (chat_id,))
             rows = cur.fetchall()
+            message_ids = [r[0] for r in rows]
+            reactions_by_msg: dict = {}
+            if message_ids:
+                cur.execute(f"""
+                    SELECT message_id, emoji, user_id
+                    FROM {SCHEMA}.message_reactions
+                    WHERE message_id = ANY(%s)
+                """, (message_ids,))
+                for msg_id, emoji, user_id in cur.fetchall():
+                    reactions_by_msg.setdefault(msg_id, {}).setdefault(emoji, []).append(user_id)
             messages = []
             for r in rows:
                 messages.append({
@@ -61,8 +71,46 @@ def handler(event: dict, context) -> dict:
                     "out": r[2] == my_user_id,
                     "read": r[3],
                     "time": r[4],
+                    "reactions": reactions_by_msg.get(r[0], {}),
                 })
             return {"statusCode": 200, "headers": CORS, "body": json.dumps({"messages": messages})}
+
+        # POST /chats?action=toggle-reaction — поставить/убрать эмодзи-реакцию на сообщение
+        if method == "POST" and params.get("action") == "toggle-reaction":
+            body = json.loads(event.get("body") or "{}")
+            message_id = body.get("message_id")
+            emoji = (body.get("emoji") or "").strip()
+            if not message_id or not emoji:
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Не переданы message_id или emoji"})}
+
+            cur.execute(f"""
+                SELECT id FROM {SCHEMA}.message_reactions
+                WHERE message_id = %s AND user_id = %s AND emoji = %s
+            """, (message_id, my_user_id, emoji))
+            existing = cur.fetchone()
+
+            if existing:
+                cur.execute(f"""
+                    DELETE FROM {SCHEMA}.message_reactions WHERE message_id = %s AND user_id = %s AND emoji = %s
+                """, (message_id, my_user_id, emoji))
+                added = False
+            else:
+                cur.execute(f"""
+                    INSERT INTO {SCHEMA}.message_reactions (message_id, user_id, emoji)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (message_id, user_id, emoji) DO NOTHING
+                """, (message_id, my_user_id, emoji))
+                added = True
+            conn.commit()
+
+            cur.execute(f"""
+                SELECT emoji, user_id FROM {SCHEMA}.message_reactions WHERE message_id = %s
+            """, (message_id,))
+            reactions: dict = {}
+            for em, uid in cur.fetchall():
+                reactions.setdefault(em, []).append(uid)
+
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"added": added, "reactions": reactions})}
 
         # POST /chats?action=pin — закрепить/открепить чат
         if method == "POST" and params.get("action") == "pin":

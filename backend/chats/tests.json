@@ -11,6 +11,14 @@
       "method": "GET",
       "path": "/?action=messages&chat_id=1",
       "expectedStatus": 200
+    },
+    {
+      "name": "Toggle reaction without message_id returns 400",
+      "method": "POST",
+      "path": "/?action=toggle-reaction",
+      "body": {"emoji": "😂"},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
     }
   ]
 }

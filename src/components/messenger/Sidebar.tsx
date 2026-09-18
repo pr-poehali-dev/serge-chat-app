@@ -10,6 +10,7 @@ interface SidebarProps {
   setActiveTab: (tab: Tab) => void;
   activeChatId: number | null;
   setActiveChatId: (id: number) => void;
+  isMobile?: boolean;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   chats: Chat[];
@@ -32,6 +33,7 @@ export default function Sidebar({
   setActiveTab,
   activeChatId,
   setActiveChatId,
+  isMobile,
   searchQuery,
   setSearchQuery,
   chats,
@@ -52,7 +54,10 @@ export default function Sidebar({
   const [groupToLeave, setGroupToLeave] = useState<Chat | null>(null);
 
   return (
-    <aside className="relative z-10 flex h-full flex-col" style={{ width: "var(--sidebar-width)" }}>
+    <aside
+      className="relative z-10 flex h-full flex-col w-full"
+      style={{ width: isMobile ? "100%" : "var(--sidebar-width)" }}
+    >
       <div className="glass-strong flex h-full flex-col border-r border-white/[0.06]">
         <SidebarHeader
           activeTab={activeTab}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { IncomingCall } from "@/components/messenger/CallOverlays";
 import Sidebar from "@/components/messenger/Sidebar";
 import ChatArea from "@/components/messenger/ChatArea";
@@ -19,8 +20,14 @@ const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca
 const SESSION_STORAGE_KEY = "trindelka_session_id";
 
 export default function Index() {
+  const isMobile = useIsMobile();
+  const [mobileShowChat, setMobileShowChat] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("chats");
-  const [activeChatId, setActiveChatId] = useState<number | null>(null);
+  const [activeChatId, setActiveChatIdRaw] = useState<number | null>(null);
+  const setActiveChatId = (id: number | null) => {
+    setActiveChatIdRaw(id);
+    setMobileShowChat(id !== null);
+  };
   const [inputText, setInputText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showEncryptBadge, setShowEncryptBadge] = useState(true);
@@ -111,6 +118,10 @@ export default function Index() {
 
   const handleAvatarUpdated = (user: AuthUser) => {
     setAuthUser(user);
+  };
+
+  const handleMobileBackToChats = () => {
+    setMobileShowChat(false);
   };
 
   // Close attach menu on outside click
@@ -421,7 +432,7 @@ export default function Index() {
       .then((data) => {
         setChats(data.chats || []);
         if (data.chats?.length > 0 && !activeChatId) {
-          setActiveChatId(data.chats[0].id);
+          setActiveChatIdRaw(data.chats[0].id);
         }
       })
       .finally(() => setLoadingChats(false));
@@ -540,6 +551,62 @@ export default function Index() {
     }
   };
 
+  const toggleReaction = async (messageId: number, emoji: string) => {
+    const applyToList = (list: Message[]): Message[] =>
+      list.map((m) => {
+        if (m.id !== messageId) return m;
+        const reactions = { ...(m.reactions || {}) };
+        const users = new Set(reactions[emoji] || []);
+        const myId = authUser?.id ?? 1;
+        if (users.has(myId)) {
+          users.delete(myId);
+        } else {
+          users.add(myId);
+        }
+        const nextUsers = Array.from(users);
+        if (nextUsers.length > 0) {
+          reactions[emoji] = nextUsers;
+        } else {
+          delete reactions[emoji];
+        }
+        return { ...m, reactions };
+      });
+
+    if (isGroupChat && activeTopicId) {
+      setTopicMessages((prev) => ({
+        ...prev,
+        [activeTopicId]: applyToList(prev[activeTopicId] || []),
+      }));
+      return;
+    }
+    if (isBotChat) {
+      setBotMessages((prev) => ({
+        ...prev,
+        [activeChatId as number]: applyToList(prev[activeChatId as number] || []),
+      }));
+      return;
+    }
+
+    setMessages((prev) => applyToList(prev));
+
+    if (!activeChatId || activeChatId < 0) return;
+
+    try {
+      const res = await fetch(`${API_CHATS}?action=toggle-reaction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ message_id: messageId, emoji }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions: data.reactions } : m)));
+      }
+    } catch {
+      // Revert on failure
+      setMessages((prev) => applyToList(prev));
+    }
+  };
+
   const filteredChats = chats.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -570,28 +637,32 @@ export default function Index() {
       <div className="orb orb-2" />
       <div className="orb orb-3" />
 
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        activeChatId={activeChatId}
-        setActiveChatId={setActiveChatId}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        chats={chats}
-        loadingChats={loadingChats}
-        filteredChats={filteredChats}
-        bots={bots}
-        onOpenBotStore={() => setBotStoreOpen(true)}
-        onDeleteBot={deleteBot}
-        onOpenCreateGroup={() => setCreateGroupOpen(true)}
-        onLeaveGroup={leaveGroup}
-        onTogglePinChat={togglePinChat}
-        authUser={authUser}
-        onUpdateProfile={handleUpdateProfile}
-        onLogout={handleLogout}
-        onAvatarUpdated={handleAvatarUpdated}
-      />
+      {(!isMobile || !mobileShowChat) && (
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          activeChatId={activeChatId}
+          setActiveChatId={setActiveChatId}
+          isMobile={isMobile}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          chats={chats}
+          loadingChats={loadingChats}
+          filteredChats={filteredChats}
+          bots={bots}
+          onOpenBotStore={() => setBotStoreOpen(true)}
+          onDeleteBot={deleteBot}
+          onOpenCreateGroup={() => setCreateGroupOpen(true)}
+          onLeaveGroup={leaveGroup}
+          onTogglePinChat={togglePinChat}
+          authUser={authUser}
+          onUpdateProfile={handleUpdateProfile}
+          onLogout={handleLogout}
+          onAvatarUpdated={handleAvatarUpdated}
+        />
+      )}
 
+      {(!isMobile || mobileShowChat) && (
       <ChatArea
         activeChat={activeChat}
         call={call}
@@ -634,7 +705,11 @@ export default function Index() {
         onOpenCreateTopic={() => setCreateTopicOpen(true)}
         onTogglePinTopic={togglePinTopic}
         onOpenGroupMembers={() => setGroupMembersOpen(true)}
+        currentUserId={authUser?.id}
+        onToggleReaction={toggleReaction}
+        onBack={isMobile ? handleMobileBackToChats : undefined}
       />
+      )}
 
       {/* Bot store modal */}
       {botStoreOpen && (

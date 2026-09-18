@@ -63,6 +63,7 @@ def handler(event: dict, context) -> dict:
                 "read": False,
                 "text": text,
                 "sender_id": my_user_id,
+                "reactions": {},
             }),
         }
     finally:

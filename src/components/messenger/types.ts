@@ -20,6 +20,7 @@ export interface Message {
   read: boolean;
   time: string;
   sender_id: number;
+  reactions?: Record<string, number[]>;
 }
 
 export type Tab = "chats" | "contacts" | "notifications" | "gallery" | "search" | "profile" | "bots";

@@ -1,7 +1,9 @@
-import { RefObject, Dispatch, SetStateAction } from "react";
+import { RefObject, Dispatch, SetStateAction, useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 import { CallScreen } from "./CallOverlays";
 import { Chat, Message, Attachment, Topic } from "./types";
+
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 interface EmojiCategory {
   label: string;
@@ -61,6 +63,9 @@ interface ChatAreaProps {
   onOpenCreateTopic?: () => void;
   onTogglePinTopic?: (topicId: number) => void;
   onOpenGroupMembers?: () => void;
+  currentUserId?: number;
+  onToggleReaction?: (messageId: number, emoji: string) => void;
+  onBack?: () => void;
 }
 
 export default function ChatArea({
@@ -101,7 +106,24 @@ export default function ChatArea({
   onOpenCreateTopic,
   onTogglePinTopic,
   onOpenGroupMembers,
+  currentUserId,
+  onToggleReaction,
+  onBack,
 }: ChatAreaProps) {
+  const [reactionPickerFor, setReactionPickerFor] = useState<number | null>(null);
+  const reactionPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (reactionPickerFor === null) return;
+    const handler = (e: MouseEvent) => {
+      if (reactionPickerRef.current && !reactionPickerRef.current.contains(e.target as Node)) {
+        setReactionPickerFor(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [reactionPickerFor]);
+
   return (
     <main className="relative z-10 flex flex-1 flex-col">
       {/* Call overlay */}
@@ -116,8 +138,16 @@ export default function ChatArea({
       {activeChat ? (
         <>
           {/* Header */}
-          <header className="glass-strong border-b border-white/[0.06] px-6 py-4">
-            <div className="flex items-center gap-4">
+          <header className="glass-strong border-b border-white/[0.06] px-3 sm:px-6 py-3 sm:py-4">
+            <div className="flex items-center gap-2 sm:gap-4">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white/50 hover:text-white/90 hover:bg-white/[0.06] transition-all -ml-1"
+                >
+                  <Icon name="ArrowLeft" size={18} />
+                </button>
+              )}
               <div className="relative">
                 {activeChat.avatarUrl ? (
                   <img
@@ -137,15 +167,15 @@ export default function ChatArea({
                   <span className="online-pulse absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-background" />
                 )}
               </div>
-              <div>
-                <h2 className="font-bold text-white/95">{activeChat.name}</h2>
-                <p className="text-xs text-white/35">
+              <div className="min-w-0">
+                <h2 className="font-bold text-white/95 truncate">{activeChat.name}</h2>
+                <p className="text-xs text-white/35 truncate">
                   {activeChat.isGroup ? "групповой чат" : activeChat.online ? "в сети" : "был(а) недавно"}
                 </p>
               </div>
 
               {showEncryptBadge && (
-                <div className="ml-4 flex items-center gap-1.5 rounded-full bg-emerald-400/[0.08] border border-emerald-400/20 px-3 py-1.5 animate-fade-in">
+                <div className="ml-4 hidden md:flex items-center gap-1.5 rounded-full bg-emerald-400/[0.08] border border-emerald-400/20 px-3 py-1.5 animate-fade-in shrink-0">
                   <Icon name="Lock" size={11} className="text-emerald-400" />
                   <span className="text-[11px] text-emerald-400 font-medium">Зашифровано</span>
                   <button onClick={() => setShowEncryptBadge(false)} className="ml-1 text-emerald-400/40 hover:text-emerald-400 transition-colors">
@@ -154,10 +184,10 @@ export default function ChatArea({
                 </div>
               )}
 
-              <div className="ml-auto flex items-center gap-2">
+              <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
                 <button
                   onClick={() => setCall({ isVideo: false })}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+                  className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
                 >
                   <Icon name="Phone" size={16} />
                 </button>
@@ -176,7 +206,7 @@ export default function ChatArea({
                     <Icon name="Users" size={16} />
                   </button>
                 ) : (
-                  <button className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all">
+                  <button className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all">
                     <Icon name="MoreVertical" size={16} />
                   </button>
                 )}
@@ -240,7 +270,7 @@ export default function ChatArea({
           )}
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
+          <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-5 space-y-3">
             {loadingMsgs ? (
               <div className="flex items-center justify-center h-full">
                 <div className="flex gap-1.5">
@@ -254,10 +284,12 @@ export default function ChatArea({
                 </div>
               </div>
             ) : (
-              messages.map((msg, i) => (
+              messages.map((msg, i) => {
+                const reactionEntries = Object.entries(msg.reactions || {}).filter(([, users]) => users.length > 0);
+                return (
                 <div
                   key={msg.id}
-                  className={`flex ${msg.out ? "justify-end" : "justify-start"} animate-fade-in`}
+                  className={`group/msg flex ${msg.out ? "justify-end" : "justify-start"} animate-fade-in`}
                   style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
                 >
                   {!msg.out && (
@@ -268,28 +300,87 @@ export default function ChatArea({
                       {activeChat.avatar[0]}
                     </div>
                   )}
-                  <div className="max-w-[65%]">
-                    <div className={`${/https?:\/\/.*\.gif/.test(msg.text) ? "p-1" : "px-4 py-2.5"} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-white/85"}`}>
-                      {/https?:\/\/.*\.gif/.test(msg.text) ? (
-                        <img
-                          src={msg.text.match(/https?:\/\/\S+\.gif/)?.[0]}
-                          alt="GIF"
-                          className="rounded-xl max-w-[220px] max-h-[160px] object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  <div className={`max-w-[75%] sm:max-w-[65%] flex items-end gap-1 ${msg.out ? "flex-row-reverse" : ""}`}>
+                    <div className="min-w-0">
+                      <div className={`${/https?:\/\/.*\.gif/.test(msg.text) ? "p-1" : "px-4 py-2.5"} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-white/85"}`}>
+                        {/https?:\/\/.*\.gif/.test(msg.text) ? (
+                          <img
+                            src={msg.text.match(/https?:\/\/\S+\.gif/)?.[0]}
+                            alt="GIF"
+                            className="rounded-xl max-w-[220px] max-h-[160px] object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                        )}
+                      </div>
+
+                      {reactionEntries.length > 0 && (
+                        <div className={`flex flex-wrap gap-1 mt-1 ${msg.out ? "justify-end" : "justify-start"}`}>
+                          {reactionEntries.map(([emoji, users]) => {
+                            const mine = currentUserId != null && users.includes(currentUserId);
+                            return (
+                              <button
+                                key={emoji}
+                                onClick={() => onToggleReaction?.(msg.id, emoji)}
+                                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-all ${
+                                  mine
+                                    ? "bg-purple-500/25 border border-purple-400/40"
+                                    : "bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1]"
+                                }`}
+                              >
+                                <span>{emoji}</span>
+                                <span className="text-[10px] text-white/50">{users.length}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
+
+                      <div className={`flex items-center gap-1 mt-1 px-1 ${msg.out ? "justify-end" : "justify-start"}`}>
+                        <span className="text-[10px] text-white/25">{msg.time}</span>
+                        {msg.out && (
+                          <Icon name={msg.read ? "CheckCheck" : "Check"} size={12} className={msg.read ? "text-purple-400" : "text-white/25"} />
+                        )}
+                      </div>
                     </div>
-                    <div className={`flex items-center gap-1 mt-1 px-1 ${msg.out ? "justify-end" : "justify-start"}`}>
-                      <span className="text-[10px] text-white/25">{msg.time}</span>
-                      {msg.out && (
-                        <Icon name={msg.read ? "CheckCheck" : "Check"} size={12} className={msg.read ? "text-purple-400" : "text-white/25"} />
-                      )}
-                    </div>
+
+                    {onToggleReaction && (
+                      <div className="relative shrink-0 self-start opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 max-[639px]:opacity-60 transition-opacity">
+                        <button
+                          onClick={() => setReactionPickerFor((v) => (v === msg.id ? null : msg.id))}
+                          className="flex h-6 w-6 items-center justify-center rounded-full text-white/30 hover:text-purple-400 hover:bg-white/[0.08] transition-all"
+                          title="Добавить реакцию"
+                        >
+                          <Icon name="SmilePlus" size={13} />
+                        </button>
+                        {reactionPickerFor === msg.id && (
+                          <div
+                            ref={reactionPickerRef}
+                            className={`absolute z-20 top-7 flex items-center gap-0.5 rounded-2xl px-1.5 py-1 animate-fade-in ${
+                              msg.out ? "right-0" : "left-0"
+                            }`}
+                            style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(20px)" }}
+                          >
+                            {QUICK_REACTIONS.map((em) => (
+                              <button
+                                key={em}
+                                onClick={() => {
+                                  onToggleReaction(msg.id, em);
+                                  setReactionPickerFor(null);
+                                }}
+                                className="flex h-8 w-8 items-center justify-center rounded-xl text-lg hover:bg-white/[0.08] hover:scale-110 transition-all"
+                              >
+                                {em}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-              ))
+              );})
             )}
             {botTyping && (
               <div className="flex justify-start animate-fade-in">
@@ -314,7 +405,7 @@ export default function ChatArea({
           </div>
 
           {/* Input */}
-          <div className="glass-strong border-t border-white/[0.06] px-4 py-3">
+          <div className="glass-strong border-t border-white/[0.06] px-2 sm:px-4 py-2.5 sm:py-3">
             {/* Attachments preview */}
             {attachments.length > 0 && (
               <div className="flex gap-2 mb-3 flex-wrap">
@@ -396,7 +487,7 @@ export default function ChatArea({
 
                 {emojiPickerOpen && (
                   <div
-                    className="absolute bottom-14 left-0 w-80 rounded-2xl overflow-hidden animate-fade-in z-20 flex flex-col"
+                    className="absolute bottom-14 left-0 w-[calc(100vw-2rem)] max-w-80 rounded-2xl overflow-hidden animate-fade-in z-20 flex flex-col"
                     style={{ background: "rgba(14,8,28,0.97)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(24px)", height: "340px" }}
                   >
                     {/* Tabs */}
