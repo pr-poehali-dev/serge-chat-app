@@ -1,15 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
-import { Chat, Tab, AuthUser } from "../types";
+import { Chat, Tab, AuthUser, NotificationItem, DirectoryUser } from "../types";
 
 const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
-
-const NOTIFICATIONS = [
-  { id: 1, icon: "MessageCircle", text: "Алиса прислала 3 новых сообщения", time: "сейчас", color: "#a855f7" },
-  { id: 2, icon: "Users", text: "Дмитрий добавил вас в группу «Проект Альфа»", time: "13:00", color: "#38bdf8" },
-  { id: 3, icon: "Heart", text: "Мария отреагировала на ваше сообщение", time: "Вт", color: "#ec4899" },
-  { id: 4, icon: "Shield", text: "Сквозное шифрование активно для всех чатов 🔒", time: "Вс", color: "#34d399" },
-];
 
 const GALLERY_ITEMS = [
   { id: 1, type: "photo", bg: "linear-gradient(135deg, #a855f7, #ec4899)" },
@@ -32,6 +25,8 @@ interface MiscTabsProps {
   onUpdateProfile: (login: string, firstName: string, lastName: string) => Promise<string | null>;
   onLogout: () => void;
   onAvatarUpdated: (user: AuthUser) => void;
+  notifications: NotificationItem[];
+  onStartChatWithUser: (userId: number) => Promise<string | null>;
 }
 
 export default function MiscTabs({
@@ -43,6 +38,8 @@ export default function MiscTabs({
   onUpdateProfile,
   onLogout,
   onAvatarUpdated,
+  notifications,
+  onStartChatWithUser,
 }: MiscTabsProps) {
   const [login, setLogin] = useState(authUser?.login || "");
   const [firstName, setFirstName] = useState(authUser?.firstName || "");
@@ -53,6 +50,12 @@ export default function MiscTabs({
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState("");
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const [userSearch, setUserSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<DirectoryUser[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [startingChatId, setStartingChatId] = useState<number | null>(null);
+  const [startChatError, setStartChatError] = useState("");
 
   useEffect(() => {
     setLogin(authUser?.login || "");
@@ -116,26 +119,67 @@ export default function MiscTabs({
     }
   };
 
+  useEffect(() => {
+    if (activeTab !== "search" || !authUser) return;
+    const query = userSearch.trim();
+    if (!query) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const timeout = setTimeout(() => {
+      fetch(`${API_AUTH}?action=users&search=${encodeURIComponent(query)}`, {
+        headers: { "X-Session-Id": authUser.sessionId },
+      })
+        .then((r) => r.json())
+        .then((data) => setSearchResults(data.users || []))
+        .finally(() => setSearching(false));
+    }, 350);
+    return () => clearTimeout(timeout);
+  }, [userSearch, activeTab, authUser]);
+
+  const handleStartChat = async (userId: number) => {
+    setStartChatError("");
+    setStartingChatId(userId);
+    const err = await onStartChatWithUser(userId);
+    setStartingChatId(null);
+    if (err) setStartChatError(err);
+  };
+
   return (
     <>
       {/* NOTIFICATIONS */}
       {activeTab === "notifications" && (
         <div className="animate-fade-in space-y-2">
           <p className="text-xs text-white/30 font-medium mb-3 px-1">УВЕДОМЛЕНИЯ</p>
-          {NOTIFICATIONS.map((n) => (
-            <div key={n.id} className="flex gap-3 rounded-2xl p-3 bg-white/[0.03] border border-white/[0.05]">
-              <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                style={{ background: `${n.color}22`, border: `1px solid ${n.color}33` }}
-              >
-                <Icon name={n.icon} size={16} style={{ color: n.color }} />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-white/75 leading-relaxed">{n.text}</p>
-                <p className="text-[11px] text-white/25 mt-1">{n.time}</p>
-              </div>
+          {notifications.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-10 text-center">
+              <Icon name="BellOff" size={22} className="text-white/15" />
+              <p className="text-xs text-white/25">Пока нет уведомлений</p>
             </div>
-          ))}
+          ) : (
+            notifications.map((n) => (
+              <div
+                key={n.id}
+                className={`flex gap-3 rounded-2xl p-3 border transition-all ${
+                  n.read ? "bg-white/[0.02] border-white/[0.04]" : "bg-white/[0.05] border-white/[0.08]"
+                }`}
+              >
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                  style={{ background: `${n.color}22`, border: `1px solid ${n.color}33` }}
+                >
+                  <Icon name={n.icon} size={16} style={{ color: n.color }} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-white/75 leading-relaxed">{n.text}</p>
+                  <p className="text-[11px] text-white/25 mt-1">{n.time}</p>
+                </div>
+                {!n.read && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-purple-400" />}
+              </div>
+            ))
+          )}
         </div>
       )}
 
@@ -173,26 +217,69 @@ export default function MiscTabs({
             <Icon name="Search" size={16} className="text-purple-400" />
             <input
               className="flex-1 bg-transparent text-sm text-white/80 placeholder:text-white/25 outline-none"
-              placeholder="Поиск пользователей..."
+              placeholder="Ник, имя или фамилия..."
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
               autoFocus
             />
+            {searching && <Icon name="Loader" size={14} className="animate-spin text-white/30" />}
           </div>
-          <p className="text-xs text-white/25 px-1 mb-3">РЕКОМЕНДАЦИИ</p>
-          {chats.slice(0, 4).map((c) => (
-            <div
-              key={c.id}
-              className="flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-white/[0.04] cursor-pointer transition-all"
-              onClick={() => { setActiveChatId(c.id); setActiveTab("chats"); }}
-            >
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold text-white"
-                style={{ background: `linear-gradient(135deg, ${c.color}cc, ${c.color}55)` }}
-              >
-                {c.avatar}
+
+          {startChatError && <p className="text-xs text-red-400 px-1 mb-3">{startChatError}</p>}
+
+          {userSearch.trim() ? (
+            searchResults.length === 0 && !searching ? (
+              <p className="text-center text-xs text-white/25 py-8">Никого не найдено</p>
+            ) : (
+              <div className="space-y-1">
+                {searchResults.map((u) => (
+                  <div key={u.id} className="flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-white/[0.04] transition-all">
+                    {u.avatarUrl ? (
+                      <img src={u.avatarUrl} alt={u.displayName} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
+                    ) : (
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white"
+                        style={{ background: `linear-gradient(135deg, ${u.avatarColor}cc, ${u.avatarColor}55)` }}
+                      >
+                        {u.avatarInitials}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white/80 truncate">{u.displayName}</p>
+                      {u.login && <p className="text-xs text-white/30 truncate">@{u.login}</p>}
+                    </div>
+                    <button
+                      onClick={() => handleStartChat(u.id)}
+                      disabled={startingChatId === u.id}
+                      className="shrink-0 flex items-center gap-1.5 rounded-xl gradient-btn text-white text-xs font-medium px-3 py-1.5 transition-all disabled:opacity-50 hover:-translate-y-0.5"
+                    >
+                      <Icon name={startingChatId === u.id ? "Loader" : "UserPlus"} size={13} className={startingChatId === u.id ? "animate-spin" : ""} />
+                      Написать
+                    </button>
+                  </div>
+                ))}
               </div>
-              <span className="text-sm text-white/60">{c.name}</span>
-            </div>
-          ))}
+            )
+          ) : (
+            <>
+              <p className="text-xs text-white/25 px-1 mb-3">РЕКОМЕНДАЦИИ</p>
+              {chats.slice(0, 4).map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-white/[0.04] cursor-pointer transition-all"
+                  onClick={() => { setActiveChatId(c.id); setActiveTab("chats"); }}
+                >
+                  <div
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold text-white"
+                    style={{ background: `linear-gradient(135deg, ${c.color}cc, ${c.color}55)` }}
+                  >
+                    {c.avatar}
+                  </div>
+                  <span className="text-sm text-white/60">{c.name}</span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
 

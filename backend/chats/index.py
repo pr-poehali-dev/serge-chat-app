@@ -158,6 +158,42 @@ def handler(event: dict, context) -> dict:
             conn.commit()
             return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True})}
 
+        # POST /chats?action=start-chat — создать (или найти существующий) личный чат с пользователем
+        if method == "POST" and params.get("action") == "start-chat":
+            body = json.loads(event.get("body") or "{}")
+            other_user_id = body.get("user_id")
+            if not other_user_id or other_user_id == my_user_id:
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Некорректный пользователь"})}
+
+            cur.execute(f"""
+                SELECT c.id FROM {SCHEMA}.chats c
+                JOIN {SCHEMA}.chat_members cm1 ON cm1.chat_id = c.id AND cm1.user_id = %s
+                JOIN {SCHEMA}.chat_members cm2 ON cm2.chat_id = c.id AND cm2.user_id = %s
+                WHERE c.is_group = false
+                LIMIT 1
+            """, (my_user_id, other_user_id))
+            existing = cur.fetchone()
+
+            if existing:
+                chat_id = existing[0]
+            else:
+                cur.execute(f"SELECT display_name, avatar_color FROM {SCHEMA}.users WHERE id = %s", (other_user_id,))
+                other = cur.fetchone()
+                if not other:
+                    return {"statusCode": 404, "headers": CORS, "body": json.dumps({"error": "Пользователь не найден"})}
+                cur.execute(f"""
+                    INSERT INTO {SCHEMA}.chats (is_group, name, avatar_color)
+                    VALUES (false, %s, %s)
+                    RETURNING id
+                """, (other[0], other[1]))
+                chat_id = cur.fetchone()[0]
+                cur.execute(f"""
+                    INSERT INTO {SCHEMA}.chat_members (chat_id, user_id) VALUES (%s, %s), (%s, %s)
+                """, (chat_id, my_user_id, chat_id, other_user_id))
+                conn.commit()
+
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"chat_id": chat_id})}
+
         # POST /chats?action=remove-member — удалить участника из группы
         if method == "POST" and params.get("action") == "remove-member":
             body = json.loads(event.get("body") or "{}")

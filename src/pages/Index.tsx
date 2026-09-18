@@ -10,7 +10,7 @@ import AuthScreen from "@/components/messenger/AuthScreen";
 import GroupMembersModal from "@/components/messenger/GroupMembersModal";
 import { generateBotReply } from "@/components/messenger/botReplies";
 import { crocodileWelcome, handleCrocodileMessage, CrocodileState } from "@/components/messenger/crocodileGame";
-import { Chat, Message, Tab, BotInfo, Topic, AuthUser } from "@/components/messenger/types";
+import { Chat, Message, Tab, BotInfo, Topic, AuthUser, NotificationItem } from "@/components/messenger/types";
 
 const CROCODILE_USERNAME = "crocodile_game_bot";
 
@@ -72,6 +72,7 @@ export default function Index() {
 
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   // Restore session on load
   useEffect(() => {
@@ -118,6 +119,32 @@ export default function Index() {
 
   const handleAvatarUpdated = (user: AuthUser) => {
     setAuthUser(user);
+  };
+
+  const reloadChats = async () => {
+    if (!authUser) return;
+    const res = await fetch(API_CHATS, { headers: authHeaders() });
+    const data = await res.json();
+    setChats(data.chats || []);
+  };
+
+  const startChatWithUser = async (userId: number): Promise<string | null> => {
+    if (!authUser) return "Не авторизован";
+    try {
+      const res = await fetch(`${API_CHATS}?action=start-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      const data = await res.json();
+      if (!res.ok) return data.error || "Не удалось начать чат";
+      await reloadChats();
+      setActiveChatId(data.chat_id);
+      setActiveTab("chats");
+      return null;
+    } catch {
+      return "Не удалось связаться с сервером";
+    }
   };
 
   const handleMobileBackToChats = () => {
@@ -458,6 +485,12 @@ export default function Index() {
     setActiveTopicId(null);
   }, [activeChatId]);
 
+  // Automatically mark notifications as read when the bell tab is opened
+  useEffect(() => {
+    if (activeTab !== "notifications") return;
+    setNotifications((prev) => (prev.some((n) => !n.read) ? prev.map((n) => ({ ...n, read: true })) : prev));
+  }, [activeTab]);
+
   // Load messages when chat changes
   useEffect(() => {
     if (!activeChatId || isBotChat || activeChatId < 0 || !authUser) return;
@@ -659,6 +692,8 @@ export default function Index() {
           onUpdateProfile={handleUpdateProfile}
           onLogout={handleLogout}
           onAvatarUpdated={handleAvatarUpdated}
+          notifications={notifications}
+          onStartChatWithUser={startChatWithUser}
         />
       )}
 

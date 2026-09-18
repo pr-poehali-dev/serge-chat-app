@@ -53,6 +53,15 @@ export interface AuthUser {
   sessionId: string;
 }
 
+export interface NotificationItem {
+  id: number;
+  icon: string;
+  text: string;
+  time: string;
+  color: string;
+  read: boolean;
+}
+
 export interface DirectoryUser {
   id: number;
   displayName: string;

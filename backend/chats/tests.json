@@ -19,6 +19,14 @@
       "body": {"emoji": "😂"},
       "expectedStatus": 400,
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Start chat without user_id returns 400",
+      "method": "POST",
+      "path": "/?action=start-chat",
+      "body": {},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
     }
   ]
 }

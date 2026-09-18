@@ -116,12 +116,28 @@ def handler(event: dict, context) -> dict:
                 cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
                 row = cur.fetchone()
                 exclude_id = row[0] if row else None
+
+            search = (params.get("search") or "").strip()
+
+            conditions = []
+            query_args = []
+            if exclude_id:
+                conditions.append("id != %s")
+                query_args.append(exclude_id)
+            if search:
+                conditions.append("(login ILIKE %s OR first_name ILIKE %s OR last_name ILIKE %s OR display_name ILIKE %s)")
+                like = f"%{search}%"
+                query_args.extend([like, like, like, like])
+
+            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
             cur.execute(f"""
                 SELECT id, display_name, avatar_initials, avatar_color, avatar_url, login
                 FROM {SCHEMA}.users
-                {"WHERE id != %s" if exclude_id else ""}
+                {where_clause}
                 ORDER BY display_name
-            """, (exclude_id,) if exclude_id else ())
+                LIMIT 50
+            """, tuple(query_args))
             rows = cur.fetchall()
             users = [{
                 "id": r[0], "displayName": r[1], "avatarInitials": r[2],

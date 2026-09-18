@@ -59,7 +59,10 @@ export default function ContactsAndBots({
               </div>
             ))}
           </div>
-          <button className="mt-4 w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.1] py-3 text-sm text-white/30 hover:text-white/60 hover:border-white/20 transition-all">
+          <button
+            onClick={() => setActiveTab("search")}
+            className="mt-4 w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.1] py-3 text-sm text-white/30 hover:text-white/60 hover:border-white/20 transition-all"
+          >
             <Icon name="UserPlus" size={16} />
             Добавить контакт
           </button>

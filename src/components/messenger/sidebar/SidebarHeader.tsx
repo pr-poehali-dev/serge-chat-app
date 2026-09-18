@@ -8,6 +8,7 @@ interface SidebarHeaderProps {
   setSearchQuery: (q: string) => void;
   chats: Chat[];
   bots: Chat[];
+  unreadNotifications: number;
   onOpenCreateGroup: () => void;
 }
 
@@ -18,13 +19,14 @@ export default function SidebarHeader({
   setSearchQuery,
   chats,
   bots,
+  unreadNotifications,
   onOpenCreateGroup,
 }: SidebarHeaderProps) {
   const tabs: { id: Tab; icon: string; badge?: number }[] = [
     { id: "chats", icon: "MessageCircle", badge: chats.reduce((s, c) => s + c.unread, 0) || undefined },
     { id: "contacts", icon: "Users" },
     { id: "bots", icon: "Bot", badge: bots.length || undefined },
-    { id: "notifications", icon: "Bell", badge: 4 },
+    { id: "notifications", icon: "Bell", badge: unreadNotifications || undefined },
     { id: "gallery", icon: "Image" },
     { id: "search", icon: "Search" },
     { id: "profile", icon: "User" },

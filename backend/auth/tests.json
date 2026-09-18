@@ -38,6 +38,12 @@
       "body": {"action": "reset-password", "password": "newpass123"},
       "expectedStatus": 400,
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Search users by name",
+      "method": "GET",
+      "path": "/?action=users&search=Алиса",
+      "expectedStatus": 200
     }
   ]
 }
