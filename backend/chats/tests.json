@@ -16,7 +16,9 @@
       "name": "Toggle reaction without message_id returns 400",
       "method": "POST",
       "path": "/?action=toggle-reaction",
-      "body": {"emoji": "😂"},
+      "body": {
+        "emoji": "😂"
+      },
       "expectedStatus": 400,
       "bodyMatcher": "partial"
     },
@@ -24,7 +26,12 @@
       "name": "Create group without session returns 401",
       "method": "POST",
       "path": "/?action=create-group",
-      "body": {"name": "Тест", "member_ids": [2]},
+      "body": {
+        "name": "Тест",
+        "member_ids": [
+          2
+        ]
+      },
       "expectedStatus": 401,
       "bodyMatcher": "partial"
     },
@@ -46,6 +53,27 @@
       "path": "/?action=start-chat",
       "body": {},
       "expectedStatus": 400,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Edit message without session returns 401",
+      "method": "POST",
+      "path": "/?action=edit-message",
+      "body": {
+        "message_id": 1,
+        "text": "Правка"
+      },
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Remove message without session returns 401",
+      "method": "POST",
+      "path": "/?action=remove-message",
+      "body": {
+        "message_id": 1
+      },
+      "expectedStatus": 401,
       "bodyMatcher": "partial"
     }
   ]

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Dispatch, SetStateAction } from "react";
 import { RecordedMedia, blobToBase64 } from "@/components/messenger/media/useRecorder";
-import { Chat, Message, Tab, AuthUser, NotificationItem, Attachment } from "@/components/messenger/types";
+import { Chat, Message, ReplyPreview, Tab, AuthUser, NotificationItem, Attachment } from "@/components/messenger/types";
 import { API_CHATS, API_SEND, API_TRANSCRIBE } from "./config";
 
 const POLL_INTERVAL_MS = 3000;
@@ -59,6 +59,9 @@ export function useMessaging({
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [sending, setSending] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [sendError, setSendError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const startChatWithUser = async (userId: number): Promise<string | null> => {
@@ -220,13 +223,22 @@ export function useMessaging({
 
   useEffect(() => {
     lastMessagesSigRef.current = "";
+    setReplyTo(null);
+    setEditingMessage(null);
+    setSendError("");
   }, [activeChatId, activeTopicId]);
+
+  useEffect(() => {
+    if (!sendError) return;
+    const t = window.setTimeout(() => setSendError(""), 5000);
+    return () => window.clearTimeout(t);
+  }, [sendError]);
 
   // Tell the server we are typing (direct chats only)
   const lastTypingPingRef = useRef(0);
   useEffect(() => {
     if (!authUser || !activeChatId || activeChatId < 0 || isBotChat || isGroupChat) return;
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || editingMessage) return;
     const now = Date.now();
     if (now - lastTypingPingRef.current < TYPING_PING_MS) return;
     lastTypingPingRef.current = now;
@@ -296,54 +308,184 @@ export function useMessaging({
     const hasAttachments = attachments.length > 0;
     if ((!hasText && !hasAttachments) || !activeChatId || sending) return;
 
-    const text = hasText
-      ? inputText.trim()
-      : attachments.map((a) => `📎 ${a.name} (${a.size})`).join("\n");
+    if (editingMessage) {
+      await submitEdit(inputText.trim());
+      return;
+    }
 
-    const fullText = hasText && hasAttachments
-      ? `${text}\n${attachments.map((a) => `📎 ${a.name} (${a.size})`).join("\n")}`
-      : text;
+    const toSend = attachments;
+    const caption = inputText.trim();
+    const replyTarget = replyTo;
 
     setInputText("");
     setAttachments([]);
-
-    const optimistic: Message = {
-      id: Date.now(),
-      text: fullText,
-      out: true,
-      read: false,
-      time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
-      sender_id: authUser?.id ?? 1,
-    };
-
-    setMessages((prev) => [...prev, optimistic]);
+    setReplyTo(null);
+    setSendError("");
     setSending(true);
 
+    const nowTime = () => new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    const replyPreview = replyTarget
+      ? {
+          id: replyTarget.id,
+          text: replyTarget.text,
+          kind: (replyTarget.kind || "text") as ReplyPreview["kind"],
+          senderName: replyTarget.out ? "Вы" : replyTarget.senderName || chats.find((c) => c.id === activeChatId)?.name,
+        }
+      : null;
+
+    const post = async (payload: Record<string, unknown>, optimistic: Message) => {
+      setMessages((prev) => [...prev, optimistic]);
+      try {
+        const res = await fetch(API_SEND, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            chat_id: activeChatId,
+            topic_id: activeTopicId,
+            reply_to_id: replyTarget?.id ?? null,
+            ...payload,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+          setSendError(data.error || "Не удалось отправить сообщение");
+          return false;
+        }
+        setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? { ...data } : m)));
+        return data as Message;
+      } catch {
+        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+        setSendError("Не удалось связаться с сервером");
+        return false;
+      }
+    };
+
     try {
-      const res = await fetch(API_SEND, {
+      let lastLabel = caption;
+      let lastTime = nowTime();
+
+      if (toSend.length === 0) {
+        const sent = await post(
+          { text: caption },
+          {
+            id: Date.now(),
+            text: caption,
+            out: true,
+            read: false,
+            time: lastTime,
+            sender_id: authUser?.id ?? 1,
+            replyTo: replyPreview,
+          }
+        );
+        if (sent) lastTime = sent.time;
+        else return;
+      } else {
+        for (let i = 0; i < toSend.length; i++) {
+          const att = toSend[i];
+          const isImage = att.type.startsWith("image/");
+          const kind = isImage ? "image" : "file";
+          const base64 = att.file ? await blobToBase64(att.file) : "";
+          const text = i === 0 ? caption : "";
+          const sent = await post(
+            { kind, media: base64, contentType: att.type || "application/octet-stream", fileName: att.name, text },
+            {
+              id: Date.now() + i,
+              text,
+              out: true,
+              read: false,
+              time: nowTime(),
+              sender_id: authUser?.id ?? 1,
+              kind,
+              mediaUrl: att.file && isImage ? URL.createObjectURL(att.file) : null,
+              fileName: att.name,
+              fileSize: att.file?.size ?? null,
+              replyTo: i === 0 ? replyPreview : null,
+            }
+          );
+          if (!sent) return;
+          lastTime = sent.time;
+          lastLabel = isImage ? "🖼 Фото" : `📎 ${att.name}`;
+        }
+      }
+
+      setChats((prev) =>
+        prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: lastLabel || caption, time: lastTime } : c))
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const startReply = (msg: Message) => {
+    setEditingMessage(null);
+    setReplyTo(msg);
+  };
+
+  const startEdit = (msg: Message) => {
+    setReplyTo(null);
+    setEditingMessage(msg);
+    setInputText(msg.text);
+  };
+
+  const cancelComposerContext = () => {
+    if (editingMessage) setInputText("");
+    setReplyTo(null);
+    setEditingMessage(null);
+  };
+
+  const submitEdit = async (text: string) => {
+    if (!editingMessage || !text) return;
+    const target = editingMessage;
+    setSending(true);
+    try {
+      const res = await fetch(`${API_CHATS}?action=edit-message`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ chat_id: activeChatId, topic_id: activeTopicId, text: fullText }),
+        body: JSON.stringify({ message_id: target.id, text }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+        setSendError(data.error || "Не удалось изменить сообщение");
         return;
       }
-      setMessages((prev) =>
-        prev.map((m) => (m.id === optimistic.id ? { ...data } : m))
-      );
-      setChats((prev) =>
-        prev.map((c) =>
-          c.id === activeChatId
-            ? { ...c, lastMsg: text, time: data.time }
-            : c
-        )
-      );
+      setMessages((prev) => prev.map((m) => (m.id === target.id ? { ...m, text: data.text, edited: true } : m)));
+      setEditingMessage(null);
+      setInputText("");
     } catch {
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      setSendError("Не удалось связаться с сервером");
     } finally {
       setSending(false);
+    }
+  };
+
+  const removeMessage = async (messageId: number) => {
+    const snapshot = messages;
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, removed: true, text: "", kind: "text", mediaUrl: null, fileName: null, reactions: {} }
+          : m
+      )
+    );
+    if (replyTo?.id === messageId) setReplyTo(null);
+    if (editingMessage?.id === messageId) {
+      setEditingMessage(null);
+      setInputText("");
+    }
+    try {
+      const res = await fetch(`${API_CHATS}?action=remove-message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ message_id: messageId }),
+      });
+      if (!res.ok) {
+        setMessages(snapshot);
+        setSendError("Не удалось удалить сообщение");
+      }
+    } catch {
+      setMessages(snapshot);
+      setSendError("Не удалось связаться с сервером");
     }
   };
 
@@ -407,5 +549,12 @@ export function useMessaging({
     transcribeMessage,
     sendMessage,
     toggleReaction,
+    replyTo,
+    editingMessage,
+    sendError,
+    startReply,
+    startEdit,
+    cancelComposerContext,
+    removeMessage,
   };
 }

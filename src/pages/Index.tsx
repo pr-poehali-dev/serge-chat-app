@@ -214,6 +214,13 @@ export default function Index() {
         onBack={isMobile ? handleMobileBackToChats : undefined}
         onSendMedia={!isBotChat && activeChatId && activeChatId > 0 && !(isGroupChat && bg.activeTopicId) ? msg.sendMedia : undefined}
         onTranscribe={msg.transcribeMessage}
+        replyTo={msg.replyTo}
+        editingMessage={msg.editingMessage}
+        sendError={msg.sendError}
+        onReply={isBotChat ? undefined : msg.startReply}
+        onEdit={isBotChat ? undefined : msg.startEdit}
+        onRemove={isBotChat ? undefined : msg.removeMessage}
+        onCancelContext={msg.cancelComposerContext}
       />
       )}
 

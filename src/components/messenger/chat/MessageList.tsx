@@ -3,6 +3,8 @@ import Icon from "@/components/ui/icon";
 import { Chat, Message } from "../types";
 import VoiceMessage from "../media/VoiceMessage";
 import CircleMessage from "../media/CircleMessage";
+import ReplyQuote from "./ReplyQuote";
+import { ImageAttachment, FileCard } from "./FileAttachment";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -15,6 +17,9 @@ interface MessageListProps {
   currentUserId?: number;
   onToggleReaction?: (messageId: number, emoji: string) => void;
   onTranscribe?: (messageId: number) => Promise<string | null>;
+  onReply?: (msg: Message) => void;
+  onEdit?: (msg: Message) => void;
+  onRemove?: (messageId: number) => void;
 }
 
 export default function MessageList({
@@ -26,9 +31,22 @@ export default function MessageList({
   currentUserId,
   onToggleReaction,
   onTranscribe,
+  onReply,
+  onEdit,
+  onRemove,
 }: MessageListProps) {
   const [reactionPickerFor, setReactionPickerFor] = useState<number | null>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
+  const [highlightId, setHighlightId] = useState<number | null>(null);
+
+  const jumpTo = (messageId: number) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightId(messageId);
+    window.setTimeout(() => setHighlightId(null), 1500);
+  };
 
   useEffect(() => {
     if (reactionPickerFor === null) return;
@@ -63,7 +81,10 @@ export default function MessageList({
             return (
             <div
               key={msg.id}
-              className={`group/msg flex ${msg.out ? "justify-end" : "justify-start"} animate-fade-in`}
+              id={`msg-${msg.id}`}
+              className={`group/msg flex rounded-2xl transition-colors duration-500 ${msg.out ? "justify-end" : "justify-start"} animate-fade-in ${
+                highlightId === msg.id ? "bg-purple-500/15" : ""
+              }`}
               style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
             >
               {!msg.out && (
@@ -89,12 +110,36 @@ export default function MessageList({
                       {msg.senderName}
                     </p>
                   )}
-                  {msg.kind === "circle" && msg.mediaUrl ? (
+                  {msg.removed ? (
+                    <div className="msg-bubble-in flex items-center gap-2 px-4 py-2.5 text-white/40">
+                      <Icon name="Ban" size={13} />
+                      <span className="text-sm italic">Сообщение удалено</span>
+                    </div>
+                  ) : msg.kind === "circle" && msg.mediaUrl ? (
                     <CircleMessage msg={msg} />
                   ) : (
-                  <div className={`${msg.kind === "voice" || /https?:\/\/.*\.gif/.test(msg.text) ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-white/85"}`}>
+                  <div className={`${msg.kind === "voice" || msg.kind === "image" || /https?:\/\/.*\.gif/.test(msg.text) ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.kind === "file" ? "px-3 py-2.5" : ""} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-white/85"}`}>
+                    {msg.replyTo && (
+                      <div className={msg.kind === "image" ? "px-2 pt-1" : ""}>
+                        <ReplyQuote reply={msg.replyTo} out={msg.out} onJump={jumpTo} />
+                      </div>
+                    )}
                     {msg.kind === "voice" && msg.mediaUrl ? (
                       <VoiceMessage msg={msg} onTranscribe={onTranscribe} />
+                    ) : msg.kind === "image" && msg.mediaUrl ? (
+                      <>
+                        <ImageAttachment msg={msg} />
+                        {msg.text && (
+                          <p className="px-3 py-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                        )}
+                      </>
+                    ) : msg.kind === "file" && msg.mediaUrl ? (
+                      <>
+                        <FileCard msg={msg} out={msg.out} />
+                        {msg.text && (
+                          <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                        )}
+                      </>
                     ) : /https?:\/\/.*\.gif/.test(msg.text) ? (
                       <img
                         src={msg.text.match(/https?:\/\/\S+\.gif/)?.[0]}
@@ -131,23 +176,53 @@ export default function MessageList({
                   )}
 
                   <div className={`flex items-center gap-1 mt-1 px-1 ${msg.out ? "justify-end" : "justify-start"}`}>
+                    {msg.edited && !msg.removed && <span className="text-[10px] text-white/25">изменено</span>}
                     <span className="text-[10px] text-white/25">{msg.time}</span>
-                    {msg.out && (
+                    {msg.out && !msg.removed && (
                       <Icon name={msg.read ? "CheckCheck" : "Check"} size={12} className={msg.read ? "text-purple-400" : "text-white/25"} />
                     )}
                   </div>
                 </div>
 
-                {onToggleReaction && (
-                  <div className="relative shrink-0 self-start opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 max-[639px]:opacity-60 transition-opacity">
-                    <button
-                      onClick={() => setReactionPickerFor((v) => (v === msg.id ? null : msg.id))}
-                      className="flex h-6 w-6 items-center justify-center rounded-full text-white/30 hover:text-purple-400 hover:bg-white/[0.08] transition-all"
-                      title="Добавить реакцию"
-                    >
-                      <Icon name="SmilePlus" size={13} />
-                    </button>
-                    {reactionPickerFor === msg.id && (
+                {!msg.removed && (onToggleReaction || onReply || (msg.out && (onEdit || onRemove))) && (
+                  <div className="relative shrink-0 self-start flex items-center opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 max-[639px]:opacity-60 transition-opacity">
+                    {onReply && (
+                      <button
+                        onClick={() => onReply(msg)}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-white/30 hover:text-purple-400 hover:bg-white/[0.08] transition-all"
+                        title="Ответить"
+                      >
+                        <Icon name="Reply" size={13} />
+                      </button>
+                    )}
+                    {msg.out && onEdit && (msg.kind === "text" || msg.kind === "image" || msg.kind === "file" || !msg.kind) && !/https?:\/\/.*\.gif/.test(msg.text) && msg.id < 1e12 && (
+                      <button
+                        onClick={() => onEdit(msg)}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-white/30 hover:text-purple-400 hover:bg-white/[0.08] transition-all"
+                        title="Изменить"
+                      >
+                        <Icon name="Pencil" size={12} />
+                      </button>
+                    )}
+                    {msg.out && onRemove && msg.id < 1e12 && (
+                      <button
+                        onClick={() => setConfirmRemoveId(msg.id)}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-white/30 hover:text-red-400 hover:bg-white/[0.08] transition-all"
+                        title="Удалить"
+                      >
+                        <Icon name="Trash2" size={12} />
+                      </button>
+                    )}
+                    {onToggleReaction && (
+                      <button
+                        onClick={() => setReactionPickerFor((v) => (v === msg.id ? null : msg.id))}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-white/30 hover:text-purple-400 hover:bg-white/[0.08] transition-all"
+                        title="Добавить реакцию"
+                      >
+                        <Icon name="SmilePlus" size={13} />
+                      </button>
+                    )}
+                    {onToggleReaction && reactionPickerFor === msg.id && (
                       <div
                         ref={reactionPickerRef}
                         className={`absolute z-20 top-7 flex items-center gap-0.5 rounded-2xl px-1.5 py-1 animate-fade-in ${
@@ -196,6 +271,47 @@ export default function MessageList({
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {confirmRemoveId !== null && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
+          onClick={() => setConfirmRemoveId(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl overflow-hidden animate-fade-in p-5"
+            style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/15">
+                <Icon name="Trash2" size={20} className="text-red-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white/90">Удалить сообщение?</p>
+                <p className="text-xs text-white/40 mt-1">Оно исчезнет у всех участников чата</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setConfirmRemoveId(null)}
+                className="flex-1 rounded-xl bg-white/[0.06] py-2.5 text-sm text-white/60 hover:bg-white/[0.1] transition-all"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={() => {
+                  onRemove?.(confirmRemoveId);
+                  setConfirmRemoveId(null);
+                }}
+                className="flex-1 rounded-xl bg-red-500/20 border border-red-500/30 py-2.5 text-sm text-red-400 hover:bg-red-500/30 transition-all"
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

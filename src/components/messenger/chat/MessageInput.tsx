@@ -1,9 +1,10 @@
 import { RefObject, Dispatch, SetStateAction, useState } from "react";
 import Icon from "@/components/ui/icon";
-import { Attachment } from "../types";
+import { Attachment, Message } from "../types";
 import MediaRecorderControls from "../media/MediaRecorderControls";
 import { RecordedMedia } from "../media/useRecorder";
 import EmojiGifPicker, { EmojiCategory, GifCategory, GifItem } from "./EmojiGifPicker";
+import { replyLabel } from "./ReplyQuote";
 
 interface MessageInputProps {
   attachments: Attachment[];
@@ -31,6 +32,11 @@ interface MessageInputProps {
   sendMessage: () => void;
   sending: boolean;
   onSendMedia?: (kind: "voice" | "circle", media: RecordedMedia) => void;
+  replyTo?: Message | null;
+  editingMessage?: Message | null;
+  sendError?: string;
+  onCancelContext?: () => void;
+  replyAuthorName?: string;
 }
 
 export default function MessageInput({
@@ -57,14 +63,49 @@ export default function MessageInput({
   sendMessage,
   sending,
   onSendMedia,
+  replyTo,
+  editingMessage,
+  sendError,
+  onCancelContext,
+  replyAuthorName,
 }: MessageInputProps) {
   const [recordingActive, setRecordingActive] = useState(false);
-  const hasDraft = inputText.trim().length > 0 || attachments.length > 0;
+  const hasDraft = inputText.trim().length > 0 || attachments.length > 0 || !!editingMessage;
 
   return (
     <>
       {/* Input */}
       <div className="glass-strong safe-bottom border-t border-white/[0.06] px-2 sm:px-4 py-2.5 sm:py-3">
+        {sendError && (
+          <div className="mb-2 flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 animate-fade-in">
+            <Icon name="TriangleAlert" size={13} className="shrink-0 text-red-400" />
+            <p className="text-xs text-red-300">{sendError}</p>
+          </div>
+        )}
+
+        {(replyTo || editingMessage) && (
+          <div className="mb-2 flex items-center gap-3 rounded-xl bg-white/[0.05] border-l-2 border-purple-400 px-3 py-2 animate-fade-in">
+            <Icon name={editingMessage ? "Pencil" : "CornerUpLeft"} size={14} className="shrink-0 text-purple-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold text-purple-300 truncate">
+                {editingMessage ? "Редактирование сообщения" : `Ответ: ${replyTo?.out ? "Вам" : replyTo?.senderName || replyAuthorName || "собеседнику"}`}
+              </p>
+              <p className="text-xs text-white/50 truncate">
+                {replyLabel({
+                  text: (editingMessage || replyTo)?.text || "",
+                  kind: ((editingMessage || replyTo)?.kind || "text") as "text",
+                })}
+              </p>
+            </div>
+            <button
+              onClick={onCancelContext}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/40 hover:text-white/80 hover:bg-white/[0.08] transition-all"
+            >
+              <Icon name="X" size={14} />
+            </button>
+          </div>
+        )}
+
         {/* Attachments preview */}
         {attachments.length > 0 && (
           <div className="flex gap-2 mb-3 flex-wrap">
@@ -153,7 +194,7 @@ export default function MessageInput({
             <textarea
               rows={1}
               className="flex-1 resize-none bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none"
-              placeholder={attachments.length > 0 ? "Добавить подпись..." : "Сообщение..."}
+              placeholder={editingMessage ? "Измените сообщение..." : attachments.length > 0 ? "Добавить подпись..." : "Сообщение..."}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => {
@@ -181,7 +222,7 @@ export default function MessageInput({
               disabled={(!inputText.trim() && attachments.length === 0) || sending}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl gradient-btn text-white shadow-lg shadow-purple-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:-translate-y-0.5"
             >
-              <Icon name={sending ? "Loader" : "Send"} size={16} className={sending ? "animate-spin" : ""} />
+              <Icon name={sending ? "Loader" : editingMessage ? "Check" : "Send"} size={16} className={sending ? "animate-spin" : ""} />
             </button>
           )}
         </div>

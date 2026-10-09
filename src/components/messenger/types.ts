@@ -25,7 +25,7 @@ export interface Message {
   time: string;
   sender_id: number;
   reactions?: Record<string, number[]>;
-  kind?: "text" | "voice" | "circle";
+  kind?: "text" | "voice" | "circle" | "image" | "file";
   mediaUrl?: string | null;
   duration?: number | null;
   transcript?: string | null;
@@ -33,6 +33,19 @@ export interface Message {
   senderColor?: string | null;
   senderInitials?: string | null;
   senderAvatarUrl?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  edited?: boolean;
+  removed?: boolean;
+  replyTo?: ReplyPreview | null;
+}
+
+export interface ReplyPreview {
+  id: number;
+  text: string;
+  kind: "text" | "voice" | "circle" | "image" | "file";
+  senderName?: string | null;
+  removed?: boolean;
 }
 
 export type Tab = "chats" | "contacts" | "notifications" | "gallery" | "search" | "profile" | "bots";
@@ -43,6 +56,7 @@ export interface Attachment {
   type: string;
   icon: string;
   color: string;
+  file?: File;
 }
 
 export interface Topic {

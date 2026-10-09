@@ -4,14 +4,31 @@
       "name": "Send message",
       "method": "POST",
       "path": "/",
-      "body": {"chat_id": 1, "text": "Тест сообщение"},
+      "body": {
+        "chat_id": 1,
+        "text": "Тест сообщение"
+      },
       "expectedStatus": 200
     },
     {
       "name": "Voice without media returns 400",
       "method": "POST",
       "path": "/",
-      "body": {"chat_id": 1, "kind": "voice"},
+      "body": {
+        "chat_id": 1,
+        "kind": "voice"
+      },
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Image without media returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "chat_id": 1,
+        "kind": "image"
+      },
       "expectedStatus": 400,
       "bodyMatcher": "partial"
     },
@@ -19,7 +36,9 @@
       "name": "Missing text returns 400",
       "method": "POST",
       "path": "/",
-      "body": {"chat_id": 1},
+      "body": {
+        "chat_id": 1
+      },
       "expectedStatus": 400,
       "bodyMatcher": "partial"
     }

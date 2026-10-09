@@ -55,6 +55,13 @@ interface ChatAreaProps {
   onBack?: () => void;
   onSendMedia?: (kind: "voice" | "circle", media: RecordedMedia) => void;
   onTranscribe?: (messageId: number) => Promise<string | null>;
+  replyTo?: Message | null;
+  editingMessage?: Message | null;
+  sendError?: string;
+  onReply?: (msg: Message) => void;
+  onEdit?: (msg: Message) => void;
+  onRemove?: (messageId: number) => void;
+  onCancelContext?: () => void;
 }
 
 export default function ChatArea({
@@ -100,6 +107,13 @@ export default function ChatArea({
   onBack,
   onSendMedia,
   onTranscribe,
+  replyTo,
+  editingMessage,
+  sendError,
+  onReply,
+  onEdit,
+  onRemove,
+  onCancelContext,
 }: ChatAreaProps) {
   return (
     <main className="relative z-10 flex flex-1 flex-col">
@@ -137,6 +151,9 @@ export default function ChatArea({
             currentUserId={currentUserId}
             onToggleReaction={onToggleReaction}
             onTranscribe={onTranscribe}
+            onReply={onReply}
+            onEdit={onEdit}
+            onRemove={onRemove}
           />
 
           <MessageInput
@@ -163,6 +180,11 @@ export default function ChatArea({
             sendMessage={sendMessage}
             sending={sending}
             onSendMedia={onSendMedia}
+            replyTo={replyTo}
+            editingMessage={editingMessage}
+            sendError={sendError}
+            onCancelContext={onCancelContext}
+            replyAuthorName={activeChat.name}
           />
         </>
       ) : (

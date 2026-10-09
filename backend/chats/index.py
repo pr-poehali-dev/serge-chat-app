@@ -105,9 +105,13 @@ def handler(event: dict, context) -> dict:
                 SELECT m.id, m.text, m.sender_id, m.is_read,
                        TO_CHAR(m.created_at, 'HH24:MI') as time_str,
                        m.created_at, m.kind, m.media_url, m.duration_sec, m.transcript,
-                       u.display_name, u.avatar_color, u.avatar_initials, u.avatar_url
+                       u.display_name, u.avatar_color, u.avatar_initials, u.avatar_url,
+                       m.file_name, m.file_size, m.edited_at, m.removed_at,
+                       rm.id, rm.text, rm.kind, rm.file_name, rm.removed_at, ru.display_name
                 FROM {SCHEMA}.messages m
                 LEFT JOIN {SCHEMA}.users u ON u.id = m.sender_id
+                LEFT JOIN {SCHEMA}.messages rm ON rm.id = m.reply_to_id
+                LEFT JOIN {SCHEMA}.users ru ON ru.id = rm.sender_id
                 WHERE m.chat_id = %s AND m.topic_id IS NOT DISTINCT FROM %s
                 ORDER BY m.created_at ASC
             """, (chat_id, topic_id))
@@ -124,22 +128,38 @@ def handler(event: dict, context) -> dict:
                     reactions_by_msg.setdefault(msg_id, {}).setdefault(emoji, []).append(user_id)
             messages = []
             for r in rows:
+                removed = r[17] is not None
+                reply_to = None
+                if r[18] is not None:
+                    reply_removed = r[22] is not None
+                    reply_to = {
+                        "id": r[18],
+                        "text": "" if reply_removed else (r[19] or r[21] or ""),
+                        "kind": r[20] or "text",
+                        "senderName": r[23],
+                        "removed": reply_removed,
+                    }
                 messages.append({
                     "id": r[0],
-                    "text": r[1],
+                    "text": "" if removed else r[1],
                     "sender_id": r[2],
                     "out": r[2] == my_user_id,
                     "read": r[3],
                     "time": r[4],
-                    "kind": r[6] or "text",
-                    "mediaUrl": r[7],
+                    "kind": "text" if removed else (r[6] or "text"),
+                    "mediaUrl": None if removed else r[7],
                     "duration": r[8],
-                    "transcript": r[9],
+                    "transcript": None if removed else r[9],
                     "senderName": r[10],
                     "senderColor": r[11],
                     "senderInitials": r[12],
                     "senderAvatarUrl": r[13],
-                    "reactions": reactions_by_msg.get(r[0], {}),
+                    "fileName": None if removed else r[14],
+                    "fileSize": None if removed else r[15],
+                    "edited": r[16] is not None and not removed,
+                    "removed": removed,
+                    "replyTo": reply_to,
+                    "reactions": {} if removed else reactions_by_msg.get(r[0], {}),
                 })
             return reply(200, {"messages": messages})
 
@@ -285,6 +305,48 @@ def handler(event: dict, context) -> dict:
             conn.commit()
             return reply(200, {"ok": True})
 
+        # POST /chats?action=edit-message — изменить текст своего сообщения
+        if method == "POST" and action == "edit-message":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            message_id = body.get("message_id")
+            text = (body.get("text") or "").strip()
+            if not message_id or not text:
+                return reply(400, {"error": "Укажите текст сообщения"})
+            cur.execute(f"""
+                SELECT sender_id, kind, removed_at FROM {SCHEMA}.messages WHERE id = %s
+            """, (message_id,))
+            row = cur.fetchone()
+            if not row or row[2] is not None:
+                return reply(404, {"error": "Сообщение не найдено"})
+            if row[0] != my_user_id:
+                return reply(403, {"error": "Можно редактировать только свои сообщения"})
+            if row[1] not in ("text", "image", "file"):
+                return reply(400, {"error": "Это сообщение нельзя изменить"})
+            cur.execute(f"""
+                UPDATE {SCHEMA}.messages SET text = %s, edited_at = NOW() WHERE id = %s
+            """, (text, message_id))
+            conn.commit()
+            return reply(200, {"ok": True, "text": text, "edited": True})
+
+        # POST /chats?action=remove-message — убрать своё сообщение из чата
+        if method == "POST" and action == "remove-message":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            message_id = body.get("message_id")
+            if not message_id:
+                return reply(400, {"error": "Не передан message_id"})
+            cur.execute(f"""
+                UPDATE {SCHEMA}.messages SET removed_at = NOW()
+                WHERE id = %s AND sender_id = %s AND removed_at IS NULL
+                RETURNING id
+            """, (message_id, my_user_id))
+            done = cur.fetchone()
+            conn.commit()
+            if not done:
+                return reply(404, {"error": "Сообщение не найдено или оно не ваше"})
+            return reply(200, {"ok": True})
+
         # POST /chats?action=toggle-reaction — поставить/убрать эмодзи-реакцию на сообщение
         if method == "POST" and action == "toggle-reaction":
             message_id = body.get("message_id")
@@ -424,7 +486,12 @@ def handler(event: dict, context) -> dict:
                 c.is_group,
                 c.avatar_color,
                 (
-                    SELECT CASE m.kind WHEN 'voice' THEN '🎤 Голосовое сообщение' WHEN 'circle' THEN '⭕ Видеосообщение' ELSE m.text END
+                    SELECT CASE WHEN m.removed_at IS NOT NULL THEN 'Сообщение удалено'
+                                WHEN m.kind = 'voice' THEN '🎤 Голосовое сообщение'
+                                WHEN m.kind = 'circle' THEN '⭕ Видеосообщение'
+                                WHEN m.kind = 'image' THEN '🖼 Фото'
+                                WHEN m.kind = 'file' THEN '📎 ' || COALESCE(m.file_name, 'Файл')
+                                ELSE m.text END
                     FROM {SCHEMA}.messages m
                     WHERE m.chat_id = c.id
                     ORDER BY m.created_at DESC LIMIT 1
@@ -436,7 +503,7 @@ def handler(event: dict, context) -> dict:
                 ) as last_time,
                 (
                     SELECT COUNT(*) FROM {SCHEMA}.messages m
-                    WHERE m.chat_id = c.id AND m.sender_id != %(me)s
+                    WHERE m.chat_id = c.id AND m.sender_id != %(me)s AND m.removed_at IS NULL
                       AND CASE WHEN cm_me.last_read_at IS NOT NULL
                                THEN m.created_at > cm_me.last_read_at
                                ELSE m.is_read = false END

@@ -1,4 +1,4 @@
-"""Отправка сообщений (текст, голосовое, видеокружок) в чат мессенджера Трынделка"""
+"""Отправка сообщений (текст, голосовое, видеокружок, фото, файлы, ответы) в чат мессенджера Трынделка"""
 import base64
 import json
 import os
@@ -10,6 +10,8 @@ import psycopg2
 SCHEMA = "t_p64541051_serge_chat_app"
 DEFAULT_USER_ID = 1
 MAX_MEDIA_BYTES = 6 * 1024 * 1024
+MAX_FILE_BYTES = 8 * 1024 * 1024
+KINDS = ("text", "voice", "circle", "image", "file")
 
 CORS = {
     "Access-Control-Allow-Origin": "*",
@@ -31,8 +33,19 @@ def resolve_user_id(cur, headers: dict) -> int:
     return row[0] if row else DEFAULT_USER_ID
 
 
-def ext_for(content_type: str, kind: str) -> str:
+def ext_for(content_type: str, kind: str, file_name: str = "") -> str:
+    if kind in ("image", "file") and "." in (file_name or ""):
+        ext = file_name.rsplit(".", 1)[-1].lower()
+        if ext.isalnum() and len(ext) <= 8:
+            return ext
     ct = (content_type or "").lower()
+    if kind == "image":
+        for key, ext in (("png", "png"), ("jpeg", "jpg"), ("jpg", "jpg"), ("gif", "gif"), ("webp", "webp"), ("heic", "heic")):
+            if key in ct:
+                return ext
+        return "jpg"
+    if kind == "file":
+        return "bin"
     if "mp4" in ct or "m4a" in ct or "aac" in ct:
         return "mp4" if kind == "circle" else "m4a"
     if "ogg" in ct:
@@ -42,13 +55,14 @@ def ext_for(content_type: str, kind: str) -> str:
     return "webm"
 
 
-def upload_media(kind: str, data_b64: str, content_type: str) -> str:
+def upload_media(kind: str, data_b64: str, content_type: str, file_name: str = "") -> tuple:
     if "," in data_b64:
         data_b64 = data_b64.split(",", 1)[1]
     data = base64.b64decode(data_b64)
-    if len(data) > MAX_MEDIA_BYTES:
+    limit = MAX_FILE_BYTES if kind in ("image", "file") else MAX_MEDIA_BYTES
+    if len(data) > limit:
         raise ValueError("Файл слишком большой")
-    key = f"messages/{kind}/{uuid.uuid4().hex}.{ext_for(content_type, kind)}"
+    key = f"messages/{kind}/{uuid.uuid4().hex}.{ext_for(content_type, kind, file_name)}"
     s3 = boto3.client(
         "s3",
         endpoint_url="https://bucket.poehali.dev",
@@ -56,11 +70,11 @@ def upload_media(kind: str, data_b64: str, content_type: str) -> str:
         aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
     )
     s3.put_object(Bucket="files", Key=key, Body=data, ContentType=content_type or "application/octet-stream")
-    return f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{key}"
+    return f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{key}", len(data)
 
 
 def handler(event: dict, context) -> dict:
-    """Сохраняет новое сообщение: текст, голосовое или видеокружок"""
+    """Сохраняет новое сообщение: текст, голосовое, видеокружок, фото или файл, с ответом на другое сообщение"""
     if event.get("httpMethod") == "OPTIONS":
         return {"statusCode": 200, "headers": CORS, "body": ""}
 
@@ -70,7 +84,9 @@ def handler(event: dict, context) -> dict:
     text = (body.get("text") or "").strip()
     media_b64 = body.get("media")
 
-    if not chat_id or kind not in ("text", "voice", "circle"):
+    file_name = (body.get("fileName") or "").strip()[:200] or None
+
+    if not chat_id or kind not in KINDS:
         return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "chat_id и text обязательны"})}
     if kind == "text" and not text:
         return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "chat_id и text обязательны"})}
@@ -78,16 +94,23 @@ def handler(event: dict, context) -> dict:
         return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Нет медиафайла"})}
 
     media_url = None
+    file_size = None
     if kind != "text":
         try:
-            media_url = upload_media(kind, media_b64, body.get("contentType") or "")
+            media_url, file_size = upload_media(kind, media_b64, body.get("contentType") or "", file_name or "")
         except ValueError as e:
             return {"statusCode": 413, "headers": CORS, "body": json.dumps({"error": str(e)})}
+        except Exception as e:
+            print(f"upload failed: {type(e).__name__}: {e}")
+            if "402" in str(e) or "Payment Required" in str(e):
+                return {"statusCode": 402, "headers": CORS, "body": json.dumps({"error": "Хранилище файлов сейчас недоступно: проверьте тариф проекта", "code": "storage_unavailable"})}
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Не удалось загрузить файл"})}
 
     duration = body.get("duration")
     duration = int(duration) if isinstance(duration, (int, float)) else None
 
     topic_id = body.get("topic_id")
+    reply_to_id = body.get("reply_to_id")
 
     conn = get_conn()
     cur = conn.cursor()
@@ -111,11 +134,34 @@ def handler(event: dict, context) -> dict:
         else:
             topic_id = None
 
+        reply = None
+        if reply_to_id:
+            cur.execute(f"""
+                SELECT m.id, m.text, m.kind, m.file_name, m.removed_at, u.display_name
+                FROM {SCHEMA}.messages m
+                LEFT JOIN {SCHEMA}.users u ON u.id = m.sender_id
+                WHERE m.id = %s AND m.chat_id = %s
+            """, (reply_to_id, chat_id))
+            r = cur.fetchone()
+            if not r:
+                reply_to_id = None
+            else:
+                reply = {
+                    "id": r[0],
+                    "text": "" if r[4] else (r[1] or r[3] or ""),
+                    "kind": r[2] or "text",
+                    "senderName": r[5],
+                    "removed": r[4] is not None,
+                }
+        else:
+            reply_to_id = None
+
         cur.execute(f"""
-            INSERT INTO {SCHEMA}.messages (chat_id, sender_id, text, is_read, kind, media_url, duration_sec, topic_id)
-            VALUES (%s, %s, %s, false, %s, %s, %s, %s)
+            INSERT INTO {SCHEMA}.messages
+                (chat_id, sender_id, text, is_read, kind, media_url, duration_sec, topic_id, reply_to_id, file_name, file_size)
+            VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id, TO_CHAR(created_at, 'HH24:MI')
-        """, (chat_id, my_user_id, text, kind, media_url, duration, topic_id))
+        """, (chat_id, my_user_id, text, kind, media_url, duration, topic_id, reply_to_id, file_name, file_size))
         row = cur.fetchone()
         cur.execute(f"""
             UPDATE {SCHEMA}.chat_members SET typing_until = NULL
@@ -138,6 +184,10 @@ def handler(event: dict, context) -> dict:
                 "mediaUrl": media_url,
                 "duration": duration,
                 "transcript": None,
+                "fileName": file_name,
+                "fileSize": file_size,
+                "replyTo": reply,
+                "edited": False,
                 "reactions": {},
             }),
         }

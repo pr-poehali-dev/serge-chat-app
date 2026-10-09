@@ -68,6 +68,7 @@ export function useComposer() {
       name: f.name,
       size: formatFileSize(f.size),
       type: f.type,
+      file: f,
       ...getFileInfo(f),
     }));
     setAttachments((prev) => [...prev, ...newAttachments]);
