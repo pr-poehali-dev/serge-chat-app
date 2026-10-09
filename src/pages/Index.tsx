@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAppHeight } from "@/hooks/use-app-height";
 import { IncomingCall } from "@/components/messenger/CallOverlays";
 import Sidebar from "@/components/messenger/Sidebar";
 import ChatArea from "@/components/messenger/ChatArea";
@@ -17,6 +18,7 @@ import { useMessaging } from "./index/useMessaging";
 
 export default function Index() {
   const isMobile = useIsMobile();
+  useAppHeight();
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("chats");
   const [activeChatId, setActiveChatIdRaw] = useState<number | null>(null);
@@ -116,7 +118,7 @@ export default function Index() {
 
   if (authLoading) {
     return (
-      <div className="relative flex h-screen w-full items-center justify-center overflow-hidden bg-background font-golos">
+      <div className="screen-full relative flex w-full items-center justify-center overflow-hidden bg-background font-golos">
         <div className="flex gap-1.5">
           {[0, 1, 2].map((i) => (
             <div

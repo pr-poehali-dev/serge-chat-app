@@ -61,8 +61,8 @@ export default function EmojiGifPicker({
 
         {emojiPickerOpen && (
           <div
-            className="absolute bottom-14 left-0 w-[calc(100vw-2rem)] max-w-80 rounded-2xl overflow-hidden animate-fade-in z-20 flex flex-col"
-            style={{ background: "rgba(14,8,28,0.97)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(24px)", height: "340px" }}
+            className="absolute bottom-14 left-0 w-[calc(100vw-1.5rem)] max-w-80 rounded-2xl overflow-hidden animate-fade-in z-20 flex flex-col"
+            style={{ background: "rgba(14,8,28,0.97)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(24px)", height: "min(340px, 55dvh)" }}
           >
             {/* Tabs */}
             <div className="flex border-b border-white/[0.07] shrink-0">

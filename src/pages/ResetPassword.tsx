@@ -53,7 +53,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="relative flex h-screen w-full items-center justify-center overflow-hidden bg-background font-golos px-4">
+    <div className="screen-full relative flex w-full items-center justify-center overflow-y-auto bg-background font-golos px-4 py-6">
       <div className="orb orb-1" />
       <div className="orb orb-2" />
       <div className="orb orb-3" />

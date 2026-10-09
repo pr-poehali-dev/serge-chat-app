@@ -59,7 +59,7 @@ export default function Sidebar({
 
   return (
     <aside
-      className="relative z-10 flex h-full flex-col w-full"
+      className="relative z-10 flex h-full min-w-0 shrink-0 flex-col w-full"
       style={{ width: isMobile ? "100%" : "var(--sidebar-width)" }}
     >
       <div className="glass-strong flex h-full flex-col border-r border-white/[0.06]">
@@ -75,7 +75,7 @@ export default function Sidebar({
         />
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-3 pb-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4 safe-bottom">
           {/* CHATS */}
           {activeTab === "chats" && (
             <ChatsList
@@ -117,7 +117,7 @@ export default function Sidebar({
       {/* Delete bot confirmation */}
       {botToDelete && (
         <div
-          className="fixed inset-0 z-[95] flex items-center justify-center px-4"
+          className="fixed inset-0 z-[95] flex items-center justify-center overlay-safe"
           style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
           onClick={() => setBotToDelete(null)}
         >
@@ -164,7 +164,7 @@ export default function Sidebar({
       {/* Leave group confirmation */}
       {groupToLeave && (
         <div
-          className="fixed inset-0 z-[95] flex items-center justify-center px-4"
+          className="fixed inset-0 z-[95] flex items-center justify-center overlay-safe"
           style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
           onClick={() => setGroupToLeave(null)}
         >

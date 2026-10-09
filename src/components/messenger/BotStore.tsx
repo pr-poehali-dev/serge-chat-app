@@ -133,12 +133,12 @@ export default function BotStore({ installedUsernames, onInstall, onClose }: Bot
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center px-4"
+      className="fixed inset-0 z-[90] flex items-center justify-center overlay-safe"
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[80vh] rounded-3xl overflow-hidden flex flex-col animate-fade-in"
+        className="w-full max-w-lg max-h-modal rounded-3xl overflow-hidden flex flex-col animate-fade-in"
         style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
         onClick={(e) => e.stopPropagation()}
       >

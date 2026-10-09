@@ -21,7 +21,7 @@ export default function CircleMessage({ msg }: { msg: Message }) {
   return (
     <button
       onClick={toggle}
-      className="relative block h-[200px] w-[200px] max-w-full overflow-hidden rounded-full border-2 border-white/20 bg-black/40"
+      className="relative block aspect-square w-[200px] max-w-full overflow-hidden rounded-full border-2 border-white/20 bg-black/40"
     >
       <video
         ref={videoRef}

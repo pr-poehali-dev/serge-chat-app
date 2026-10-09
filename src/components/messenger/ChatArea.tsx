@@ -165,7 +165,7 @@ export default function ChatArea({
   const pinned = activeChat?.pinnedMessage || null;
 
   return (
-    <main className="relative z-10 flex flex-1 flex-col">
+    <main className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
       {/* Call overlay */}
       {call && activeChat && (
         <CallScreen

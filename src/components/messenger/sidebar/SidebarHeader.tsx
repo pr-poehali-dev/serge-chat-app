@@ -35,7 +35,7 @@ export default function SidebarHeader({
   return (
     <>
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5">
+      <div className="flex items-center gap-3 px-4 sm:px-5 py-4 sm:py-5">
         <div className="flex h-10 w-10 items-center justify-center rounded-2xl gradient-btn shadow-lg shadow-purple-500/30">
           <span className="text-lg font-black text-white">Т</span>
         </div>
@@ -68,12 +68,12 @@ export default function SidebarHeader({
       </div>
 
       {/* Nav tabs */}
-      <nav className="flex gap-1 px-3 pb-3">
+      <nav className="flex gap-0.5 sm:gap-1 px-2 sm:px-3 pb-3">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2 text-[10px] font-medium transition-all ${
+            className={`relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-2.5 sm:py-2 text-[10px] font-medium transition-all ${
               activeTab === tab.id
                 ? "bg-white/[0.08] text-white"
                 : "text-white/35 hover:text-white/60 hover:bg-white/[0.04]"

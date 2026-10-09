@@ -115,7 +115,7 @@ export default function MessageList({
   return (
     <>
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-5 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-6 py-4 sm:py-5 space-y-3">
         {loadingMsgs ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex gap-1.5">
@@ -157,7 +157,7 @@ export default function MessageList({
                   </div>
                 )
               )}
-              <div className={`max-w-[75%] sm:max-w-[65%] flex items-end gap-1 ${msg.out ? "flex-row-reverse" : ""}`}>
+              <div className={`max-w-[82%] sm:max-w-[70%] lg:max-w-[62%] flex items-end gap-1 ${msg.out ? "flex-row-reverse" : ""}`}>
                 <div className="min-w-0">
                   {activeChat.isGroup && !msg.out && msg.senderName && (
                     <p className="mb-0.5 px-1 text-[11px] font-medium truncate" style={{ color: msg.senderColor || "#a855f7" }}>
@@ -345,7 +345,7 @@ export default function MessageList({
 
       {confirmRemoveId !== null && (
         <div
-          className="fixed inset-0 z-[95] flex items-center justify-center px-4"
+          className="fixed inset-0 z-[95] flex items-center justify-center overlay-safe"
           style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
           onClick={() => setConfirmRemoveId(null)}
         >

@@ -50,8 +50,8 @@ export default function MediaRecorderControls({ disabled, onRecorded, onRecordin
     return (
       <>
         {active === "circle" && (
-          <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-black/70 backdrop-blur-sm">
-            <div className="h-64 w-64 max-w-[80vw] overflow-hidden rounded-full border-4 border-red-500/70 shadow-2xl">
+          <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-black/70 backdrop-blur-sm overlay-safe">
+            <div className="aspect-square w-64 max-w-[80vw] max-h-[45dvh] overflow-hidden rounded-full border-4 border-red-500/70 shadow-2xl">
               <CirclePreview stream={circle.stream} />
             </div>
             <p className="text-sm font-medium text-white">{formatDuration(circle.seconds)} / 1:00</p>

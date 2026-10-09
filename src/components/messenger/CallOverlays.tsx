@@ -18,7 +18,7 @@ export function IncomingCall({ caller, isVideo, onAccept, onDecline }: IncomingC
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center pb-10 px-4"
+    <div className="fixed inset-0 z-[100] flex items-end justify-center overlay-safe pb-10"
       style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(12px)" }}>
 
       {/* Card */}

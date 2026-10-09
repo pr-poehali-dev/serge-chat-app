@@ -53,7 +53,7 @@ export function ImageAttachment({ msg }: { msg: Message }) {
       </button>
       {open && (
         <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 overlay-safe"
           onClick={() => setOpen(false)}
         >
           <button
