@@ -100,6 +100,7 @@ export default function Index() {
     isBotChat,
     isGroupChat,
     activeTopicId: bg.activeTopicId,
+    setActiveTopicId: bg.setActiveTopicId,
     botMessages: bg.botMessages,
     setBotMessages: bg.setBotMessages,
     inputText: composer.inputText,
@@ -212,7 +213,7 @@ export default function Index() {
         currentUserId={authUser?.id}
         onToggleReaction={msg.toggleReaction}
         onBack={isMobile ? handleMobileBackToChats : undefined}
-        onSendMedia={!isBotChat && activeChatId && activeChatId > 0 && !(isGroupChat && bg.activeTopicId) ? msg.sendMedia : undefined}
+        onSendMedia={!isBotChat && activeChatId && activeChatId > 0 ? msg.sendMedia : undefined}
         onTranscribe={msg.transcribeMessage}
         replyTo={msg.replyTo}
         editingMessage={msg.editingMessage}
@@ -221,6 +222,9 @@ export default function Index() {
         onEdit={isBotChat ? undefined : msg.startEdit}
         onRemove={isBotChat ? undefined : msg.removeMessage}
         onCancelContext={msg.cancelComposerContext}
+        onPinMessage={isBotChat ? undefined : msg.pinMessage}
+        onOpenPinned={isBotChat ? undefined : msg.openPinned}
+        jumpRequest={msg.jumpRequest}
       />
       )}
 

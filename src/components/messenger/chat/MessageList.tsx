@@ -1,4 +1,4 @@
-import { RefObject, useState, useEffect, useRef } from "react";
+import { RefObject, useState, useEffect, useRef, ReactNode } from "react";
 import Icon from "@/components/ui/icon";
 import { Chat, Message } from "../types";
 import VoiceMessage from "../media/VoiceMessage";
@@ -7,6 +7,32 @@ import ReplyQuote from "./ReplyQuote";
 import { ImageAttachment, FileCard } from "./FileAttachment";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+
+function highlightText(text: string, query: string, isCurrent: boolean): ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  const lower = text.toLowerCase();
+  const needle = q.toLowerCase();
+  const parts: ReactNode[] = [];
+  let from = 0;
+  let idx = lower.indexOf(needle, from);
+  let key = 0;
+  while (idx !== -1) {
+    if (idx > from) parts.push(text.slice(from, idx));
+    parts.push(
+      <mark
+        key={key++}
+        className={`rounded px-0.5 text-white ${isCurrent ? "bg-amber-500/80" : "bg-amber-400/35"}`}
+      >
+        {text.slice(idx, idx + needle.length)}
+      </mark>
+    );
+    from = idx + needle.length;
+    idx = lower.indexOf(needle, from);
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return parts;
+}
 
 interface MessageListProps {
   activeChat: Chat;
@@ -20,6 +46,13 @@ interface MessageListProps {
   onReply?: (msg: Message) => void;
   onEdit?: (msg: Message) => void;
   onRemove?: (messageId: number) => void;
+  searchQuery?: string;
+  matchIds?: number[];
+  currentMatchId?: number | null;
+  onSelectMatch?: (messageId: number) => void;
+  pinnedMessageId?: number | null;
+  onTogglePin?: (msg: Message) => void;
+  jumpRequest?: { id: number; nonce: number } | null;
 }
 
 export default function MessageList({
@@ -34,11 +67,20 @@ export default function MessageList({
   onReply,
   onEdit,
   onRemove,
+  searchQuery = "",
+  matchIds = [],
+  currentMatchId = null,
+  onSelectMatch,
+  pinnedMessageId = null,
+  onTogglePin,
+  jumpRequest = null,
 }: MessageListProps) {
   const [reactionPickerFor, setReactionPickerFor] = useState<number | null>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
+
+  const matchIdSet = new Set(matchIds);
 
   const jumpTo = (messageId: number) => {
     const el = document.getElementById(`msg-${messageId}`);
@@ -47,6 +89,17 @@ export default function MessageList({
     setHighlightId(messageId);
     window.setTimeout(() => setHighlightId(null), 1500);
   };
+
+  useEffect(() => {
+    if (currentMatchId == null) return;
+    const el = document.getElementById(`msg-${currentMatchId}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [currentMatchId]);
+
+  useEffect(() => {
+    if (!jumpRequest) return;
+    jumpTo(jumpRequest.id);
+  }, [jumpRequest]);
 
   useEffect(() => {
     if (reactionPickerFor === null) return;
@@ -84,7 +137,8 @@ export default function MessageList({
               id={`msg-${msg.id}`}
               className={`group/msg flex rounded-2xl transition-colors duration-500 ${msg.out ? "justify-end" : "justify-start"} animate-fade-in ${
                 highlightId === msg.id ? "bg-purple-500/15" : ""
-              }`}
+              } ${currentMatchId === msg.id ? "bg-amber-400/10 ring-1 ring-amber-400/40" : matchIdSet.has(msg.id) ? "bg-amber-400/[0.04]" : ""}`}
+              onClick={matchIdSet.has(msg.id) && onSelectMatch ? () => onSelectMatch(msg.id) : undefined}
               style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
             >
               {!msg.out && (
@@ -130,14 +184,18 @@ export default function MessageList({
                       <>
                         <ImageAttachment msg={msg} />
                         {msg.text && (
-                          <p className="px-3 py-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                          <p className="px-3 py-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                            {highlightText(msg.text, searchQuery, currentMatchId === msg.id)}
+                          </p>
                         )}
                       </>
                     ) : msg.kind === "file" && msg.mediaUrl ? (
                       <>
                         <FileCard msg={msg} out={msg.out} />
                         {msg.text && (
-                          <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                          <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                            {highlightText(msg.text, searchQuery, currentMatchId === msg.id)}
+                          </p>
                         )}
                       </>
                     ) : /https?:\/\/.*\.gif/.test(msg.text) ? (
@@ -148,7 +206,9 @@ export default function MessageList({
                         loading="lazy"
                       />
                     ) : (
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                        {highlightText(msg.text, searchQuery, currentMatchId === msg.id)}
+                      </p>
                     )}
                   </div>
                   )}
@@ -184,7 +244,7 @@ export default function MessageList({
                   </div>
                 </div>
 
-                {!msg.removed && (onToggleReaction || onReply || (msg.out && (onEdit || onRemove))) && (
+                {!msg.removed && (onToggleReaction || onReply || onTogglePin || (msg.out && (onEdit || onRemove))) && (
                   <div className="relative shrink-0 self-start flex items-center opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 max-[639px]:opacity-60 transition-opacity">
                     {onReply && (
                       <button
@@ -211,6 +271,17 @@ export default function MessageList({
                         title="Удалить"
                       >
                         <Icon name="Trash2" size={12} />
+                      </button>
+                    )}
+                    {onTogglePin && msg.id < 1e12 && (
+                      <button
+                        onClick={() => onTogglePin(msg)}
+                        className={`flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/[0.08] transition-all ${
+                          pinnedMessageId === msg.id ? "text-amber-400" : "text-white/30 hover:text-amber-400"
+                        }`}
+                        title={pinnedMessageId === msg.id ? "Открепить сообщение" : "Закрепить сообщение"}
+                      >
+                        <Icon name="Pin" size={12} className={pinnedMessageId === msg.id ? "fill-amber-400" : ""} />
                       </button>
                     )}
                     {onToggleReaction && (

@@ -15,6 +15,16 @@ export interface Chat {
   typing?: boolean;
   contactUserId?: number | null;
   memberCount?: number | null;
+  pinnedMessage?: PinnedMessage | null;
+}
+
+export interface PinnedMessage {
+  id: number;
+  text: string;
+  kind: "text" | "voice" | "circle" | "image" | "file";
+  fileName?: string | null;
+  topicId?: number | null;
+  senderName?: string | null;
 }
 
 export interface Message {

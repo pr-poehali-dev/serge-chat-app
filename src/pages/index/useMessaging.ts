@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Dispatch, SetStateAction } from "react";
 import { RecordedMedia, blobToBase64 } from "@/components/messenger/media/useRecorder";
-import { Chat, Message, ReplyPreview, Tab, AuthUser, NotificationItem, Attachment } from "@/components/messenger/types";
+import { Chat, Message, PinnedMessage, ReplyPreview, Tab, AuthUser, NotificationItem, Attachment } from "@/components/messenger/types";
 import { API_CHATS, API_SEND, API_TRANSCRIBE } from "./config";
 
 const POLL_INTERVAL_MS = 3000;
@@ -22,6 +22,7 @@ interface UseMessagingParams {
   isBotChat: boolean;
   isGroupChat: boolean;
   activeTopicId: number | null;
+  setActiveTopicId: (id: number | null) => void;
   botMessages: Record<number, Message[]>;
   setBotMessages: Dispatch<SetStateAction<Record<number, Message[]>>>;
   inputText: string;
@@ -47,6 +48,7 @@ export function useMessaging({
   isBotChat,
   isGroupChat,
   activeTopicId,
+  setActiveTopicId,
   botMessages,
   setBotMessages,
   inputText,
@@ -62,6 +64,8 @@ export function useMessaging({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [sendError, setSendError] = useState("");
+  const [jumpRequest, setJumpRequest] = useState<{ id: number; nonce: number } | null>(null);
+  const pendingJumpRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const startChatWithUser = async (userId: number): Promise<string | null> => {
@@ -252,6 +256,7 @@ export function useMessaging({
   const sendMedia = async (kind: "voice" | "circle", media: RecordedMedia) => {
     if (!activeChatId || activeChatId < 0 || isBotChat || sending) return;
     setSending(true);
+    setSendError("");
     try {
       const base64 = await blobToBase64(media.blob);
       const res = await fetch(API_SEND, {
@@ -267,12 +272,17 @@ export function useMessaging({
         }),
       });
       const data = await res.json();
-      if (!res.ok) return;
+      if (!res.ok) {
+        setSendError(data.error || "Не удалось отправить сообщение");
+        return;
+      }
       setMessages((prev) => [...prev, data]);
       const label = kind === "voice" ? "🎤 Голосовое сообщение" : "⭕ Видеосообщение";
       setChats((prev) =>
         prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: label, time: data.time } : c))
       );
+    } catch {
+      setSendError("Не удалось связаться с сервером");
     } finally {
       setSending(false);
     }
@@ -417,6 +427,68 @@ export function useMessaging({
     }
   };
 
+  const pinMessage = async (messageId: number | null) => {
+    if (!activeChatId || activeChatId < 0) return;
+    const chatId = activeChatId;
+    const previous = chats.find((c) => c.id === chatId)?.pinnedMessage ?? null;
+    const target = messageId ? messages.find((m) => m.id === messageId) : null;
+
+    setChats((prev) =>
+      prev.map((c) =>
+        c.id === chatId
+          ? {
+              ...c,
+              pinnedMessage:
+                messageId && target
+                  ? {
+                      id: target.id,
+                      text: target.text,
+                      kind: (target.kind || "text") as PinnedMessage["kind"],
+                      fileName: target.fileName,
+                      topicId: activeTopicId,
+                      senderName: target.out ? "Вы" : target.senderName || c.name,
+                    }
+                  : null,
+            }
+          : c
+      )
+    );
+
+    try {
+      const res = await fetch(`${API_CHATS}?action=pin-message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+      });
+      if (!res.ok) {
+        setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinnedMessage: previous } : c)));
+        setSendError("Не удалось закрепить сообщение");
+      }
+    } catch {
+      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinnedMessage: previous } : c)));
+      setSendError("Не удалось связаться с сервером");
+    }
+  };
+
+  const openPinned = (pinned: PinnedMessage) => {
+    const targetTopic = pinned.topicId ?? null;
+    if (targetTopic !== activeTopicId) {
+      pendingJumpRef.current = pinned.id;
+      setActiveTopicId(targetTopic);
+      return;
+    }
+    setJumpRequest({ id: pinned.id, nonce: Date.now() });
+  };
+
+  useEffect(() => {
+    if (pendingJumpRef.current == null || loadingMsgs) return;
+    const id = pendingJumpRef.current;
+    if (messages.some((m) => m.id === id)) {
+      pendingJumpRef.current = null;
+      setJumpRequest({ id, nonce: Date.now() });
+    }
+  }, [messages, loadingMsgs]);
+
   const startReply = (msg: Message) => {
     setEditingMessage(null);
     setReplyTo(msg);
@@ -556,5 +628,8 @@ export function useMessaging({
     startEdit,
     cancelComposerContext,
     removeMessage,
+    pinMessage,
+    openPinned,
+    jumpRequest,
   };
 }

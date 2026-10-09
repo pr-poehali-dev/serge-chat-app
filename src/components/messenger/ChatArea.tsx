@@ -1,11 +1,13 @@
-import { RefObject, Dispatch, SetStateAction } from "react";
+import { RefObject, Dispatch, SetStateAction, useState, useEffect, useMemo } from "react";
 import Icon from "@/components/ui/icon";
 import { CallScreen } from "./CallOverlays";
-import { Chat, Message, Attachment, Topic } from "./types";
+import { Chat, Message, Attachment, Topic, PinnedMessage } from "./types";
 import { RecordedMedia } from "./media/useRecorder";
 import ChatHeader from "./chat/ChatHeader";
 import MessageList from "./chat/MessageList";
 import MessageInput from "./chat/MessageInput";
+import SearchBar from "./chat/SearchBar";
+import PinnedBar from "./chat/PinnedBar";
 import { EmojiCategory, GifCategory, GifItem } from "./chat/EmojiGifPicker";
 
 interface ChatAreaProps {
@@ -62,6 +64,9 @@ interface ChatAreaProps {
   onEdit?: (msg: Message) => void;
   onRemove?: (messageId: number) => void;
   onCancelContext?: () => void;
+  onPinMessage?: (messageId: number | null) => void;
+  onOpenPinned?: (pinned: PinnedMessage) => void;
+  jumpRequest?: { id: number; nonce: number } | null;
 }
 
 export default function ChatArea({
@@ -114,7 +119,51 @@ export default function ChatArea({
   onEdit,
   onRemove,
   onCancelContext,
+  onPinMessage,
+  onOpenPinned,
+  jumpRequest,
 }: ChatAreaProps) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [matchIndex, setMatchIndex] = useState(0);
+
+  const matchIds = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!searchOpen || !q) return [];
+    return messages
+      .filter((m) => !m.removed && (m.text || "").toLowerCase().includes(q))
+      .map((m) => m.id);
+  }, [messages, searchQuery, searchOpen]);
+
+  useEffect(() => {
+    setMatchIndex(matchIds.length > 0 ? matchIds.length - 1 : 0);
+  }, [searchQuery, searchOpen, activeChat?.id]);
+
+  useEffect(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+  }, [activeChat?.id]);
+
+  useEffect(() => {
+    if (matchIndex >= matchIds.length && matchIds.length > 0) setMatchIndex(matchIds.length - 1);
+  }, [matchIds.length]);
+
+  const goNext = () => {
+    if (matchIds.length === 0) return;
+    setMatchIndex((i) => (i + 1) % matchIds.length);
+  };
+  const goPrev = () => {
+    if (matchIds.length === 0) return;
+    setMatchIndex((i) => (i - 1 + matchIds.length) % matchIds.length);
+  };
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery("");
+  };
+
+  const currentMatchId = matchIds.length > 0 ? matchIds[Math.min(matchIndex, matchIds.length - 1)] : null;
+  const pinned = activeChat?.pinnedMessage || null;
+
   return (
     <main className="relative z-10 flex flex-1 flex-col">
       {/* Call overlay */}
@@ -140,7 +189,29 @@ export default function ChatArea({
             onTogglePinTopic={onTogglePinTopic}
             onOpenGroupMembers={onOpenGroupMembers}
             onBack={onBack}
+            onToggleSearch={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+            searchOpen={searchOpen}
           />
+
+          {searchOpen && (
+            <SearchBar
+              query={searchQuery}
+              setQuery={setSearchQuery}
+              total={matchIds.length}
+              current={Math.min(matchIndex, Math.max(matchIds.length - 1, 0))}
+              onPrev={goPrev}
+              onNext={goNext}
+              onClose={closeSearch}
+            />
+          )}
+
+          {pinned && !searchOpen && onOpenPinned && (
+            <PinnedBar
+              pinned={pinned}
+              onOpen={onOpenPinned}
+              onUnpin={onPinMessage ? () => onPinMessage(null) : undefined}
+            />
+          )}
 
           <MessageList
             activeChat={activeChat}
@@ -154,6 +225,18 @@ export default function ChatArea({
             onReply={onReply}
             onEdit={onEdit}
             onRemove={onRemove}
+            searchQuery={searchOpen ? searchQuery : ""}
+            matchIds={matchIds}
+            currentMatchId={currentMatchId}
+            onSelectMatch={(id) => {
+              const idx = matchIds.indexOf(id);
+              if (idx >= 0) setMatchIndex(idx);
+            }}
+            pinnedMessageId={pinned?.id ?? null}
+            onTogglePin={
+              onPinMessage ? (m) => onPinMessage(pinned?.id === m.id ? null : m.id) : undefined
+            }
+            jumpRequest={jumpRequest}
           />
 
           <MessageInput

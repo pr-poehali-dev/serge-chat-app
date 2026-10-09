@@ -75,6 +75,17 @@
       },
       "expectedStatus": 401,
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Pin message without session returns 401",
+      "method": "POST",
+      "path": "/?action=pin-message",
+      "body": {
+        "chat_id": 1,
+        "message_id": 1
+      },
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
     }
   ]
 }

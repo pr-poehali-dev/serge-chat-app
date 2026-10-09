@@ -55,13 +55,27 @@ def handler(event: dict, context) -> dict:
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     cur = conn.cursor()
     try:
+        headers = event.get("headers") or {}
+        session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
+        if not session_id:
+            return reply(401, {"error": "Нужна авторизация"})
+
         cur.execute(
-            f"SELECT media_url, transcript FROM {SCHEMA}.messages WHERE id = %s AND kind = 'voice'",
+            f"SELECT media_url, transcript, chat_id FROM {SCHEMA}.messages "
+            f"WHERE id = %s AND kind = 'voice' AND removed_at IS NULL",
             (message_id,),
         )
         row = cur.fetchone()
         if not row or not row[0]:
             return reply(404, {"error": "Голосовое сообщение не найдено"})
+
+        cur.execute(
+            f"SELECT 1 FROM {SCHEMA}.chat_members cm JOIN {SCHEMA}.users u ON u.id = cm.user_id "
+            f"WHERE cm.chat_id = %s AND u.session_id = %s",
+            (row[2], session_id),
+        )
+        if not cur.fetchone():
+            return reply(403, {"error": "Нет доступа к этому чату"})
         if row[1]:
             return reply(200, {"transcript": row[1]})
 

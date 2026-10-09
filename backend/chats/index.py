@@ -305,6 +305,27 @@ def handler(event: dict, context) -> dict:
             conn.commit()
             return reply(200, {"ok": True})
 
+        # POST /chats?action=pin-message — закрепить сообщение в чате (message_id = null снимает закрепление)
+        if method == "POST" and action == "pin-message":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = body.get("chat_id")
+            message_id = body.get("message_id")
+            if not chat_id or not is_member(cur, int(chat_id), my_user_id):
+                return reply(403, {"error": "Нет доступа к чату"})
+            if message_id:
+                cur.execute(f"""
+                    SELECT 1 FROM {SCHEMA}.messages
+                    WHERE id = %s AND chat_id = %s AND removed_at IS NULL
+                """, (message_id, chat_id))
+                if not cur.fetchone():
+                    return reply(404, {"error": "Сообщение не найдено"})
+            else:
+                message_id = None
+            cur.execute(f"UPDATE {SCHEMA}.chats SET pinned_message_id = %s WHERE id = %s", (message_id, chat_id))
+            conn.commit()
+            return reply(200, {"ok": True, "pinnedMessageId": message_id})
+
         # POST /chats?action=edit-message — изменить текст своего сообщения
         if method == "POST" and action == "edit-message":
             if not authed:
@@ -516,9 +537,12 @@ def handler(event: dict, context) -> dict:
                 EXTRACT(EPOCH FROM (NOW() - o.last_seen)) as seen_ago,
                 (o.typing_until IS NOT NULL AND o.typing_until > NOW()) as other_typing,
                 cm_me.pinned as pinned,
-                (SELECT COUNT(*) FROM {SCHEMA}.chat_members x WHERE x.chat_id = c.id) as members_count
+                (SELECT COUNT(*) FROM {SCHEMA}.chat_members x WHERE x.chat_id = c.id) as members_count,
+                pm.id, pm.text, pm.kind, pm.file_name, pm.topic_id, pu.display_name
             FROM {SCHEMA}.chats c
             JOIN {SCHEMA}.chat_members cm_me ON cm_me.chat_id = c.id AND cm_me.user_id = %(me)s
+            LEFT JOIN {SCHEMA}.messages pm ON pm.id = c.pinned_message_id AND pm.removed_at IS NULL
+            LEFT JOIN {SCHEMA}.users pu ON pu.id = pm.sender_id
             LEFT JOIN LATERAL (
                 SELECT u.id, u.display_name, u.avatar_color, u.avatar_initials, u.avatar_url,
                        u.last_seen, cm.typing_until
@@ -560,6 +584,14 @@ def handler(event: dict, context) -> dict:
                 "avatarUrl": None if is_group else r[11],
                 "contactUserId": None if is_group else r[7],
                 "memberCount": int(r[15]) if is_group and r[15] is not None else None,
+                "pinnedMessage": None if r[16] is None else {
+                    "id": r[16],
+                    "text": r[17] or "",
+                    "kind": r[18] or "text",
+                    "fileName": r[19],
+                    "topicId": r[20],
+                    "senderName": r[21],
+                },
             })
 
         return reply(200, {"chats": chats})

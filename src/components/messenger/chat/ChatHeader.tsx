@@ -14,6 +14,8 @@ interface ChatHeaderProps {
   onTogglePinTopic?: (topicId: number) => void;
   onOpenGroupMembers?: () => void;
   onBack?: () => void;
+  onToggleSearch?: () => void;
+  searchOpen?: boolean;
 }
 
 export default function ChatHeader({
@@ -28,6 +30,8 @@ export default function ChatHeader({
   onTogglePinTopic,
   onOpenGroupMembers,
   onBack,
+  onToggleSearch,
+  searchOpen,
 }: ChatHeaderProps) {
   return (
     <>
@@ -100,6 +104,19 @@ export default function ChatHeader({
           )}
 
           <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
+            {onToggleSearch && (
+              <button
+                onClick={onToggleSearch}
+                title="Поиск в переписке"
+                className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+                  searchOpen
+                    ? "bg-purple-500/20 text-purple-400"
+                    : "text-white/40 hover:text-white/80 hover:bg-white/[0.06]"
+                }`}
+              >
+                <Icon name="Search" size={16} />
+              </button>
+            )}
             <button
               onClick={() => setCall({ isVideo: false })}
               className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
