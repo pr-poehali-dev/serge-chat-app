@@ -44,9 +44,14 @@ def handler(event: dict, context) -> dict:
         if method == "GET" and params.get("action") == "messages":
             chat_id = int(params["chat_id"])
             cur.execute(f"""
+                UPDATE {SCHEMA}.messages SET is_read = true
+                WHERE chat_id = %s AND sender_id != %s AND is_read = false
+            """, (chat_id, my_user_id))
+            conn.commit()
+            cur.execute(f"""
                 SELECT m.id, m.text, m.sender_id, m.is_read,
                        TO_CHAR(m.created_at, 'HH24:MI') as time_str,
-                       m.created_at
+                       m.created_at, m.kind, m.media_url, m.duration_sec, m.transcript
                 FROM {SCHEMA}.messages m
                 WHERE m.chat_id = %s
                 ORDER BY m.created_at ASC
@@ -71,9 +76,24 @@ def handler(event: dict, context) -> dict:
                     "out": r[2] == my_user_id,
                     "read": r[3],
                     "time": r[4],
+                    "kind": r[6] or "text",
+                    "mediaUrl": r[7],
+                    "duration": r[8],
+                    "transcript": r[9],
                     "reactions": reactions_by_msg.get(r[0], {}),
                 })
             return {"statusCode": 200, "headers": CORS, "body": json.dumps({"messages": messages})}
+
+        # POST /chats?action=save-transcript — сохранить расшифровку голосового
+        if method == "POST" and params.get("action") == "save-transcript":
+            body = json.loads(event.get("body") or "{}")
+            message_id = body.get("message_id")
+            transcript = (body.get("transcript") or "").strip()
+            if not message_id or not transcript:
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Не переданы message_id или transcript"})}
+            cur.execute(f"UPDATE {SCHEMA}.messages SET transcript = %s WHERE id = %s", (transcript, message_id))
+            conn.commit()
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True})}
 
         # POST /chats?action=toggle-reaction — поставить/убрать эмодзи-реакцию на сообщение
         if method == "POST" and params.get("action") == "toggle-reaction":
@@ -213,7 +233,8 @@ def handler(event: dict, context) -> dict:
                 c.is_group,
                 c.avatar_color,
                 (
-                    SELECT m.text FROM {SCHEMA}.messages m
+                    SELECT CASE m.kind WHEN 'voice' THEN '🎤 Голосовое сообщение' WHEN 'circle' THEN '⭕ Видеосообщение' ELSE m.text END
+                    FROM {SCHEMA}.messages m
                     WHERE m.chat_id = c.id
                     ORDER BY m.created_at DESC LIMIT 1
                 ) as last_msg,
@@ -244,7 +265,19 @@ def handler(event: dict, context) -> dict:
                     JOIN {SCHEMA}.chat_members cm ON cm.user_id = u.id
                     WHERE cm.chat_id = c.id AND u.id != %s
                     LIMIT 1
-                ) as contact_avatar_url
+                ) as contact_avatar_url,
+                (
+                    SELECT u.display_name FROM {SCHEMA}.users u
+                    JOIN {SCHEMA}.chat_members cm ON cm.user_id = u.id
+                    WHERE cm.chat_id = c.id AND u.id != %s
+                    LIMIT 1
+                ) as contact_name,
+                (
+                    SELECT u.avatar_color FROM {SCHEMA}.users u
+                    JOIN {SCHEMA}.chat_members cm ON cm.user_id = u.id
+                    WHERE cm.chat_id = c.id AND u.id != %s
+                    LIMIT 1
+                ) as contact_color
             FROM {SCHEMA}.chats c
             JOIN {SCHEMA}.chat_members cm_me ON cm_me.chat_id = c.id AND cm_me.user_id = %s
             ORDER BY (
@@ -252,21 +285,23 @@ def handler(event: dict, context) -> dict:
                 WHERE m.chat_id = c.id
                 ORDER BY m.created_at DESC LIMIT 1
             ) DESC NULLS LAST
-        """, (my_user_id, my_user_id, my_user_id, my_user_id, my_user_id))
+        """, (my_user_id, my_user_id, my_user_id, my_user_id, my_user_id, my_user_id, my_user_id))
 
         rows = cur.fetchall()
         chats = []
         for r in rows:
+            display_name = r[1] if r[2] else (r[11] or r[1])
+            display_color = r[3] if r[2] else (r[12] or r[3])
             chats.append({
                 "id": r[0],
-                "name": r[1],
+                "name": display_name,
                 "isGroup": r[2],
-                "color": r[3],
+                "color": display_color,
                 "lastMsg": r[4] or "",
                 "time": r[5] or "",
                 "unread": int(r[6]) if r[6] else 0,
                 "online": bool(r[7]) if r[7] is not None else False,
-                "avatar": r[8] or r[1][:2].upper() if r[1] else "??",
+                "avatar": (r[8] or display_name[:2].upper()) if display_name else "??",
                 "pinned": bool(r[9]) if r[9] is not None else False,
                 "avatarUrl": r[10] if not r[2] else None,
             })

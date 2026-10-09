@@ -21,6 +21,10 @@ export interface Message {
   time: string;
   sender_id: number;
   reactions?: Record<string, number[]>;
+  kind?: "text" | "voice" | "circle";
+  mediaUrl?: string | null;
+  duration?: number | null;
+  transcript?: string | null;
 }
 
 export type Tab = "chats" | "contacts" | "notifications" | "gallery" | "search" | "profile" | "bots";

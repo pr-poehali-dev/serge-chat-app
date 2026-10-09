@@ -9,6 +9,7 @@ import CreateTopicModal from "@/components/messenger/CreateTopicModal";
 import AuthScreen from "@/components/messenger/AuthScreen";
 import GroupMembersModal from "@/components/messenger/GroupMembersModal";
 import { generateBotReply } from "@/components/messenger/botReplies";
+import { RecordedMedia, blobToBase64 } from "@/components/messenger/media/useRecorder";
 import { crocodileWelcome, handleCrocodileMessage, CrocodileState } from "@/components/messenger/crocodileGame";
 import { Chat, Message, Tab, BotInfo, Topic, AuthUser, NotificationItem } from "@/components/messenger/types";
 
@@ -17,6 +18,7 @@ const CROCODILE_USERNAME = "crocodile_game_bot";
 const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
 const API_SEND = "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6";
 const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
+const API_TRANSCRIBE = "https://functions.poehali.dev/9c47e0da-18f9-4bab-96c3-0531023fb5cc";
 const SESSION_STORAGE_KEY = "trindelka_session_id";
 
 export default function Index() {
@@ -496,11 +498,128 @@ export default function Index() {
     if (!activeChatId || isBotChat || activeChatId < 0 || !authUser) return;
     setLoadingMsgs(true);
     setMessages([]);
+    setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, unread: 0 } : c)));
     fetch(`${API_CHATS}?action=messages&chat_id=${activeChatId}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((data) => setMessages(data.messages || []))
       .finally(() => setLoadingMsgs(false));
   }, [activeChatId, isBotChat, authUser]);
+
+  const activeChatIdRef = useRef<number | null>(null);
+  const activeTabRef = useRef<Tab>("chats");
+  const prevChatsRef = useRef<Record<number, { unread: number; lastMsg: string; time: string }>>({});
+  activeChatIdRef.current = activeChatId;
+  activeTabRef.current = activeTab;
+
+  // Poll for new messages: refresh chat list, fill the bell, refresh the open chat
+  useEffect(() => {
+    if (!authUser) return;
+    prevChatsRef.current = {};
+    let stopped = false;
+
+    const tick = async () => {
+      if (document.hidden) return;
+      try {
+        const res = await fetch(API_CHATS, { headers: { "X-Session-Id": authUser.sessionId } });
+        if (!res.ok || stopped) return;
+        const data = await res.json();
+        const fresh: Chat[] = data.chats || [];
+        const openId = activeChatIdRef.current;
+        const firstRun = Object.keys(prevChatsRef.current).length === 0;
+        const newNotes: NotificationItem[] = [];
+        let openChatChanged = false;
+
+        const normalized = fresh.map((c) => {
+          const prev = prevChatsRef.current[c.id];
+          const isOpen = c.id === openId;
+          if (isOpen && prev && (prev.lastMsg !== c.lastMsg || prev.time !== c.time || c.unread > 0)) {
+            openChatChanged = true;
+          }
+          if (!firstRun && !isOpen && c.unread > (prev?.unread ?? 0)) {
+            newNotes.push({
+              id: Date.now() + c.id,
+              icon: "MessageCircle",
+              text: `${c.name}: ${c.lastMsg || "новое сообщение"}`,
+              time: c.time || "сейчас",
+              color: c.color,
+              read: activeTabRef.current === "notifications",
+            });
+          }
+          prevChatsRef.current[c.id] = { unread: c.unread, lastMsg: c.lastMsg, time: c.time };
+          return isOpen ? { ...c, unread: 0 } : c;
+        });
+
+        setChats((prev) => [...prev.filter((c) => c.id < 0), ...normalized]);
+        if (newNotes.length > 0) setNotifications((prev) => [...newNotes, ...prev].slice(0, 50));
+
+        if (openChatChanged && openId && openId > 0) {
+          const r = await fetch(`${API_CHATS}?action=messages&chat_id=${openId}`, {
+            headers: { "X-Session-Id": authUser.sessionId },
+          });
+          if (r.ok && !stopped) {
+            const d = await r.json();
+            setMessages((cur) => {
+              const pending = cur.filter((m) => m.id > 1e12);
+              return [...(d.messages || []), ...pending];
+            });
+          }
+        }
+      } catch {
+        return;
+      }
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 5000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [authUser]);
+
+  const sendMedia = async (kind: "voice" | "circle", media: RecordedMedia) => {
+    if (!activeChatId || activeChatId < 0 || isBotChat || sending) return;
+    setSending(true);
+    try {
+      const base64 = await blobToBase64(media.blob);
+      const res = await fetch(API_SEND, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          chat_id: activeChatId,
+          kind,
+          media: base64,
+          contentType: media.mime,
+          duration: media.duration,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+      setMessages((prev) => [...prev, data]);
+      const label = kind === "voice" ? "🎤 Голосовое сообщение" : "⭕ Видеосообщение";
+      setChats((prev) =>
+        prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: label, time: data.time } : c))
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const transcribeMessage = async (messageId: number): Promise<string | null> => {
+    try {
+      const res = await fetch(API_TRANSCRIBE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ message_id: messageId }),
+      });
+      const data = await res.json();
+      if (!res.ok) return null;
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, transcript: data.transcript } : m)));
+      return data.transcript as string;
+    } catch {
+      return null;
+    }
+  };
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -665,7 +784,7 @@ export default function Index() {
   }
 
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-background font-golos">
+    <div className="app-screen relative flex w-full overflow-hidden bg-background font-golos">
       <div className="orb orb-1" />
       <div className="orb orb-2" />
       <div className="orb orb-3" />
@@ -743,6 +862,8 @@ export default function Index() {
         currentUserId={authUser?.id}
         onToggleReaction={toggleReaction}
         onBack={isMobile ? handleMobileBackToChats : undefined}
+        onSendMedia={!isBotChat && activeChatId && activeChatId > 0 && !(isGroupChat && activeTopicId) ? sendMedia : undefined}
+        onTranscribe={transcribeMessage}
       />
       )}
 

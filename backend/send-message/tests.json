@@ -8,6 +8,14 @@
       "expectedStatus": 200
     },
     {
+      "name": "Voice without media returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {"chat_id": 1, "kind": "voice"},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
+    },
+    {
       "name": "Missing text returns 400",
       "method": "POST",
       "path": "/",

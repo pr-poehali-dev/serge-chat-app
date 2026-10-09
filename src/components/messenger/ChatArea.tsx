@@ -2,6 +2,10 @@ import { RefObject, Dispatch, SetStateAction, useState, useEffect, useRef } from
 import Icon from "@/components/ui/icon";
 import { CallScreen } from "./CallOverlays";
 import { Chat, Message, Attachment, Topic } from "./types";
+import MediaRecorderControls from "./media/MediaRecorderControls";
+import VoiceMessage from "./media/VoiceMessage";
+import CircleMessage from "./media/CircleMessage";
+import { RecordedMedia } from "./media/useRecorder";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -66,6 +70,8 @@ interface ChatAreaProps {
   currentUserId?: number;
   onToggleReaction?: (messageId: number, emoji: string) => void;
   onBack?: () => void;
+  onSendMedia?: (kind: "voice" | "circle", media: RecordedMedia) => void;
+  onTranscribe?: (messageId: number) => Promise<string | null>;
 }
 
 export default function ChatArea({
@@ -109,7 +115,11 @@ export default function ChatArea({
   currentUserId,
   onToggleReaction,
   onBack,
+  onSendMedia,
+  onTranscribe,
 }: ChatAreaProps) {
+  const [recordingActive, setRecordingActive] = useState(false);
+  const hasDraft = inputText.trim().length > 0 || attachments.length > 0;
   const [reactionPickerFor, setReactionPickerFor] = useState<number | null>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
 
@@ -302,8 +312,13 @@ export default function ChatArea({
                   )}
                   <div className={`max-w-[75%] sm:max-w-[65%] flex items-end gap-1 ${msg.out ? "flex-row-reverse" : ""}`}>
                     <div className="min-w-0">
-                      <div className={`${/https?:\/\/.*\.gif/.test(msg.text) ? "p-1" : "px-4 py-2.5"} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-white/85"}`}>
-                        {/https?:\/\/.*\.gif/.test(msg.text) ? (
+                      {msg.kind === "circle" && msg.mediaUrl ? (
+                        <CircleMessage msg={msg} />
+                      ) : (
+                      <div className={`${msg.kind === "voice" || /https?:\/\/.*\.gif/.test(msg.text) ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-white/85"}`}>
+                        {msg.kind === "voice" && msg.mediaUrl ? (
+                          <VoiceMessage msg={msg} onTranscribe={onTranscribe} />
+                        ) : /https?:\/\/.*\.gif/.test(msg.text) ? (
                           <img
                             src={msg.text.match(/https?:\/\/\S+\.gif/)?.[0]}
                             alt="GIF"
@@ -314,6 +329,7 @@ export default function ChatArea({
                           <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
                         )}
                       </div>
+                      )}
 
                       {reactionEntries.length > 0 && (
                         <div className={`flex flex-wrap gap-1 mt-1 ${msg.out ? "justify-end" : "justify-start"}`}>
@@ -405,7 +421,7 @@ export default function ChatArea({
           </div>
 
           {/* Input */}
-          <div className="glass-strong border-t border-white/[0.06] px-2 sm:px-4 py-2.5 sm:py-3">
+          <div className="glass-strong safe-bottom border-t border-white/[0.06] px-2 sm:px-4 py-2.5 sm:py-3">
             {/* Attachments preview */}
             {attachments.length > 0 && (
               <div className="flex gap-2 mb-3 flex-wrap">
@@ -620,7 +636,7 @@ export default function ChatArea({
               <input ref={fileInputRef} type="file" multiple className="hidden" accept="*" onChange={handleFileSelect} />
               <input ref={imageInputRef} type="file" multiple className="hidden" accept="image/*,video/*" onChange={handleFileSelect} />
 
-              <div className="flex-1 flex items-end gap-3 rounded-2xl bg-white/[0.05] border border-white/[0.07] px-4 py-3 focus-within:border-purple-500/40 transition-all">
+              <div className={`${recordingActive ? "hidden" : "flex"} flex-1 items-end gap-3 rounded-2xl bg-white/[0.05] border border-white/[0.07] px-4 py-3 focus-within:border-purple-500/40 transition-all`}>
                 <textarea
                   rows={1}
                   className="flex-1 resize-none bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none"
@@ -638,13 +654,23 @@ export default function ChatArea({
                 <Icon name="Lock" size={12} className="text-emerald-400/40 shrink-0 mb-0.5" />
               </div>
 
-              <button
-                onClick={sendMessage}
-                disabled={(!inputText.trim() && attachments.length === 0) || sending}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl gradient-btn text-white shadow-lg shadow-purple-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:-translate-y-0.5"
-              >
-                <Icon name={sending ? "Loader" : "Send"} size={16} className={sending ? "animate-spin" : ""} />
-              </button>
+              {!hasDraft && onSendMedia && (
+                <MediaRecorderControls
+                  disabled={sending}
+                  onRecorded={onSendMedia}
+                  onRecordingChange={setRecordingActive}
+                />
+              )}
+
+              {(hasDraft || !onSendMedia) && (
+                <button
+                  onClick={sendMessage}
+                  disabled={(!inputText.trim() && attachments.length === 0) || sending}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl gradient-btn text-white shadow-lg shadow-purple-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:-translate-y-0.5"
+                >
+                  <Icon name={sending ? "Loader" : "Send"} size={16} className={sending ? "animate-spin" : ""} />
+                </button>
+              )}
             </div>
           </div>
         </>
