@@ -7,6 +7,19 @@
     <meta name="mobile-web-app-capable" content="yes"/>
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
     <meta name="theme-color" content="#0d0d14"/>
+    <script>
+      (function () {
+        try {
+          var a = JSON.parse(localStorage.getItem("trindelka_appearance") || "{}");
+          var light = a.theme === "light" || (a.theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
+          var r = document.documentElement;
+          r.classList.add(light ? "light" : "dark");
+          r.style.colorScheme = light ? "light" : "dark";
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m && light) m.setAttribute("content", "#f6f6fb");
+        } catch (e) {}
+      })();
+    </script>
     <title>Трынделка — мессенджер</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -105,11 +105,11 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
     >
       <div
         className="w-full max-w-lg max-h-modal rounded-3xl overflow-hidden flex flex-col animate-fade-in"
-        style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
+        style={{ background: "hsl(var(--popover) / 0.98)", border: "1px solid rgb(var(--fg) / calc(0.1 * var(--fg-gain)))" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-fg/[0.07]">
           <div className="flex items-center gap-2">
             <div
               className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold text-white"
@@ -118,20 +118,20 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
               {chat.avatar}
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white/95">{chat.name}</h2>
-              <p className="text-[11px] text-white/35">Участники группы</p>
+              <h2 className="text-sm font-bold text-fg/95">{chat.name}</h2>
+              <p className="text-[11px] text-fg/35">Участники группы</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
           >
             <Icon name="X" size={16} />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-white/[0.07] shrink-0 px-2">
+        <div className="flex border-b border-fg/[0.07] shrink-0 px-2">
           {[
             { id: "members" as const, label: "Участники", icon: "Users" },
             { id: "add-people" as const, label: "Добавить людей", icon: "UserPlus" },
@@ -141,7 +141,7 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
               key={t.id}
               onClick={() => { setTab(t.id); setSearch(""); }}
               className={`flex items-center gap-1.5 px-3 py-3 text-xs font-medium transition-all ${
-                tab === t.id ? "text-white border-b-2 border-purple-400" : "text-white/35 hover:text-white/60"
+                tab === t.id ? "text-foreground border-b-2 border-purple-400" : "text-fg/35 hover:text-fg/60"
               }`}
             >
               <Icon name={t.icon} size={13} />
@@ -160,11 +160,11 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
 
         {/* Search (for add tabs) */}
         {tab !== "members" && (
-          <div className="px-5 py-3 border-b border-white/[0.06]">
-            <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
-              <Icon name="Search" size={14} className="text-white/30" />
+          <div className="px-5 py-3 border-b border-fg/[0.06]">
+            <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5">
+              <Icon name="Search" size={14} className="text-fg/30" />
               <input
-                className="flex-1 bg-transparent text-sm text-white/80 placeholder:text-white/25 outline-none"
+                className="flex-1 bg-transparent text-sm text-fg/80 placeholder:text-fg/25 outline-none"
                 placeholder={tab === "add-people" ? "Поиск людей..." : "Поиск ботов..."}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -179,13 +179,13 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
           {tab === "members" && (
             loadingMembers ? (
               <div className="flex items-center justify-center py-8">
-                <Icon name="Loader" size={20} className="animate-spin text-white/30" />
+                <Icon name="Loader" size={20} className="animate-spin text-fg/30" />
               </div>
             ) : members.length === 0 ? (
-              <p className="text-center text-xs text-white/25 py-8">Нет данных об участниках</p>
+              <p className="text-center text-xs text-fg/25 py-8">Нет данных об участниках</p>
             ) : (
               members.map((m) => (
-                <div key={m.id} className="group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/[0.04] transition-all">
+                <div key={m.id} className="group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-fg/[0.04] transition-all">
                   {m.avatarUrl ? (
                     <img src={m.avatarUrl} alt={m.displayName} className="h-10 w-10 shrink-0 rounded-2xl object-cover" />
                   ) : (
@@ -197,13 +197,13 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white/90 truncate">{m.displayName}</p>
+                    <p className="text-sm font-semibold text-fg/90 truncate">{m.displayName}</p>
                   </div>
                   {!isLocalChat && authUser?.id !== m.id && (
                     <button
                       onClick={() => removeMember(m.id)}
                       disabled={removingId === m.id}
-                      className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-white/20 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-400/10 transition-all disabled:opacity-50"
+                      className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-fg/20 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-400/10 transition-all disabled:opacity-50"
                     >
                       <Icon name={removingId === m.id ? "Loader" : "UserMinus"} size={14} className={removingId === m.id ? "animate-spin" : ""} />
                     </button>
@@ -215,10 +215,10 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
 
           {tab === "add-people" && (
             availableUsers.length === 0 ? (
-              <p className="text-center text-xs text-white/25 py-8">Никого не найдено</p>
+              <p className="text-center text-xs text-fg/25 py-8">Никого не найдено</p>
             ) : (
               availableUsers.map((u) => (
-                <div key={u.id} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/[0.04] transition-all">
+                <div key={u.id} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-fg/[0.04] transition-all">
                   {u.avatarUrl ? (
                     <img src={u.avatarUrl} alt={u.displayName} className="h-10 w-10 shrink-0 rounded-2xl object-cover" />
                   ) : (
@@ -230,8 +230,8 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white/90 truncate">{u.displayName}</p>
-                    <p className="text-xs text-white/35 truncate">@{u.login}</p>
+                    <p className="text-sm font-semibold text-fg/90 truncate">{u.displayName}</p>
+                    <p className="text-xs text-fg/35 truncate">@{u.login}</p>
                   </div>
                   <button
                     onClick={() => addMember(u.id)}
@@ -249,7 +249,7 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
             filteredBots.map((bot) => {
               const installed = installedBotUsernames.includes(bot.username);
               return (
-                <div key={bot.username} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/[0.04] transition-all">
+                <div key={bot.username} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-fg/[0.04] transition-all">
                   <div
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-lg"
                     style={{ background: `${bot.color}22`, border: `1px solid ${bot.color}33` }}
@@ -257,14 +257,14 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
                     {bot.avatar}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white/90 truncate">{bot.name}</p>
-                    <p className="text-xs text-white/35 truncate">{bot.description}</p>
+                    <p className="text-sm font-semibold text-fg/90 truncate">{bot.name}</p>
+                    <p className="text-xs text-fg/35 truncate">{bot.description}</p>
                   </div>
                   <button
                     onClick={() => !installed && onInstallBot(bot)}
                     disabled={installed}
                     className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
-                      installed ? "bg-white/[0.06] text-white/30 cursor-default" : "gradient-btn text-white hover:-translate-y-0.5"
+                      installed ? "bg-fg/[0.06] text-fg/30 cursor-default" : "gradient-btn text-white hover:-translate-y-0.5"
                     }`}
                   >
                     {installed ? "Добавлен" : "Добавить"}

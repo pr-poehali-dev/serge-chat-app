@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type TextSize = "small" | "normal" | "large";
@@ -45,41 +45,60 @@ export function applyAppearance(a: Appearance) {
   const resolved = resolveTheme(a.theme);
   root.classList.toggle("light", resolved === "light");
   root.classList.toggle("dark", resolved === "dark");
+  root.style.colorScheme = resolved;
   const accent = ACCENTS.find((x) => x.id === a.accent) || ACCENTS[0];
   root.style.setProperty("--neon-purple", accent.from);
   root.style.setProperty("--neon-pink", accent.to);
   root.style.fontSize = TEXT_SCALE[a.textSize];
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", resolved === "light" ? "#f4f4f9" : "#0d0d14");
+    ?.setAttribute("content", resolved === "light" ? "#f6f6fb" : "#0d0d14");
+}
+
+let current: Appearance = DEFAULTS;
+let started = false;
+const listeners = new Set<() => void>();
+
+function emit() {
+  listeners.forEach((l) => l());
 }
 
 export function initAppearance() {
-  applyAppearance(read());
+  if (started) return;
+  started = true;
+  current = read();
+  applyAppearance(current);
+  const mql = window.matchMedia?.("(prefers-color-scheme: light)");
+  mql?.addEventListener("change", () => {
+    if (current.theme === "system") applyAppearance(current);
+  });
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getSnapshot() {
+  return current;
 }
 
 export function useAppearance() {
-  const [appearance, setAppearance] = useState<Appearance>(read);
-
-  useEffect(() => {
-    applyAppearance(appearance);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(appearance));
-    } catch {
-      return;
-    }
-  }, [appearance]);
-
-  useEffect(() => {
-    if (appearance.theme !== "system") return;
-    const mql = window.matchMedia("(prefers-color-scheme: light)");
-    const onChange = () => applyAppearance(appearance);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, [appearance]);
+  initAppearance();
+  const appearance = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   const update = useCallback((patch: Partial<Appearance>) => {
-    setAppearance((prev) => ({ ...prev, ...patch }));
+    current = { ...current, ...patch };
+    applyAppearance(current);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    } catch {
+      return;
+    } finally {
+      emit();
+    }
   }, []);
 
   return { appearance, update };

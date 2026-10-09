@@ -25,10 +25,10 @@ export default function ChatsList({
       {loadingChats ? (
         Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-3 py-3 rounded-2xl">
-            <div className="h-11 w-11 rounded-2xl bg-white/[0.06] animate-pulse shrink-0" />
+            <div className="h-11 w-11 rounded-2xl bg-fg/[0.06] animate-pulse shrink-0" />
             <div className="flex-1 space-y-2">
-              <div className="h-3 w-2/3 rounded-full bg-white/[0.06] animate-pulse" />
-              <div className="h-2.5 w-1/2 rounded-full bg-white/[0.04] animate-pulse" />
+              <div className="h-3 w-2/3 rounded-full bg-fg/[0.06] animate-pulse" />
+              <div className="h-2.5 w-1/2 rounded-full bg-fg/[0.04] animate-pulse" />
             </div>
           </div>
         ))
@@ -38,9 +38,9 @@ export default function ChatsList({
             key={chat.id}
             className={`group w-full flex items-center gap-3 rounded-2xl px-3 py-3 transition-all animate-fade-in ${
               activeChatId === chat.id
-                ? "bg-white/[0.08] border border-white/[0.08]"
-                : "hover:bg-white/[0.04]"
-            } ${chat.pinned ? "bg-white/[0.03]" : ""}`}
+                ? "bg-fg/[0.08] border border-fg/[0.08]"
+                : "hover:bg-fg/[0.04]"
+            } ${chat.pinned ? "bg-fg/[0.03]" : ""}`}
             style={{ animationDelay: `${i * 40}ms` }}
           >
             <button
@@ -66,15 +66,15 @@ export default function ChatsList({
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1 min-w-0">
                     {chat.pinned && <Icon name="Pin" size={11} className="text-amber-400 fill-amber-400 shrink-0" />}
-                    <span className="text-sm font-semibold text-white/90 truncate">{chat.name}</span>
+                    <span className="text-sm font-semibold text-fg/90 truncate">{chat.name}</span>
                   </span>
-                  <span className="text-[11px] text-white/30 ml-2 shrink-0">{chat.time}</span>
+                  <span className="text-[11px] text-fg/30 ml-2 shrink-0">{chat.time}</span>
                 </div>
                 <div className="flex items-center justify-between mt-0.5">
                   {chat.typing && !chat.isGroup ? (
                     <span className="text-xs text-purple-400 truncate">печатает…</span>
                   ) : (
-                    <span className="text-xs text-white/40 truncate">{chat.lastMsg}</span>
+                    <span className="text-xs text-fg/40 truncate">{chat.lastMsg}</span>
                   )}
                   {chat.unread > 0 && (
                     <span className="ml-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full gradient-btn text-[10px] font-bold text-white px-1">
@@ -90,7 +90,7 @@ export default function ChatsList({
               className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
                 chat.pinned
                   ? "text-amber-400 opacity-100"
-                  : "text-white/20 opacity-0 group-hover:opacity-100 hover:text-amber-400 hover:bg-amber-400/10"
+                  : "text-fg/20 opacity-0 group-hover:opacity-100 hover:text-amber-400 hover:bg-amber-400/10"
               }`}
             >
               <Icon name="Pin" size={14} className={chat.pinned ? "fill-amber-400" : ""} />
@@ -99,7 +99,7 @@ export default function ChatsList({
               <button
                 onClick={(e) => { e.stopPropagation(); onRequestLeaveGroup(chat); }}
                 title="Выйти из группы"
-                className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-white/20 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-fg/20 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-400/10 transition-all"
               >
                 <Icon name="LogOut" size={14} />
               </button>

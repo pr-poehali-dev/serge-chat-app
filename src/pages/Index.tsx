@@ -9,6 +9,7 @@ import CreateGroupModal from "@/components/messenger/CreateGroupModal";
 import CreateTopicModal from "@/components/messenger/CreateTopicModal";
 import AuthScreen from "@/components/messenger/AuthScreen";
 import GroupMembersModal from "@/components/messenger/GroupMembersModal";
+import ForwardModal from "@/components/messenger/chat/ForwardModal";
 import { Chat, Message, Tab } from "@/components/messenger/types";
 import { EMOJI_CATEGORIES, GIF_CATEGORIES, API_CHATS } from "./index/config";
 import { useAuth } from "./index/useAuth";
@@ -34,6 +35,7 @@ export default function Index() {
   const [messages, setMessages] = useState<Message[]>([]);
 
   const [call, setCall] = useState<{ isVideo: boolean } | null>(null);
+  const [forwardSource, setForwardSource] = useState<Message | null>(null);
   const [incomingCall, setIncomingCall] = useState<{
     caller: { name: string; avatar: string; color: string };
     isVideo: boolean;
@@ -226,8 +228,19 @@ export default function Index() {
         onCancelContext={msg.cancelComposerContext}
         onPinMessage={isBotChat ? undefined : msg.pinMessage}
         onOpenPinned={isBotChat ? undefined : msg.openPinned}
+        onForward={isBotChat ? undefined : setForwardSource}
         jumpRequest={msg.jumpRequest}
       />
+      )}
+
+      {forwardSource && (
+        <ForwardModal
+          message={forwardSource}
+          chats={chats}
+          currentChatId={activeChatId}
+          onForward={(targetId) => msg.forwardMessage(forwardSource, targetId)}
+          onClose={() => setForwardSource(null)}
+        />
       )}
 
       {/* Bot store modal */}

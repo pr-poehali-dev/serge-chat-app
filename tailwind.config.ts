@@ -23,6 +23,7 @@ export default {
 				golos: ['Golos Text', 'sans-serif'],
 			},
 			colors: {
+				fg: 'rgb(var(--fg) / calc(<alpha-value> * var(--fg-gain)))',
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',

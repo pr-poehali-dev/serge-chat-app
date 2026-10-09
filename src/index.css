@@ -41,7 +41,44 @@
     --neon-green: #34d399;
     --glass-bg: rgba(255, 255, 255, 0.04);
     --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-strong-bg: rgba(255, 255, 255, 0.07);
+    --glass-strong-border: rgba(255, 255, 255, 0.12);
+    --bubble-in-bg: rgba(255, 255, 255, 0.07);
+    --bubble-in-border: rgba(255, 255, 255, 0.08);
+    --fg: 255 255 255;
+    --fg-gain: 1;
+    --orb-opacity: 1;
     --sidebar-width: 320px;
+  }
+
+  html.light {
+    --background: 240 30% 97%;
+    --foreground: 240 25% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 25% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 25% 11%;
+
+    --secondary: 240 20% 93%;
+    --secondary-foreground: 240 20% 25%;
+
+    --muted: 240 20% 93%;
+    --muted-foreground: 240 8% 38%;
+
+    --border: 240 15% 86%;
+    --input: 240 15% 90%;
+
+    --glass-bg: rgba(255, 255, 255, 0.6);
+    --glass-border: rgba(24, 20, 48, 0.1);
+    --glass-strong-bg: rgba(255, 255, 255, 0.78);
+    --glass-strong-border: rgba(24, 20, 48, 0.1);
+    --bubble-in-bg: rgba(255, 255, 255, 0.95);
+    --bubble-in-border: rgba(24, 20, 48, 0.1);
+    --fg: 24 20 48;
+    --fg-gain: 1.6;
+    --orb-opacity: 0.5;
   }
 
   @media (min-width: 768px) and (max-width: 1023px) {
@@ -148,8 +185,8 @@
   }
 
   .glass-strong {
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--glass-strong-bg);
+    border: 1px solid var(--glass-strong-border);
     backdrop-filter: blur(32px);
     -webkit-backdrop-filter: blur(32px);
   }
@@ -166,7 +203,8 @@
   }
 
   .gradient-btn:hover {
-    background: linear-gradient(135deg, #9333ea, #db2777);
+    background: linear-gradient(135deg, var(--neon-purple), var(--neon-pink));
+    filter: brightness(0.92);
     transform: translateY(-1px);
     box-shadow: 0 8px 30px rgba(168, 85, 247, 0.4);
   }
@@ -177,8 +215,8 @@
   }
 
   .msg-bubble-in {
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bubble-in-bg);
+    border: 1px solid var(--bubble-in-border);
     border-radius: 18px 18px 18px 4px;
   }
 
@@ -281,6 +319,7 @@
 }
 
 .orb {
+  opacity: var(--orb-opacity, 1);
   position: fixed;
   border-radius: 50%;
   filter: blur(80px);

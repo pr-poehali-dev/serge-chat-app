@@ -86,6 +86,23 @@
       },
       "expectedStatus": 401,
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Settings without session returns 401",
+      "method": "GET",
+      "path": "/?action=settings",
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Update settings without session returns 401",
+      "method": "POST",
+      "path": "/?action=update-settings",
+      "body": {
+        "showOnline": false
+      },
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
     }
   ]
 }

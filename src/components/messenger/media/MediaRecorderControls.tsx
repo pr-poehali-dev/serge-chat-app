@@ -74,10 +74,10 @@ export default function MediaRecorderControls({ disabled, onRecorded, onRecordin
         {active === "voice" && (
           <div className="flex flex-1 items-center gap-3 rounded-2xl bg-red-500/10 border border-red-500/30 px-4 py-2.5">
             <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
-            <span className="flex-1 text-sm font-medium text-white/85">Запись… {formatDuration(voice.seconds)}</span>
+            <span className="flex-1 text-sm font-medium text-fg/85">Запись… {formatDuration(voice.seconds)}</span>
             <button
               onClick={voice.cancel}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-white/50 hover:text-red-400 hover:bg-white/10"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-fg/50 hover:text-red-400 hover:bg-fg/10"
             >
               <Icon name="Trash2" size={16} />
             </button>
@@ -100,7 +100,7 @@ export default function MediaRecorderControls({ disabled, onRecorded, onRecordin
         onClick={() => circle.start()}
         disabled={disabled}
         title="Видеокружок"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white/30 hover:text-purple-400 hover:bg-purple-400/[0.08] transition-all disabled:opacity-30"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-fg/30 hover:text-purple-400 hover:bg-purple-400/[0.08] transition-all disabled:opacity-30"
       >
         <Icon name="Video" size={18} />
       </button>

@@ -85,17 +85,18 @@ def handler(event: dict, context) -> dict:
     media_b64 = body.get("media")
 
     file_name = (body.get("fileName") or "").strip()[:200] or None
+    forward_of = body.get("forward_message_id")
 
     if not chat_id or kind not in KINDS:
         return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "chat_id и text обязательны"})}
-    if kind == "text" and not text:
+    if kind == "text" and not text and not forward_of:
         return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "chat_id и text обязательны"})}
-    if kind != "text" and not media_b64:
+    if kind != "text" and not media_b64 and not forward_of:
         return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Нет медиафайла"})}
 
     media_url = None
     file_size = None
-    if kind != "text":
+    if kind != "text" and not forward_of:
         try:
             media_url, file_size = upload_media(kind, media_b64, body.get("contentType") or "", file_name or "")
         except ValueError as e:
@@ -134,8 +135,31 @@ def handler(event: dict, context) -> dict:
         else:
             topic_id = None
 
+        forwarded_from = None
+        if forward_of:
+            cur.execute(f"""
+                SELECT m.text, m.kind, m.media_url, m.duration_sec, m.file_name, m.file_size,
+                       m.removed_at, m.forwarded_from, u.display_name
+                FROM {SCHEMA}.messages m
+                LEFT JOIN {SCHEMA}.users u ON u.id = m.sender_id
+                WHERE m.id = %s
+                  AND EXISTS (SELECT 1 FROM {SCHEMA}.chat_members cm
+                              WHERE cm.chat_id = m.chat_id AND cm.user_id = %s)
+            """, (forward_of, my_user_id))
+            src = cur.fetchone()
+            if not src or src[6] is not None:
+                return {"statusCode": 404, "headers": CORS, "body": json.dumps({"error": "Исходное сообщение недоступно"})}
+            text = src[0] or ""
+            kind = src[1] or "text"
+            media_url = src[2]
+            duration = src[3]
+            file_name = src[4]
+            file_size = src[5]
+            forwarded_from = (src[7] or src[8] or "Пользователь")[:200]
+            topic_id = topic_id if topic_id else None
+
         reply = None
-        if reply_to_id:
+        if reply_to_id and not forward_of:
             cur.execute(f"""
                 SELECT m.id, m.text, m.kind, m.file_name, m.removed_at, u.display_name
                 FROM {SCHEMA}.messages m
@@ -158,10 +182,10 @@ def handler(event: dict, context) -> dict:
 
         cur.execute(f"""
             INSERT INTO {SCHEMA}.messages
-                (chat_id, sender_id, text, is_read, kind, media_url, duration_sec, topic_id, reply_to_id, file_name, file_size)
-            VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s)
+                (chat_id, sender_id, text, is_read, kind, media_url, duration_sec, topic_id, reply_to_id, file_name, file_size, forwarded_from)
+            VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id, TO_CHAR(created_at, 'HH24:MI')
-        """, (chat_id, my_user_id, text, kind, media_url, duration, topic_id, reply_to_id, file_name, file_size))
+        """, (chat_id, my_user_id, text, kind, media_url, duration, topic_id, reply_to_id, file_name, file_size, forwarded_from))
         row = cur.fetchone()
         cur.execute(f"""
             UPDATE {SCHEMA}.chat_members SET typing_until = NULL
@@ -187,6 +211,7 @@ def handler(event: dict, context) -> dict:
                 "fileName": file_name,
                 "fileSize": file_size,
                 "replyTo": reply,
+                "forwardedFrom": forwarded_from,
                 "edited": False,
                 "reactions": {},
             }),

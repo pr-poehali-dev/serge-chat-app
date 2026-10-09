@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 import { Chat, Tab, AuthUser, NotificationItem, DirectoryUser } from "../types";
+import SettingsPanels, { SettingsSection } from "./SettingsPanels";
+import { useAppearance } from "@/hooks/use-appearance";
 
 const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
 
@@ -56,6 +58,13 @@ export default function MiscTabs({
   const [searching, setSearching] = useState(false);
   const [startingChatId, setStartingChatId] = useState<number | null>(null);
   const [startChatError, setStartChatError] = useState("");
+  const [section, setSection] = useState<SettingsSection | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const { appearance } = useAppearance();
+
+  useEffect(() => {
+    if (activeTab !== "profile") setSection(null);
+  }, [activeTab]);
 
   useEffect(() => {
     setLogin(authUser?.login || "");
@@ -152,18 +161,18 @@ export default function MiscTabs({
       {/* NOTIFICATIONS */}
       {activeTab === "notifications" && (
         <div className="animate-fade-in space-y-2">
-          <p className="text-xs text-white/30 font-medium mb-3 px-1">УВЕДОМЛЕНИЯ</p>
+          <p className="text-xs text-fg/30 font-medium mb-3 px-1">УВЕДОМЛЕНИЯ</p>
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-10 text-center">
-              <Icon name="BellOff" size={22} className="text-white/15" />
-              <p className="text-xs text-white/25">Пока нет уведомлений</p>
+              <Icon name="BellOff" size={22} className="text-fg/15" />
+              <p className="text-xs text-fg/25">Пока нет уведомлений</p>
             </div>
           ) : (
             notifications.map((n) => (
               <div
                 key={n.id}
                 className={`flex gap-3 rounded-2xl p-3 border transition-all ${
-                  n.read ? "bg-white/[0.02] border-white/[0.04]" : "bg-white/[0.05] border-white/[0.08]"
+                  n.read ? "bg-fg/[0.02] border-fg/[0.04]" : "bg-fg/[0.05] border-fg/[0.08]"
                 }`}
               >
                 <div
@@ -173,8 +182,8 @@ export default function MiscTabs({
                   <Icon name={n.icon} size={16} style={{ color: n.color }} />
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs text-white/75 leading-relaxed">{n.text}</p>
-                  <p className="text-[11px] text-white/25 mt-1">{n.time}</p>
+                  <p className="text-xs text-fg/75 leading-relaxed">{n.text}</p>
+                  <p className="text-[11px] text-fg/25 mt-1">{n.time}</p>
                 </div>
                 {!n.read && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-purple-400" />}
               </div>
@@ -187,11 +196,11 @@ export default function MiscTabs({
       {activeTab === "gallery" && (
         <div className="animate-fade-in">
           <div className="flex items-center justify-between mb-3 px-1">
-            <p className="text-xs text-white/30 font-medium">МЕДИАФАЙЛЫ</p>
+            <p className="text-xs text-fg/30 font-medium">МЕДИАФАЙЛЫ</p>
             <div className="flex gap-2 text-xs">
-              <button className="text-white/60 border-b border-purple-400 pb-0.5">Всё</button>
-              <button className="text-white/30 hover:text-white/60 transition-colors">Фото</button>
-              <button className="text-white/30 hover:text-white/60 transition-colors">GIF</button>
+              <button className="text-fg/60 border-b border-purple-400 pb-0.5">Всё</button>
+              <button className="text-fg/30 hover:text-fg/60 transition-colors">Фото</button>
+              <button className="text-fg/30 hover:text-fg/60 transition-colors">GIF</button>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -213,27 +222,27 @@ export default function MiscTabs({
       {/* SEARCH */}
       {activeTab === "search" && (
         <div className="animate-fade-in">
-          <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-3 mb-4">
+          <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-3 mb-4">
             <Icon name="Search" size={16} className="text-purple-400" />
             <input
-              className="flex-1 bg-transparent text-sm text-white/80 placeholder:text-white/25 outline-none"
+              className="flex-1 bg-transparent text-sm text-fg/80 placeholder:text-fg/25 outline-none"
               placeholder="Ник, имя или фамилия..."
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
               autoFocus
             />
-            {searching && <Icon name="Loader" size={14} className="animate-spin text-white/30" />}
+            {searching && <Icon name="Loader" size={14} className="animate-spin text-fg/30" />}
           </div>
 
           {startChatError && <p className="text-xs text-red-400 px-1 mb-3">{startChatError}</p>}
 
           {userSearch.trim() ? (
             searchResults.length === 0 && !searching ? (
-              <p className="text-center text-xs text-white/25 py-8">Никого не найдено</p>
+              <p className="text-center text-xs text-fg/25 py-8">Никого не найдено</p>
             ) : (
               <div className="space-y-1">
                 {searchResults.map((u) => (
-                  <div key={u.id} className="flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-white/[0.04] transition-all">
+                  <div key={u.id} className="flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-fg/[0.04] transition-all">
                     {u.avatarUrl ? (
                       <img src={u.avatarUrl} alt={u.displayName} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
                     ) : (
@@ -245,8 +254,8 @@ export default function MiscTabs({
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white/80 truncate">{u.displayName}</p>
-                      {u.login && <p className="text-xs text-white/30 truncate">@{u.login}</p>}
+                      <p className="text-sm text-fg/80 truncate">{u.displayName}</p>
+                      {u.login && <p className="text-xs text-fg/30 truncate">@{u.login}</p>}
                     </div>
                     <button
                       onClick={() => handleStartChat(u.id)}
@@ -262,11 +271,11 @@ export default function MiscTabs({
             )
           ) : (
             <>
-              <p className="text-xs text-white/25 px-1 mb-3">РЕКОМЕНДАЦИИ</p>
+              <p className="text-xs text-fg/25 px-1 mb-3">РЕКОМЕНДАЦИИ</p>
               {chats.slice(0, 4).map((c) => (
                 <div
                   key={c.id}
-                  className="flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-white/[0.04] cursor-pointer transition-all"
+                  className="flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-fg/[0.04] cursor-pointer transition-all"
                   onClick={() => { setActiveChatId(c.id); setActiveTab("chats"); }}
                 >
                   <div
@@ -275,7 +284,7 @@ export default function MiscTabs({
                   >
                     {c.avatar}
                   </div>
-                  <span className="text-sm text-white/60">{c.name}</span>
+                  <span className="text-sm text-fg/60">{c.name}</span>
                 </div>
               ))}
             </>
@@ -284,101 +293,134 @@ export default function MiscTabs({
       )}
 
       {/* PROFILE */}
-      {activeTab === "profile" && (
-        <div className="animate-fade-in">
-          <div className="flex flex-col items-center pt-2 pb-5">
+      {activeTab === "profile" && section && (
+        <SettingsPanels section={section} authUser={authUser} onBack={() => setSection(null)} />
+      )}
+
+      {activeTab === "profile" && !section && (
+        <div className="animate-fade-in mx-auto w-full max-w-md pb-4">
+          <div className="flex flex-col items-center pt-2 pb-5 text-center">
             <div className="relative mb-3">
               {authUser?.avatarUrl ? (
                 <img
                   src={authUser.avatarUrl}
                   alt={authUser.displayName}
-                  className="h-20 w-20 rounded-3xl object-cover shadow-xl shadow-purple-500/30"
+                  className="h-20 w-20 sm:h-24 sm:w-24 rounded-3xl object-cover shadow-xl shadow-purple-500/30"
                 />
               ) : (
-                <div className="flex h-20 w-20 items-center justify-center rounded-3xl gradient-btn text-2xl font-black text-white shadow-xl shadow-purple-500/30">
+                <div className="flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-3xl gradient-btn text-2xl sm:text-3xl font-black text-white shadow-xl shadow-purple-500/30">
                   {authUser?.avatarInitials || "ВА"}
                 </div>
               )}
               <button
                 onClick={() => avatarInputRef.current?.click()}
                 disabled={avatarUploading}
-                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-background border border-white/10 text-white/60 hover:text-white transition-all disabled:opacity-50"
+                aria-label="Сменить фото"
+                className="absolute -bottom-1 -right-1 flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-background border border-fg/10 text-fg/60 hover:text-foreground transition-all disabled:opacity-50"
               >
-                <Icon name={avatarUploading ? "Loader" : "Camera"} size={12} className={avatarUploading ? "animate-spin" : ""} />
+                <Icon name={avatarUploading ? "Loader" : "Camera"} size={14} className={avatarUploading ? "animate-spin" : ""} />
               </button>
               <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarSelect} />
             </div>
-            {avatarError && <p className="text-xs text-red-400 mb-1">{avatarError}</p>}
-            <h2 className="text-base font-bold text-white/90">{authUser?.displayName || "Ваше Имя"}</h2>
-            <p className="text-xs text-white/35 mt-0.5">{authUser?.email || "@me"}</p>
-            <div className="mt-2 flex items-center gap-1.5 rounded-full bg-emerald-400/10 border border-emerald-400/20 px-3 py-1">
-              <Icon name="Shield" size={12} className="text-emerald-400" />
-              <span className="text-[11px] text-emerald-400 font-medium">E2E шифрование активно</span>
+            {avatarError && <p className="text-xs text-red-400 mb-1 max-w-full break-words">{avatarError}</p>}
+            <h2 className="max-w-full truncate text-base font-bold text-fg/90">{authUser?.displayName || "Ваше Имя"}</h2>
+            <p className="max-w-full truncate text-xs text-fg/40 mt-0.5">{authUser?.email || "@me"}</p>
+            <div className="mt-2 flex max-w-full items-center gap-1.5 rounded-full bg-emerald-400/10 border border-emerald-400/20 px-3 py-1">
+              <Icon name="Shield" size={12} className="shrink-0 text-emerald-400" />
+              <span className="truncate text-[11px] text-emerald-500 font-medium">E2E шифрование активно</span>
             </div>
           </div>
 
-          {/* Editable profile fields */}
           <div className="space-y-2 mb-4">
-            <p className="text-xs text-white/30 font-medium mb-2 px-1">ДАННЫЕ ПРОФИЛЯ</p>
-            <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
-              <Icon name="AtSign" size={14} className="text-white/30 shrink-0" />
+            <p className="text-xs text-fg/40 font-medium mb-2 px-1">ДАННЫЕ ПРОФИЛЯ</p>
+            <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5 focus-within:border-purple-500/40 transition-all">
+              <Icon name="AtSign" size={14} className="text-fg/40 shrink-0" />
               <input
-                className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none min-w-0"
+                className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/30 outline-none min-w-0"
                 placeholder="Логин"
+                autoCapitalize="none"
+                autoCorrect="off"
                 value={login}
                 onChange={(e) => setLogin(e.target.value)}
               />
             </div>
-            <div className="flex gap-2">
-              <div className="flex-1 flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
+            <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-2">
+              <div className="flex min-w-0 items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5 focus-within:border-purple-500/40 transition-all">
                 <input
-                  className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none min-w-0"
+                  className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/30 outline-none min-w-0"
                   placeholder="Имя"
+                  autoComplete="given-name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                 />
               </div>
-              <div className="flex-1 flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5 focus-within:border-purple-500/40 transition-all">
                 <input
-                  className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none min-w-0"
+                  className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/30 outline-none min-w-0"
                   placeholder="Фамилия"
+                  autoComplete="family-name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                 />
               </div>
             </div>
-            {saveError && <p className="text-xs text-red-400 px-1">{saveError}</p>}
+            {saveError && <p className="text-xs text-red-400 px-1 break-words">{saveError}</p>}
             <button
               onClick={handleSave}
               disabled={saving || !authUser}
-              className="w-full rounded-2xl gradient-btn text-white text-sm font-medium py-2.5 transition-all disabled:opacity-40 hover:-translate-y-0.5"
+              className="w-full rounded-2xl gradient-btn text-white text-sm font-medium py-3 sm:py-2.5 transition-all disabled:opacity-40 hover:-translate-y-0.5"
             >
               {saving ? <Icon name="Loader" size={14} className="animate-spin mx-auto" /> : saved ? "Сохранено ✓" : "Сохранить профиль"}
             </button>
           </div>
 
-          {[
-            { icon: "Bell", label: "Уведомления", desc: "Настроить оповещения" },
-            { icon: "Shield", label: "Приватность", desc: "Шифрование и безопасность" },
-            { icon: "Palette", label: "Оформление", desc: "Тема и акценты" },
-            { icon: "HelpCircle", label: "Помощь", desc: "FAQ и поддержка" },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/[0.04] cursor-pointer transition-all group">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.05] border border-white/[0.06] text-white/50 group-hover:text-purple-400 transition-colors">
+          <p className="text-xs text-fg/40 font-medium mb-1 px-1">НАСТРОЙКИ</p>
+          {([
+            { id: "notifications", icon: "Bell", label: "Уведомления", desc: "Колокольчик, звук, браузер" },
+            { id: "privacy", icon: "Shield", label: "Приватность", desc: "Статус, «печатает», прочтение" },
+            { id: "appearance", icon: "Palette", label: "Оформление", desc: `Тема: ${appearance.theme === "dark" ? "тёмная" : appearance.theme === "light" ? "светлая" : "системная"}` },
+          ] as { id: SettingsSection; icon: string; label: string; desc: string }[]).map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setSection(item.id)}
+              className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 min-h-[56px] text-left hover:bg-fg/[0.05] active:bg-fg/[0.08] transition-all group"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-fg/[0.05] border border-fg/[0.06] text-fg/55 group-hover:text-purple-400 transition-colors">
                 <Icon name={item.icon} size={16} />
               </div>
-              <div>
-                <p className="text-sm font-medium text-white/80">{item.label}</p>
-                <p className="text-xs text-white/30">{item.desc}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-fg/85 truncate">{item.label}</p>
+                <p className="text-xs text-fg/40 truncate">{item.desc}</p>
               </div>
-              <Icon name="ChevronRight" size={14} className="ml-auto text-white/20 group-hover:text-white/40 transition-colors" />
-            </div>
+              <Icon name="ChevronRight" size={14} className="shrink-0 text-fg/25 group-hover:text-fg/50 transition-colors" />
+            </button>
           ))}
+
+          <button
+            onClick={() => setHelpOpen((v) => !v)}
+            className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 min-h-[56px] text-left hover:bg-fg/[0.05] transition-all group"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-fg/[0.05] border border-fg/[0.06] text-fg/55 group-hover:text-purple-400 transition-colors">
+              <Icon name="HelpCircle" size={16} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-fg/85">Помощь</p>
+              <p className="text-xs text-fg/40 truncate">FAQ и поддержка</p>
+            </div>
+            <Icon name={helpOpen ? "ChevronUp" : "ChevronDown"} size={14} className="shrink-0 text-fg/25" />
+          </button>
+          {helpOpen && (
+            <div className="mx-1 mb-2 space-y-2 rounded-2xl bg-fg/[0.04] border border-fg/[0.06] p-3 text-xs leading-relaxed text-fg/60 animate-fade-in">
+              <p>Нажмите на сообщение и выберите значок, чтобы ответить, изменить, закрепить, переслать или удалить его.</p>
+              <p>Поиск по переписке открывается лупой в шапке чата.</p>
+              <p>Тему и размер текста можно поменять в разделе «Оформление».</p>
+            </div>
+          )}
 
           {authUser && (
             <button
               onClick={onLogout}
-              className="w-full mt-3 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-red-400/30 py-3 text-sm text-red-400/70 hover:text-red-400 hover:border-red-400/60 transition-all"
+              className="w-full mt-3 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-red-400/30 py-3 min-h-[48px] text-sm text-red-500/80 hover:text-red-500 hover:border-red-400/60 transition-all"
             >
               <Icon name="LogOut" size={14} />
               Выйти из аккаунта

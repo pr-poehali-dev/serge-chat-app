@@ -66,6 +66,7 @@ interface ChatAreaProps {
   onCancelContext?: () => void;
   onPinMessage?: (messageId: number | null) => void;
   onOpenPinned?: (pinned: PinnedMessage) => void;
+  onForward?: (msg: Message) => void;
   jumpRequest?: { id: number; nonce: number } | null;
 }
 
@@ -121,6 +122,7 @@ export default function ChatArea({
   onCancelContext,
   onPinMessage,
   onOpenPinned,
+  onForward,
   jumpRequest,
 }: ChatAreaProps) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -236,6 +238,7 @@ export default function ChatArea({
             onTogglePin={
               onPinMessage ? (m) => onPinMessage(pinned?.id === m.id ? null : m.id) : undefined
             }
+            onForward={onForward}
             jumpRequest={jumpRequest}
           />
 
@@ -277,7 +280,7 @@ export default function ChatArea({
               <Icon name="MessageCircle" size={36} className="text-white" />
             </div>
             <h2 className="text-xl font-bold gradient-text mb-2">Трынделка</h2>
-            <p className="text-sm text-white/30">Выберите чат для начала общения</p>
+            <p className="text-sm text-fg/30">Выберите чат для начала общения</p>
           </div>
         </div>
       )}

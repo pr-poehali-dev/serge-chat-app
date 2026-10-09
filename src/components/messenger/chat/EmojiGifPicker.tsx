@@ -53,7 +53,7 @@ export default function EmojiGifPicker({
           className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-all ${
             emojiPickerOpen
               ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-              : "text-white/30 hover:text-purple-400 hover:bg-purple-400/[0.08]"
+              : "text-fg/30 hover:text-purple-400 hover:bg-purple-400/[0.08]"
           }`}
         >
           <Icon name="Smile" size={18} />
@@ -62,10 +62,10 @@ export default function EmojiGifPicker({
         {emojiPickerOpen && (
           <div
             className="absolute bottom-14 left-0 w-[calc(100vw-1.5rem)] max-w-80 rounded-2xl overflow-hidden animate-fade-in z-20 flex flex-col"
-            style={{ background: "rgba(14,8,28,0.97)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(24px)", height: "min(340px, 55dvh)" }}
+            style={{ background: "hsl(var(--popover) / 0.97)", border: "1px solid rgb(var(--fg) / calc(0.1 * var(--fg-gain)))", backdropFilter: "blur(24px)", height: "min(340px, 55dvh)" }}
           >
             {/* Tabs */}
-            <div className="flex border-b border-white/[0.07] shrink-0">
+            <div className="flex border-b border-fg/[0.07] shrink-0">
               {[
                 { id: "emoji" as const, label: "😊 Эмодзи" },
                 { id: "gif" as const, label: "🎬 GIF" },
@@ -75,8 +75,8 @@ export default function EmojiGifPicker({
                   onClick={() => setEmojiTab(t.id)}
                   className={`flex-1 py-3 text-sm font-medium transition-all ${
                     emojiTab === t.id
-                      ? "text-white border-b-2 border-purple-400"
-                      : "text-white/35 hover:text-white/60"
+                      ? "text-foreground border-b-2 border-purple-400"
+                      : "text-fg/35 hover:text-fg/60"
                   }`}
                 >
                   {t.label}
@@ -87,14 +87,14 @@ export default function EmojiGifPicker({
             {emojiTab === "emoji" && (
               <div className="flex flex-1 overflow-hidden">
                 {/* Category sidebar */}
-                <div className="flex flex-col gap-1 p-2 border-r border-white/[0.06] shrink-0">
+                <div className="flex flex-col gap-1 p-2 border-r border-fg/[0.06] shrink-0">
                   {EMOJI_CATEGORIES.map((cat, i) => (
                     <button
                       key={i}
                       onClick={() => {
                         document.getElementById(`emoji-cat-${i}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
                       }}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-base hover:bg-white/[0.08] transition-all"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-base hover:bg-fg/[0.08] transition-all"
                       title={cat.title}
                     >
                       {cat.label}
@@ -105,7 +105,7 @@ export default function EmojiGifPicker({
                 <div className="flex-1 overflow-y-auto p-2">
                   {EMOJI_CATEGORIES.map((cat, ci) => (
                     <div key={ci} id={`emoji-cat-${ci}`} className="mb-3">
-                      <p className="text-[10px] text-white/25 font-medium mb-1.5 px-1 uppercase tracking-wider">{cat.title}</p>
+                      <p className="text-[10px] text-fg/25 font-medium mb-1.5 px-1 uppercase tracking-wider">{cat.title}</p>
                       <div className="grid grid-cols-8 gap-0.5">
                         {cat.emojis.map((em, ei) => (
                           <button
@@ -114,7 +114,7 @@ export default function EmojiGifPicker({
                               setInputText((prev) => prev + em);
                               setEmojiPickerOpen(false);
                             }}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-white/[0.08] transition-all hover:scale-110"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-fg/[0.08] transition-all hover:scale-110"
                           >
                             {em}
                           </button>
@@ -129,17 +129,17 @@ export default function EmojiGifPicker({
             {emojiTab === "gif" && (
               <div className="flex flex-col flex-1 overflow-hidden">
                 {/* Search */}
-                <div className="px-3 py-2 border-b border-white/[0.06] shrink-0">
-                  <div className="flex items-center gap-2 rounded-xl bg-white/[0.06] border border-white/[0.08] px-3 py-2">
-                    <Icon name="Search" size={13} className="text-white/30" />
+                <div className="px-3 py-2 border-b border-fg/[0.06] shrink-0">
+                  <div className="flex items-center gap-2 rounded-xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2">
+                    <Icon name="Search" size={13} className="text-fg/30" />
                     <input
-                      className="flex-1 bg-transparent text-xs text-white/80 placeholder:text-white/25 outline-none"
+                      className="flex-1 bg-transparent text-xs text-fg/80 placeholder:text-fg/25 outline-none"
                       placeholder="Поиск GIF..."
                       value={gifSearch}
                       onChange={(e) => setGifSearch(e.target.value)}
                     />
                     {gifSearch && (
-                      <button onClick={() => setGifSearch("")} className="text-white/25 hover:text-white/60">
+                      <button onClick={() => setGifSearch("")} className="text-fg/25 hover:text-fg/60">
                         <Icon name="X" size={12} />
                       </button>
                     )}
@@ -156,7 +156,7 @@ export default function EmojiGifPicker({
                             setInputText((prev) => prev ? prev + " " + gif.url : gif.url);
                             setEmojiPickerOpen(false);
                           }}
-                          className="aspect-video rounded-xl overflow-hidden hover:scale-[1.03] transition-transform bg-white/[0.04]"
+                          className="aspect-video rounded-xl overflow-hidden hover:scale-[1.03] transition-transform bg-fg/[0.04]"
                         >
                           <img src={gif.url} alt={gif.title} className="w-full h-full object-cover" loading="lazy" />
                         </button>
@@ -165,7 +165,7 @@ export default function EmojiGifPicker({
                   ) : (
                     GIF_CATEGORIES.map((cat, ci) => (
                       <div key={ci} className="mb-4">
-                        <p className="text-[10px] text-white/25 font-medium mb-2 px-1 uppercase tracking-wider">{cat.label}</p>
+                        <p className="text-[10px] text-fg/25 font-medium mb-2 px-1 uppercase tracking-wider">{cat.label}</p>
                         <div className="grid grid-cols-2 gap-2">
                           {cat.gifs.map((gif, gi) => (
                             <button
@@ -174,7 +174,7 @@ export default function EmojiGifPicker({
                                 setInputText((prev) => prev ? prev + " " + gif.url : gif.url);
                                 setEmojiPickerOpen(false);
                               }}
-                              className="aspect-video rounded-xl overflow-hidden hover:scale-[1.03] transition-transform bg-white/[0.04]"
+                              className="aspect-video rounded-xl overflow-hidden hover:scale-[1.03] transition-transform bg-fg/[0.04]"
                             >
                               <img src={gif.url} alt={gif.title} className="w-full h-full object-cover" loading="lazy" />
                             </button>

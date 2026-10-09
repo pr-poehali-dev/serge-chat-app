@@ -36,12 +36,12 @@ export default function ChatHeader({
   return (
     <>
       {/* Header */}
-      <header className="glass-strong border-b border-white/[0.06] px-3 sm:px-6 py-3 sm:py-4">
+      <header className="glass-strong border-b border-fg/[0.06] px-3 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center gap-2 sm:gap-4">
           {onBack && (
             <button
               onClick={onBack}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white/50 hover:text-white/90 hover:bg-white/[0.06] transition-all -ml-1"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-fg/50 hover:text-fg/90 hover:bg-fg/[0.06] transition-all -ml-1"
             >
               <Icon name="ArrowLeft" size={18} />
             </button>
@@ -66,7 +66,7 @@ export default function ChatHeader({
             )}
           </div>
           <div className="min-w-0">
-            <h2 className="font-bold text-white/95 truncate">{activeChat.name}</h2>
+            <h2 className="font-bold text-fg/95 truncate">{activeChat.name}</h2>
             {!activeChat.isGroup && activeChat.typing ? (
               <p className="flex items-center gap-1.5 text-xs text-purple-400 truncate">
                 печатает
@@ -81,7 +81,7 @@ export default function ChatHeader({
                 </span>
               </p>
             ) : (
-              <p className={`text-xs truncate ${!activeChat.isGroup && activeChat.online ? "text-emerald-400/80" : "text-white/35"}`}>
+              <p className={`text-xs truncate ${!activeChat.isGroup && activeChat.online ? "text-emerald-400/80" : "text-fg/35"}`}>
                 {activeChat.isGroup
                   ? activeChat.memberCount
                     ? `групповой чат · ${activeChat.memberCount} уч.`
@@ -111,7 +111,7 @@ export default function ChatHeader({
                 className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
                   searchOpen
                     ? "bg-purple-500/20 text-purple-400"
-                    : "text-white/40 hover:text-white/80 hover:bg-white/[0.06]"
+                    : "text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06]"
                 }`}
               >
                 <Icon name="Search" size={16} />
@@ -119,13 +119,13 @@ export default function ChatHeader({
             )}
             <button
               onClick={() => setCall({ isVideo: false })}
-              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
             >
               <Icon name="Phone" size={16} />
             </button>
             <button
               onClick={() => setCall({ isVideo: true })}
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
             >
               <Icon name="Video" size={16} />
             </button>
@@ -133,12 +133,12 @@ export default function ChatHeader({
               <button
                 onClick={onOpenGroupMembers}
                 title="Участники группы"
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
               >
                 <Icon name="Users" size={16} />
               </button>
             ) : (
-              <button className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all">
+              <button className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all">
                 <Icon name="MoreVertical" size={16} />
               </button>
             )}
@@ -148,13 +148,13 @@ export default function ChatHeader({
 
       {/* Topics bar (group chats only) */}
       {activeChat.isGroup && topics && (
-        <div className="glass-strong border-b border-white/[0.06] px-4 py-2 flex items-center gap-2 overflow-x-auto">
+        <div className="glass-strong border-b border-fg/[0.06] px-4 py-2 flex items-center gap-2 overflow-x-auto">
           <button
             onClick={() => onSelectTopic?.(null)}
             className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
               !activeTopicId
-                ? "bg-white/[0.1] text-white"
-                : "text-white/40 hover:text-white/70 hover:bg-white/[0.05]"
+                ? "bg-fg/[0.1] text-foreground"
+                : "text-fg/40 hover:text-fg/70 hover:bg-fg/[0.05]"
             }`}
           >
             <Icon name="MessageCircle" size={12} />
@@ -165,8 +165,8 @@ export default function ChatHeader({
               key={topic.id}
               className={`group/topic shrink-0 flex items-center gap-1 rounded-xl pl-3 pr-1.5 py-1.5 text-xs font-medium transition-all ${
                 activeTopicId === topic.id
-                  ? "text-white"
-                  : "text-white/40 hover:text-white/70 hover:bg-white/[0.05]"
+                  ? "text-foreground"
+                  : "text-fg/40 hover:text-fg/70 hover:bg-fg/[0.05]"
               }`}
               style={activeTopicId === topic.id ? { background: `${topic.color}33`, border: `1px solid ${topic.color}55` } : undefined}
             >
@@ -184,7 +184,7 @@ export default function ChatHeader({
                 className={`flex h-5 w-5 items-center justify-center rounded-lg transition-all ${
                   topic.pinned
                     ? "text-amber-400 opacity-100"
-                    : "text-white/30 opacity-0 group-hover/topic:opacity-100 hover:text-amber-400"
+                    : "text-fg/30 opacity-0 group-hover/topic:opacity-100 hover:text-amber-400"
                 }`}
               >
                 <Icon name="Pin" size={11} className={topic.pinned ? "fill-amber-400" : ""} />
@@ -194,7 +194,7 @@ export default function ChatHeader({
           <button
             onClick={onOpenCreateTopic}
             title="Создать тему"
-            className="shrink-0 flex h-7 w-7 items-center justify-center rounded-xl text-white/30 hover:text-purple-400 hover:bg-purple-400/[0.08] transition-all"
+            className="shrink-0 flex h-7 w-7 items-center justify-center rounded-xl text-fg/30 hover:text-purple-400 hover:bg-purple-400/[0.08] transition-all"
           >
             <Icon name="Plus" size={14} />
           </button>

@@ -41,13 +41,13 @@ export default function SidebarHeader({
         </div>
         <div>
           <h1 className="text-lg font-bold gradient-text leading-none">Трынделка</h1>
-          <p className="text-[11px] text-white/35 mt-0.5">мессенджер</p>
+          <p className="text-[11px] text-fg/35 mt-0.5">мессенджер</p>
         </div>
         <div className="ml-auto">
           <button
             onClick={onOpenCreateGroup}
             title="Создать группу"
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
           >
             <Icon name="PenSquare" size={16} />
           </button>
@@ -56,10 +56,10 @@ export default function SidebarHeader({
 
       {/* Search bar */}
       <div className="px-4 pb-3">
-        <div className="flex items-center gap-2 rounded-2xl bg-white/[0.05] border border-white/[0.06] px-3 py-2.5">
-          <Icon name="Search" size={14} className="text-white/30" />
+        <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.05] border border-fg/[0.06] px-3 py-2.5">
+          <Icon name="Search" size={14} className="text-fg/30" />
           <input
-            className="flex-1 bg-transparent text-sm text-white/80 placeholder:text-white/25 outline-none"
+            className="flex-1 bg-transparent text-sm text-fg/80 placeholder:text-fg/25 outline-none"
             placeholder="Поиск..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -75,8 +75,8 @@ export default function SidebarHeader({
             onClick={() => setActiveTab(tab.id)}
             className={`relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-2.5 sm:py-2 text-[10px] font-medium transition-all ${
               activeTab === tab.id
-                ? "bg-white/[0.08] text-white"
-                : "text-white/35 hover:text-white/60 hover:bg-white/[0.04]"
+                ? "bg-fg/[0.08] text-foreground"
+                : "text-fg/35 hover:text-fg/60 hover:bg-fg/[0.04]"
             }`}
           >
             <Icon name={tab.icon} size={16} />

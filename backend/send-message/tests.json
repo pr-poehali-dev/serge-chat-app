@@ -41,6 +41,17 @@
       },
       "expectedStatus": 400,
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Forward of missing message returns 404",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "chat_id": 1,
+        "forward_message_id": 99999999
+      },
+      "expectedStatus": 404,
+      "bodyMatcher": "partial"
     }
   ]
 }

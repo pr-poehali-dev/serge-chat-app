@@ -61,6 +61,17 @@ def is_online(seen_ago) -> bool:
     return seen_ago is not None and float(seen_ago) < ONLINE_WINDOW_SEC
 
 
+def read_settings(cur, user_id: int) -> dict:
+    cur.execute(
+        f"SELECT show_online, show_typing, read_receipts, who_can_message FROM {SCHEMA}.users WHERE id = %s",
+        (user_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"showOnline": True, "showTyping": True, "readReceipts": True, "whoCanMessage": "all"}
+    return {"showOnline": row[0], "showTyping": row[1], "readReceipts": row[2], "whoCanMessage": row[3]}
+
+
 def handler(event: dict, context) -> dict:
     """Чаты и сообщения, создание групп и тем, присутствие пользователей и индикатор набора текста"""
     if event.get("httpMethod") == "OPTIONS":
@@ -91,11 +102,14 @@ def handler(event: dict, context) -> dict:
             topic_id = int(params["topic_id"]) if params.get("topic_id") else None
             if not is_member(cur, chat_id, my_user_id):
                 return reply(403, {"error": "Нет доступа к чату"})
-            cur.execute(f"""
-                UPDATE {SCHEMA}.messages SET is_read = true
-                WHERE chat_id = %s AND sender_id != %s AND is_read = false
-                  AND topic_id IS NOT DISTINCT FROM %s
-            """, (chat_id, my_user_id, topic_id))
+            cur.execute(f"SELECT read_receipts FROM {SCHEMA}.users WHERE id = %s", (my_user_id,))
+            receipts_row = cur.fetchone()
+            if not receipts_row or receipts_row[0]:
+                cur.execute(f"""
+                    UPDATE {SCHEMA}.messages SET is_read = true
+                    WHERE chat_id = %s AND sender_id != %s AND is_read = false
+                      AND topic_id IS NOT DISTINCT FROM %s
+                """, (chat_id, my_user_id, topic_id))
             cur.execute(f"""
                 UPDATE {SCHEMA}.chat_members SET last_read_at = NOW()
                 WHERE chat_id = %s AND user_id = %s
@@ -107,7 +121,8 @@ def handler(event: dict, context) -> dict:
                        m.created_at, m.kind, m.media_url, m.duration_sec, m.transcript,
                        u.display_name, u.avatar_color, u.avatar_initials, u.avatar_url,
                        m.file_name, m.file_size, m.edited_at, m.removed_at,
-                       rm.id, rm.text, rm.kind, rm.file_name, rm.removed_at, ru.display_name
+                       rm.id, rm.text, rm.kind, rm.file_name, rm.removed_at, ru.display_name,
+                       m.forwarded_from
                 FROM {SCHEMA}.messages m
                 LEFT JOIN {SCHEMA}.users u ON u.id = m.sender_id
                 LEFT JOIN {SCHEMA}.messages rm ON rm.id = m.reply_to_id
@@ -126,6 +141,13 @@ def handler(event: dict, context) -> dict:
                 """, (message_ids,))
                 for msg_id, emoji, user_id in cur.fetchall():
                     reactions_by_msg.setdefault(msg_id, {}).setdefault(emoji, []).append(user_id)
+            cur.execute(f"""
+                SELECT BOOL_AND(u.read_receipts) FROM {SCHEMA}.chat_members cm
+                JOIN {SCHEMA}.users u ON u.id = cm.user_id
+                WHERE cm.chat_id = %s AND cm.user_id != %s
+            """, (chat_id, my_user_id))
+            rr = cur.fetchone()
+            other_receipts = True if not rr or rr[0] is None else bool(rr[0])
             messages = []
             for r in rows:
                 removed = r[17] is not None
@@ -144,7 +166,7 @@ def handler(event: dict, context) -> dict:
                     "text": "" if removed else r[1],
                     "sender_id": r[2],
                     "out": r[2] == my_user_id,
-                    "read": r[3],
+                    "read": bool(r[3]) and (not r[2] == my_user_id or other_receipts),
                     "time": r[4],
                     "kind": "text" if removed else (r[6] or "text"),
                     "mediaUrl": None if removed else r[7],
@@ -157,6 +179,7 @@ def handler(event: dict, context) -> dict:
                     "fileName": None if removed else r[14],
                     "fileSize": None if removed else r[15],
                     "edited": r[16] is not None and not removed,
+                    "forwardedFrom": None if removed else r[24],
                     "removed": removed,
                     "replyTo": reply_to,
                     "reactions": {} if removed else reactions_by_msg.get(r[0], {}),
@@ -170,14 +193,15 @@ def handler(event: dict, context) -> dict:
                 return reply(403, {"error": "Нет доступа к чату"})
             cur.execute(f"""
                 SELECT EXTRACT(EPOCH FROM (NOW() - u.last_seen)),
-                       (cm.typing_until IS NOT NULL AND cm.typing_until > NOW())
+                       (cm.typing_until IS NOT NULL AND cm.typing_until > NOW() AND u.show_typing),
+                       u.show_online
                 FROM {SCHEMA}.chat_members cm
                 JOIN {SCHEMA}.users u ON u.id = cm.user_id
                 WHERE cm.chat_id = %s AND cm.user_id != %s
                 LIMIT 1
             """, (chat_id, my_user_id))
             row = cur.fetchone()
-            seen_ago = row[0] if row else None
+            seen_ago = row[0] if row and row[2] else None
             return reply(200, {
                 "typing": bool(row[1]) if row else False,
                 "online": is_online(seen_ago),
@@ -304,6 +328,32 @@ def handler(event: dict, context) -> dict:
             cur.execute(f"UPDATE {SCHEMA}.messages SET transcript = %s WHERE id = %s", (transcript, message_id))
             conn.commit()
             return reply(200, {"ok": True})
+
+        # GET /chats?action=settings — настройки приватности
+        if method == "GET" and action == "settings":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            return reply(200, {"settings": read_settings(cur, my_user_id)})
+
+        # POST /chats?action=update-settings — сохранить настройки приватности
+        if method == "POST" and action == "update-settings":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            fields = {
+                "showOnline": "show_online",
+                "showTyping": "show_typing",
+                "readReceipts": "read_receipts",
+            }
+            for key, column in fields.items():
+                if key in body:
+                    cur.execute(f"UPDATE {SCHEMA}.users SET {column} = %s WHERE id = %s", (bool(body[key]), my_user_id))
+            if body.get("whoCanMessage") in ("all", "contacts"):
+                cur.execute(
+                    f"UPDATE {SCHEMA}.users SET who_can_message = %s WHERE id = %s",
+                    (body["whoCanMessage"], my_user_id),
+                )
+            conn.commit()
+            return reply(200, {"settings": read_settings(cur, my_user_id)})
 
         # POST /chats?action=pin-message — закрепить сообщение в чате (message_id = null снимает закрепление)
         if method == "POST" and action == "pin-message":
@@ -457,6 +507,18 @@ def handler(event: dict, context) -> dict:
             other_user_id = body.get("user_id")
             if not other_user_id or other_user_id == my_user_id:
                 return reply(400, {"error": "Некорректный пользователь"})
+            cur.execute(f"SELECT who_can_message FROM {SCHEMA}.users WHERE id = %s", (other_user_id,))
+            policy = cur.fetchone()
+            if policy and policy[0] == "contacts":
+                cur.execute(f"""
+                    SELECT 1 FROM {SCHEMA}.chat_members a
+                    JOIN {SCHEMA}.chat_members b ON b.chat_id = a.chat_id
+                    JOIN {SCHEMA}.chats c ON c.id = a.chat_id
+                    WHERE a.user_id = %s AND b.user_id = %s AND c.is_group = false
+                    LIMIT 1
+                """, (my_user_id, other_user_id))
+                if not cur.fetchone():
+                    return reply(403, {"error": "Этот пользователь принимает сообщения только от контактов"})
 
             cur.execute(f"""
                 SELECT c.id FROM {SCHEMA}.chats c
@@ -535,7 +597,7 @@ def handler(event: dict, context) -> dict:
                 o.avatar_initials as other_initials,
                 o.avatar_url as other_avatar_url,
                 EXTRACT(EPOCH FROM (NOW() - o.last_seen)) as seen_ago,
-                (o.typing_until IS NOT NULL AND o.typing_until > NOW()) as other_typing,
+                (o.typing_until IS NOT NULL AND o.typing_until > NOW() AND o.show_typing) as other_typing,
                 cm_me.pinned as pinned,
                 (SELECT COUNT(*) FROM {SCHEMA}.chat_members x WHERE x.chat_id = c.id) as members_count,
                 pm.id, pm.text, pm.kind, pm.file_name, pm.topic_id, pu.display_name
@@ -545,7 +607,8 @@ def handler(event: dict, context) -> dict:
             LEFT JOIN {SCHEMA}.users pu ON pu.id = pm.sender_id
             LEFT JOIN LATERAL (
                 SELECT u.id, u.display_name, u.avatar_color, u.avatar_initials, u.avatar_url,
-                       u.last_seen, cm.typing_until
+                       CASE WHEN u.show_online THEN u.last_seen ELSE NULL END AS last_seen,
+                       cm.typing_until, u.show_typing
                 FROM {SCHEMA}.chat_members cm
                 JOIN {SCHEMA}.users u ON u.id = cm.user_id
                 WHERE cm.chat_id = c.id AND cm.user_id != %(me)s AND NOT c.is_group

@@ -46,6 +46,7 @@ export interface Message {
   fileName?: string | null;
   fileSize?: number | null;
   edited?: boolean;
+  forwardedFrom?: string | null;
   removed?: boolean;
   replyTo?: ReplyPreview | null;
 }

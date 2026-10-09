@@ -489,6 +489,33 @@ export function useMessaging({
     }
   }, [messages, loadingMsgs]);
 
+  const forwardMessage = async (message: Message, targetChatId: number): Promise<string | null> => {
+    try {
+      const res = await fetch(API_SEND, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ chat_id: targetChatId, forward_message_id: message.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) return data.error || "Не удалось переслать сообщение";
+      const label =
+        data.kind === "voice" ? "🎤 Голосовое сообщение"
+        : data.kind === "circle" ? "⭕ Видеосообщение"
+        : data.kind === "image" ? "🖼 Фото"
+        : data.kind === "file" ? `📎 ${data.fileName || "Файл"}`
+        : data.text;
+      setChats((prev) =>
+        prev.map((c) => (c.id === targetChatId ? { ...c, lastMsg: label, time: data.time } : c))
+      );
+      if (targetChatId === activeChatId && !activeTopicId) {
+        setMessages((prev) => [...prev, data]);
+      }
+      return null;
+    } catch {
+      return "Не удалось связаться с сервером";
+    }
+  };
+
   const startReply = (msg: Message) => {
     setEditingMessage(null);
     setReplyTo(msg);
@@ -630,6 +657,7 @@ export function useMessaging({
     removeMessage,
     pinMessage,
     openPinned,
+    forwardMessage,
     jumpRequest,
   };
 }

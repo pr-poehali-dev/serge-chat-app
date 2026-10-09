@@ -93,14 +93,14 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
       <div
         className="relative z-10 w-full max-w-sm rounded-3xl p-6 animate-fade-in"
-        style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
+        style={{ background: "hsl(var(--popover) / 0.98)", border: "1px solid rgb(var(--fg) / calc(0.1 * var(--fg-gain)))" }}
       >
         <div className="flex flex-col items-center mb-6">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl gradient-btn shadow-lg shadow-purple-500/30 mb-3">
             <span className="text-2xl font-black text-white">Т</span>
           </div>
           <h1 className="text-lg font-bold gradient-text">Трынделка</h1>
-          <p className="text-xs text-white/35 mt-0.5">
+          <p className="text-xs text-fg/35 mt-0.5">
             {mode === "login" && "Войдите в свой аккаунт"}
             {mode === "register" && "Создайте новый аккаунт"}
             {mode === "forgot" && "Восстановление пароля"}
@@ -108,11 +108,11 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         </div>
 
         {mode !== "forgot" && (
-          <div className="flex gap-1 mb-5 rounded-2xl bg-white/[0.05] p-1">
+          <div className="flex gap-1 mb-5 rounded-2xl bg-fg/[0.05] p-1">
             <button
               onClick={() => switchMode("login")}
               className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
-                mode === "login" ? "bg-white/[0.1] text-white" : "text-white/40 hover:text-white/60"
+                mode === "login" ? "bg-fg/[0.1] text-foreground" : "text-fg/40 hover:text-fg/60"
               }`}
             >
               Вход
@@ -120,7 +120,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             <button
               onClick={() => switchMode("register")}
               className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${
-                mode === "register" ? "bg-white/[0.1] text-white" : "text-white/40 hover:text-white/60"
+                mode === "register" ? "bg-fg/[0.1] text-foreground" : "text-fg/40 hover:text-fg/60"
               }`}
             >
               Регистрация
@@ -131,7 +131,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         {mode === "forgot" && (
           <button
             onClick={() => switchMode("login")}
-            className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors mb-4"
+            className="flex items-center gap-1.5 text-xs text-fg/40 hover:text-fg/70 transition-colors mb-4"
           >
             <Icon name="ArrowLeft" size={13} />
             Назад ко входу
@@ -139,11 +139,11 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         )}
 
         <div className="space-y-3">
-          <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
-            <Icon name="Mail" size={14} className="text-white/30" />
+          <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5">
+            <Icon name="Mail" size={14} className="text-fg/30" />
             <input
               type="email"
-              className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none"
+              className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/25 outline-none"
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -153,11 +153,11 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           </div>
 
           {mode !== "forgot" && (
-            <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
-              <Icon name="Lock" size={14} className="text-white/30" />
+            <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5">
+              <Icon name="Lock" size={14} className="text-fg/30" />
               <input
                 type="password"
-                className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none"
+                className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/25 outline-none"
                 placeholder="Пароль"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -168,27 +168,27 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
           {mode === "register" && (
             <>
-              <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
-                <Icon name="AtSign" size={14} className="text-white/30" />
+              <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5">
+                <Icon name="AtSign" size={14} className="text-fg/30" />
                 <input
-                  className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none"
+                  className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/25 outline-none"
                   placeholder="Логин (необязательно)"
                   value={login}
                   onChange={(e) => setLogin(e.target.value)}
                 />
               </div>
               <div className="flex gap-2">
-                <div className="flex-1 flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
+                <div className="flex-1 flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5">
                   <input
-                    className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none min-w-0"
+                    className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/25 outline-none min-w-0"
                     placeholder="Имя"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                   />
                 </div>
-                <div className="flex-1 flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
+                <div className="flex-1 flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5">
                   <input
-                    className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none min-w-0"
+                    className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/25 outline-none min-w-0"
                     placeholder="Фамилия"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}

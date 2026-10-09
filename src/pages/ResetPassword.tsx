@@ -60,14 +60,14 @@ export default function ResetPassword() {
 
       <div
         className="relative z-10 w-full max-w-sm rounded-3xl p-6 animate-fade-in"
-        style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
+        style={{ background: "hsl(var(--popover) / 0.98)", border: "1px solid rgb(var(--fg) / calc(0.1 * var(--fg-gain)))" }}
       >
         <div className="flex flex-col items-center mb-6">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl gradient-btn shadow-lg shadow-purple-500/30 mb-3">
             <Icon name="KeyRound" size={24} className="text-white" />
           </div>
           <h1 className="text-lg font-bold gradient-text">Новый пароль</h1>
-          <p className="text-xs text-white/35 mt-0.5">Придумайте новый пароль для входа</p>
+          <p className="text-xs text-fg/35 mt-0.5">Придумайте новый пароль для входа</p>
         </div>
 
         {success ? (
@@ -77,22 +77,22 @@ export default function ResetPassword() {
         ) : (
           <>
             <div className="space-y-3">
-              <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
-                <Icon name="Lock" size={14} className="text-white/30" />
+              <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5">
+                <Icon name="Lock" size={14} className="text-fg/30" />
                 <input
                   type="password"
-                  className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none"
+                  className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/25 outline-none"
                   placeholder="Новый пароль"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoFocus
                 />
               </div>
-              <div className="flex items-center gap-2 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-3 py-2.5">
-                <Icon name="Lock" size={14} className="text-white/30" />
+              <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5">
+                <Icon name="Lock" size={14} className="text-fg/30" />
                 <input
                   type="password"
-                  className="flex-1 bg-transparent text-sm text-white/85 placeholder:text-white/25 outline-none"
+                  className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/25 outline-none"
                   placeholder="Повторите пароль"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}

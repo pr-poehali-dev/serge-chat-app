@@ -62,7 +62,7 @@ export default function Sidebar({
       className="relative z-10 flex h-full min-w-0 shrink-0 flex-col w-full"
       style={{ width: isMobile ? "100%" : "var(--sidebar-width)" }}
     >
-      <div className="glass-strong flex h-full flex-col border-r border-white/[0.06]">
+      <div className="glass-strong flex h-full flex-col border-r border-fg/[0.06]">
         <SidebarHeader
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -123,7 +123,7 @@ export default function Sidebar({
         >
           <div
             className="w-full max-w-xs rounded-3xl overflow-hidden animate-fade-in p-5"
-            style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
+            style={{ background: "hsl(var(--popover) / 0.98)", border: "1px solid rgb(var(--fg) / calc(0.1 * var(--fg-gain)))" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col items-center text-center gap-3">
@@ -134,8 +134,8 @@ export default function Sidebar({
                 {botToDelete.avatar}
               </div>
               <div>
-                <p className="text-sm font-semibold text-white/90">Удалить бота?</p>
-                <p className="text-xs text-white/40 mt-1">
+                <p className="text-sm font-semibold text-fg/90">Удалить бота?</p>
+                <p className="text-xs text-fg/40 mt-1">
                   {botToDelete.name} и вся история переписки будут удалены безвозвратно
                 </p>
               </div>
@@ -143,7 +143,7 @@ export default function Sidebar({
             <div className="flex gap-2 mt-5">
               <button
                 onClick={() => setBotToDelete(null)}
-                className="flex-1 rounded-xl bg-white/[0.06] py-2.5 text-sm text-white/60 hover:bg-white/[0.1] transition-all"
+                className="flex-1 rounded-xl bg-fg/[0.06] py-2.5 text-sm text-fg/60 hover:bg-fg/[0.1] transition-all"
               >
                 Отмена
               </button>
@@ -170,7 +170,7 @@ export default function Sidebar({
         >
           <div
             className="w-full max-w-xs rounded-3xl overflow-hidden animate-fade-in p-5"
-            style={{ background: "rgba(14,8,28,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
+            style={{ background: "hsl(var(--popover) / 0.98)", border: "1px solid rgb(var(--fg) / calc(0.1 * var(--fg-gain)))" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col items-center text-center gap-3">
@@ -181,8 +181,8 @@ export default function Sidebar({
                 {groupToLeave.avatar}
               </div>
               <div>
-                <p className="text-sm font-semibold text-white/90">Выйти из группы?</p>
-                <p className="text-xs text-white/40 mt-1">
+                <p className="text-sm font-semibold text-fg/90">Выйти из группы?</p>
+                <p className="text-xs text-fg/40 mt-1">
                   «{groupToLeave.name}» будет удалена из списка чатов вместе с историей переписки
                 </p>
               </div>
@@ -190,7 +190,7 @@ export default function Sidebar({
             <div className="flex gap-2 mt-5">
               <button
                 onClick={() => setGroupToLeave(null)}
-                className="flex-1 rounded-xl bg-white/[0.06] py-2.5 text-sm text-white/60 hover:bg-white/[0.1] transition-all"
+                className="flex-1 rounded-xl bg-fg/[0.06] py-2.5 text-sm text-fg/60 hover:bg-fg/[0.1] transition-all"
               >
                 Отмена
               </button>
