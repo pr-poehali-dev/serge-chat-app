@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { IncomingCall } from "@/components/messenger/CallOverlays";
 import Sidebar from "@/components/messenger/Sidebar";
@@ -9,7 +9,7 @@ import CreateTopicModal from "@/components/messenger/CreateTopicModal";
 import AuthScreen from "@/components/messenger/AuthScreen";
 import GroupMembersModal from "@/components/messenger/GroupMembersModal";
 import { Chat, Message, Tab } from "@/components/messenger/types";
-import { EMOJI_CATEGORIES, GIF_CATEGORIES } from "./index/config";
+import { EMOJI_CATEGORIES, GIF_CATEGORIES, API_CHATS } from "./index/config";
 import { useAuth } from "./index/useAuth";
 import { useComposer } from "./index/useComposer";
 import { useBotsAndGroups } from "./index/useBotsAndGroups";
@@ -28,6 +28,7 @@ export default function Index() {
   const [showEncryptBadge, setShowEncryptBadge] = useState(true);
 
   const [chats, setChats] = useState<Chat[]>([]);
+  const botsRef = useRef<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
 
   const [call, setCall] = useState<{ isVideo: boolean } | null>(null);
@@ -48,35 +49,45 @@ export default function Index() {
 
   const composer = useComposer();
 
+  const reloadChats = async () => {
+    if (!authUser) return;
+    const res = await fetch(API_CHATS, { headers: authHeaders() });
+    const data = await res.json();
+    setChats(data.chats || []);
+  };
+
+  const activeChat = chats.find((c) => c.id === activeChatId) || botsRef.current.find((b) => b.id === activeChatId);
+  const isGroupChat = !!activeChat?.isGroup;
+
   const bg = useBotsAndGroups({
-    chats,
+    authHeaders,
+    reloadChats,
     setChats,
     setMessages,
     activeChatId,
     setActiveChatId,
     setActiveTab,
+    isGroupChat,
     inputText: composer.inputText,
     setInputText: composer.setInputText,
     attachments: composer.attachments,
     setAttachments: composer.setAttachments,
   });
+  botsRef.current = bg.bots;
 
   const handleMobileBackToChats = () => {
     setMobileShowChat(false);
   };
 
-  const activeChat = chats.find((c) => c.id === activeChatId) || bg.bots.find((b) => b.id === activeChatId);
   const isBotChat = bg.bots.some((b) => b.id === activeChatId);
-  const isGroupChat = !!activeChat?.isGroup;
   const displayMessages = isBotChat
     ? (bg.botMessages[activeChatId as number] || [])
-    : isGroupChat && bg.activeTopicId
-    ? (bg.topicMessages[bg.activeTopicId] || [])
     : messages;
 
   const msg = useMessaging({
     authUser,
     authHeaders,
+    reloadChats,
     chats,
     setChats,
     messages,
@@ -91,8 +102,6 @@ export default function Index() {
     activeTopicId: bg.activeTopicId,
     botMessages: bg.botMessages,
     setBotMessages: bg.setBotMessages,
-    topicMessages: bg.topicMessages,
-    setTopicMessages: bg.setTopicMessages,
     inputText: composer.inputText,
     setInputText: composer.setInputText,
     attachments: composer.attachments,
@@ -220,8 +229,15 @@ export default function Index() {
       {/* Create group modal */}
       {bg.createGroupOpen && (
         <CreateGroupModal
-          contacts={chats}
-          onCreate={bg.createGroup}
+          contacts={chats.filter((c) => !c.isGroup && !c.isBot && c.contactUserId != null)}
+          onCreate={(name, chatIds) =>
+            bg.createGroup(
+              name,
+              chats
+                .filter((c) => chatIds.includes(c.id) && c.contactUserId != null)
+                .map((c) => c.contactUserId as number)
+            )
+          }
           onClose={() => bg.setCreateGroupOpen(false)}
         />
       )}

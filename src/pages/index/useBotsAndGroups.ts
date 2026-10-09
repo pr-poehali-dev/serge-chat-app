@@ -2,15 +2,17 @@ import { useState, useEffect, useRef, Dispatch, SetStateAction } from "react";
 import { generateBotReply } from "@/components/messenger/botReplies";
 import { crocodileWelcome, handleCrocodileMessage, CrocodileState } from "@/components/messenger/crocodileGame";
 import { Chat, Message, Tab, BotInfo, Topic, Attachment } from "@/components/messenger/types";
-import { CROCODILE_USERNAME, GROUP_COLORS } from "./config";
+import { API_CHATS, CROCODILE_USERNAME } from "./config";
 
 interface UseBotsAndGroupsParams {
-  chats: Chat[];
+  authHeaders: () => Record<string, string>;
+  reloadChats: () => Promise<void>;
   setChats: Dispatch<SetStateAction<Chat[]>>;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   activeChatId: number | null;
   setActiveChatId: (id: number | null) => void;
   setActiveTab: (tab: Tab) => void;
+  isGroupChat: boolean;
   inputText: string;
   setInputText: Dispatch<SetStateAction<string>>;
   attachments: Attachment[];
@@ -18,12 +20,14 @@ interface UseBotsAndGroupsParams {
 }
 
 export function useBotsAndGroups({
-  chats,
+  authHeaders,
+  reloadChats,
   setChats,
   setMessages,
   activeChatId,
   setActiveChatId,
   setActiveTab,
+  isGroupChat,
   inputText,
   setInputText,
   attachments,
@@ -38,31 +42,39 @@ export function useBotsAndGroups({
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [groupTopics, setGroupTopics] = useState<Record<number, Topic[]>>({});
   const [activeTopicId, setActiveTopicId] = useState<number | null>(null);
-  const [topicMessages, setTopicMessages] = useState<Record<number, Message[]>>({});
   const [createTopicOpen, setCreateTopicOpen] = useState(false);
   const [groupMembersOpen, setGroupMembersOpen] = useState(false);
 
-  const createGroup = (name: string, memberIds: number[]) => {
-    const id = -(Date.now());
-    const color = GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
-    const memberNames = chats.filter((c) => memberIds.includes(c.id)).map((c) => c.name);
-    const newChat: Chat = {
-      id,
-      name,
-      isGroup: true,
-      color,
-      lastMsg: `Группа создана · ${memberNames.length} участник(ов)`,
-      time: "сейчас",
-      unread: 0,
-      online: true,
-      avatar: name.slice(0, 2).toUpperCase(),
-    };
-    setChats((prev) => [newChat, ...prev]);
-    setMessages([]);
-    setActiveTopicId(null);
-    setCreateGroupOpen(false);
-    setActiveChatId(id);
-    setActiveTab("chats");
+  const loadTopics = async (chatId: number) => {
+    if (chatId <= 0) return;
+    try {
+      const res = await fetch(`${API_CHATS}?action=topics&chat_id=${chatId}`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      setGroupTopics((prev) => ({ ...prev, [chatId]: data.topics || [] }));
+    } catch {
+      return;
+    }
+  };
+
+  const createGroup = async (name: string, memberIds: number[]) => {
+    try {
+      const res = await fetch(`${API_CHATS}?action=create-group`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ name, member_ids: memberIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+      await reloadChats();
+      setMessages([]);
+      setActiveTopicId(null);
+      setCreateGroupOpen(false);
+      setActiveChatId(data.chat_id);
+      setActiveTab("chats");
+    } catch {
+      return;
+    }
   };
 
   const installBot = (bot: BotInfo) => {
@@ -121,46 +133,73 @@ export function useBotsAndGroups({
     }
   };
 
-  const leaveGroup = (id: number) => {
+  const leaveGroup = async (id: number) => {
     setChats((prev) => prev.filter((c) => c.id !== id));
     setGroupTopics((prev) => {
       const next = { ...prev };
-      const topicIds = (next[id] || []).map((t) => t.id);
       delete next[id];
-      setTopicMessages((tm) => {
-        const nextTm = { ...tm };
-        topicIds.forEach((tid) => delete nextTm[tid]);
-        return nextTm;
-      });
       return next;
     });
     if (activeChatId === id) {
       setActiveChatId(null);
       setActiveTopicId(null);
     }
+    if (id < 0) return;
+    try {
+      await fetch(`${API_CHATS}?action=leave-group`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ chat_id: id }),
+      });
+    } finally {
+      await reloadChats();
+    }
   };
 
-  const createTopic = (name: string, color: string) => {
-    if (!activeChatId) return;
-    const id = -(Date.now());
-    const topic: Topic = { id, name, color };
-    setGroupTopics((prev) => ({
-      ...prev,
-      [activeChatId]: [...(prev[activeChatId] || []), topic],
-    }));
-    setTopicMessages((prev) => ({ ...prev, [id]: [] }));
-    setCreateTopicOpen(false);
-    setActiveTopicId(id);
+  const createTopic = async (name: string, color: string) => {
+    if (!activeChatId || activeChatId < 0) return;
+    const chatId = activeChatId;
+    try {
+      const res = await fetch(`${API_CHATS}?action=create-topic`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ chat_id: chatId, name, color }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+      setGroupTopics((prev) => ({
+        ...prev,
+        [chatId]: [...(prev[chatId] || []), data.topic],
+      }));
+      setCreateTopicOpen(false);
+      setActiveTopicId(data.topic.id);
+    } catch {
+      return;
+    }
   };
 
-  const togglePinTopic = (topicId: number) => {
+  const togglePinTopic = async (topicId: number) => {
     if (!activeChatId) return;
-    setGroupTopics((prev) => ({
-      ...prev,
-      [activeChatId]: (prev[activeChatId] || []).map((t) =>
-        t.id === topicId ? { ...t, pinned: !t.pinned } : t
-      ),
-    }));
+    const chatId = activeChatId;
+    const current = (groupTopics[chatId] || []).find((t) => t.id === topicId);
+    if (!current) return;
+    const nextPinned = !current.pinned;
+    const apply = (pinned: boolean) =>
+      setGroupTopics((prev) => ({
+        ...prev,
+        [chatId]: (prev[chatId] || []).map((t) => (t.id === topicId ? { ...t, pinned } : t)),
+      }));
+    apply(nextPinned);
+    try {
+      const res = await fetch(`${API_CHATS}?action=toggle-pin-topic`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ topic_id: topicId, pinned: nextPinned }),
+      });
+      if (!res.ok) apply(!nextPinned);
+    } catch {
+      apply(!nextPinned);
+    }
   };
 
   const sendBotMessage = () => {
@@ -233,6 +272,16 @@ export function useBotsAndGroups({
     setActiveTopicId(null);
   }, [activeChatId]);
 
+  // Load topics when a group is opened and keep them fresh for all members
+  useEffect(() => {
+    if (!activeChatId || activeChatId < 0 || !isGroupChat) return;
+    loadTopics(activeChatId);
+    const timer = window.setInterval(() => {
+      if (!document.hidden) loadTopics(activeChatId);
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [activeChatId, isGroupChat]);
+
   return {
     bots,
     botMessages,
@@ -246,8 +295,6 @@ export function useBotsAndGroups({
     groupTopics,
     activeTopicId,
     setActiveTopicId,
-    topicMessages,
-    setTopicMessages,
     createTopicOpen,
     setCreateTopicOpen,
     groupMembersOpen,

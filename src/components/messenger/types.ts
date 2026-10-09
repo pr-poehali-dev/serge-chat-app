@@ -11,6 +11,10 @@ export interface Chat {
   isBot?: boolean;
   pinned?: boolean;
   avatarUrl?: string | null;
+  statusText?: string;
+  typing?: boolean;
+  contactUserId?: number | null;
+  memberCount?: number | null;
 }
 
 export interface Message {
@@ -25,6 +29,10 @@ export interface Message {
   mediaUrl?: string | null;
   duration?: number | null;
   transcript?: string | null;
+  senderName?: string | null;
+  senderColor?: string | null;
+  senderInitials?: string | null;
+  senderAvatarUrl?: string | null;
 }
 
 export type Tab = "chats" | "contacts" | "notifications" | "gallery" | "search" | "profile" | "bots";

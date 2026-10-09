@@ -87,16 +87,41 @@ def handler(event: dict, context) -> dict:
     duration = body.get("duration")
     duration = int(duration) if isinstance(duration, (int, float)) else None
 
+    topic_id = body.get("topic_id")
+
     conn = get_conn()
     cur = conn.cursor()
     try:
         my_user_id = resolve_user_id(cur, event.get("headers") or {})
+
+        cur.execute(
+            f"SELECT 1 FROM {SCHEMA}.chat_members WHERE chat_id = %s AND user_id = %s",
+            (chat_id, my_user_id),
+        )
+        if not cur.fetchone():
+            return {"statusCode": 403, "headers": CORS, "body": json.dumps({"error": "Вы не участник этого чата"})}
+
+        if topic_id:
+            cur.execute(
+                f"SELECT 1 FROM {SCHEMA}.chat_topics WHERE id = %s AND chat_id = %s",
+                (topic_id, chat_id),
+            )
+            if not cur.fetchone():
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Тема не найдена"})}
+        else:
+            topic_id = None
+
         cur.execute(f"""
-            INSERT INTO {SCHEMA}.messages (chat_id, sender_id, text, is_read, kind, media_url, duration_sec)
-            VALUES (%s, %s, %s, false, %s, %s, %s)
+            INSERT INTO {SCHEMA}.messages (chat_id, sender_id, text, is_read, kind, media_url, duration_sec, topic_id)
+            VALUES (%s, %s, %s, false, %s, %s, %s, %s)
             RETURNING id, TO_CHAR(created_at, 'HH24:MI')
-        """, (chat_id, my_user_id, text, kind, media_url, duration))
+        """, (chat_id, my_user_id, text, kind, media_url, duration, topic_id))
         row = cur.fetchone()
+        cur.execute(f"""
+            UPDATE {SCHEMA}.chat_members SET typing_until = NULL
+            WHERE chat_id = %s AND user_id = %s
+        """, (chat_id, my_user_id))
+        cur.execute(f"UPDATE {SCHEMA}.users SET last_seen = NOW(), is_online = true WHERE id = %s", (my_user_id,))
         conn.commit()
 
         return {

@@ -3,9 +3,13 @@ import { RecordedMedia, blobToBase64 } from "@/components/messenger/media/useRec
 import { Chat, Message, Tab, AuthUser, NotificationItem, Attachment } from "@/components/messenger/types";
 import { API_CHATS, API_SEND, API_TRANSCRIBE } from "./config";
 
+const POLL_INTERVAL_MS = 3000;
+const TYPING_PING_MS = 3000;
+
 interface UseMessagingParams {
   authUser: AuthUser | null;
   authHeaders: () => Record<string, string>;
+  reloadChats: () => Promise<void>;
   chats: Chat[];
   setChats: Dispatch<SetStateAction<Chat[]>>;
   messages: Message[];
@@ -20,8 +24,6 @@ interface UseMessagingParams {
   activeTopicId: number | null;
   botMessages: Record<number, Message[]>;
   setBotMessages: Dispatch<SetStateAction<Record<number, Message[]>>>;
-  topicMessages: Record<number, Message[]>;
-  setTopicMessages: Dispatch<SetStateAction<Record<number, Message[]>>>;
   inputText: string;
   setInputText: Dispatch<SetStateAction<string>>;
   attachments: Attachment[];
@@ -32,6 +34,7 @@ interface UseMessagingParams {
 export function useMessaging({
   authUser,
   authHeaders,
+  reloadChats,
   chats,
   setChats,
   messages,
@@ -46,8 +49,6 @@ export function useMessaging({
   activeTopicId,
   botMessages,
   setBotMessages,
-  topicMessages,
-  setTopicMessages,
   inputText,
   setInputText,
   attachments,
@@ -59,13 +60,6 @@ export function useMessaging({
   const [sending, setSending] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const reloadChats = async () => {
-    if (!authUser) return;
-    const res = await fetch(API_CHATS, { headers: authHeaders() });
-    const data = await res.json();
-    setChats(data.chats || []);
-  };
 
   const startChatWithUser = async (userId: number): Promise<string | null> => {
     if (!authUser) return "Не авторизован";
@@ -106,7 +100,7 @@ export function useMessaging({
     if (!chat) return;
     const nextPinned = !chat.pinned;
     setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinned: nextPinned } : c)));
-    if (chatId < 0) return; // locally created chats have no backend record
+    if (chatId < 0) return;
     fetch(`${API_CHATS}?action=pin`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -122,25 +116,41 @@ export function useMessaging({
     setNotifications((prev) => (prev.some((n) => !n.read) ? prev.map((n) => ({ ...n, read: true })) : prev));
   }, [activeTab]);
 
-  // Load messages when chat changes
+  const messagesUrl = (chatId: number, topicId: number | null) =>
+    `${API_CHATS}?action=messages&chat_id=${chatId}${topicId ? `&topic_id=${topicId}` : ""}`;
+
+  // Load messages when chat or topic changes
   useEffect(() => {
     if (!activeChatId || isBotChat || activeChatId < 0 || !authUser) return;
+    let cancelled = false;
     setLoadingMsgs(true);
     setMessages([]);
     setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, unread: 0 } : c)));
-    fetch(`${API_CHATS}?action=messages&chat_id=${activeChatId}`, { headers: authHeaders() })
+    fetch(messagesUrl(activeChatId, activeTopicId), { headers: authHeaders() })
       .then((r) => r.json())
-      .then((data) => setMessages(data.messages || []))
-      .finally(() => setLoadingMsgs(false));
-  }, [activeChatId, isBotChat, authUser]);
+      .then((data) => {
+        if (!cancelled) setMessages(data.messages || []);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMsgs(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChatId, activeTopicId, isBotChat, authUser]);
 
   const activeChatIdRef = useRef<number | null>(null);
+  const activeTopicIdRef = useRef<number | null>(null);
   const activeTabRef = useRef<Tab>("chats");
+  const isBotChatRef = useRef(false);
   const prevChatsRef = useRef<Record<number, { unread: number; lastMsg: string; time: string }>>({});
+  const lastMessagesSigRef = useRef("");
   activeChatIdRef.current = activeChatId;
+  activeTopicIdRef.current = activeTopicId;
   activeTabRef.current = activeTab;
+  isBotChatRef.current = isBotChat;
 
-  // Poll for new messages: refresh chat list, fill the bell, refresh the open chat
+  // Poll: refresh chat list (statuses, typing, unread), fill the bell, refresh the open chat
   useEffect(() => {
     if (!authUser) return;
     prevChatsRef.current = {};
@@ -156,14 +166,10 @@ export function useMessaging({
         const openId = activeChatIdRef.current;
         const firstRun = Object.keys(prevChatsRef.current).length === 0;
         const newNotes: NotificationItem[] = [];
-        let openChatChanged = false;
 
         const normalized = fresh.map((c) => {
           const prev = prevChatsRef.current[c.id];
           const isOpen = c.id === openId;
-          if (isOpen && prev && (prev.lastMsg !== c.lastMsg || prev.time !== c.time || c.unread > 0)) {
-            openChatChanged = true;
-          }
           if (!firstRun && !isOpen && c.unread > (prev?.unread ?? 0)) {
             newNotes.push({
               id: Date.now() + c.id,
@@ -178,19 +184,25 @@ export function useMessaging({
           return isOpen ? { ...c, unread: 0 } : c;
         });
 
-        setChats((prev) => [...prev.filter((c) => c.id < 0), ...normalized]);
+        setChats(normalized);
         if (newNotes.length > 0) setNotifications((prev) => [...newNotes, ...prev].slice(0, 50));
 
-        if (openChatChanged && openId && openId > 0) {
-          const r = await fetch(`${API_CHATS}?action=messages&chat_id=${openId}`, {
+        if (openId && openId > 0 && !isBotChatRef.current) {
+          const topicId = activeTopicIdRef.current;
+          const r = await fetch(messagesUrl(openId, topicId), {
             headers: { "X-Session-Id": authUser.sessionId },
           });
-          if (r.ok && !stopped) {
+          if (r.ok && !stopped && openId === activeChatIdRef.current && topicId === activeTopicIdRef.current) {
             const d = await r.json();
-            setMessages((cur) => {
-              const pending = cur.filter((m) => m.id > 1e12);
-              return [...(d.messages || []), ...pending];
-            });
+            const fetched: Message[] = d.messages || [];
+            const sig = JSON.stringify(fetched);
+            if (sig !== lastMessagesSigRef.current) {
+              lastMessagesSigRef.current = sig;
+              setMessages((cur) => {
+                const pending = cur.filter((m) => m.id > 1e12);
+                return [...fetched, ...pending];
+              });
+            }
           }
         }
       } catch {
@@ -199,12 +211,31 @@ export function useMessaging({
     };
 
     tick();
-    const timer = window.setInterval(tick, 5000);
+    const timer = window.setInterval(tick, POLL_INTERVAL_MS);
     return () => {
       stopped = true;
       window.clearInterval(timer);
     };
   }, [authUser]);
+
+  useEffect(() => {
+    lastMessagesSigRef.current = "";
+  }, [activeChatId, activeTopicId]);
+
+  // Tell the server we are typing (direct chats only)
+  const lastTypingPingRef = useRef(0);
+  useEffect(() => {
+    if (!authUser || !activeChatId || activeChatId < 0 || isBotChat || isGroupChat) return;
+    if (!inputText.trim()) return;
+    const now = Date.now();
+    if (now - lastTypingPingRef.current < TYPING_PING_MS) return;
+    lastTypingPingRef.current = now;
+    fetch(`${API_CHATS}?action=typing`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ chat_id: activeChatId }),
+    }).catch(() => undefined);
+  }, [inputText, activeChatId, isBotChat, isGroupChat, authUser]);
 
   const sendMedia = async (kind: "voice" | "circle", media: RecordedMedia) => {
     if (!activeChatId || activeChatId < 0 || isBotChat || sending) return;
@@ -216,6 +247,7 @@ export function useMessaging({
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           chat_id: activeChatId,
+          topic_id: activeTopicId,
           kind,
           media: base64,
           contentType: media.mime,
@@ -253,7 +285,7 @@ export function useMessaging({
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, botMessages, topicMessages]);
+  }, [messages, botMessages]);
 
   const sendMessage = async () => {
     if (isBotChat) {
@@ -275,51 +307,32 @@ export function useMessaging({
     setInputText("");
     setAttachments([]);
 
-    // Optimistic update
     const optimistic: Message = {
       id: Date.now(),
       text: fullText,
       out: true,
       read: false,
       time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
-      sender_id: 1,
+      sender_id: authUser?.id ?? 1,
     };
 
-    // Messages inside a group topic are kept fully local
-    if (isGroupChat && activeTopicId) {
-      setTopicMessages((prev) => ({
-        ...prev,
-        [activeTopicId]: [...(prev[activeTopicId] || []), optimistic],
-      }));
-      return;
-    }
-
     setMessages((prev) => [...prev, optimistic]);
-
-    // Locally created chats (e.g. new groups) don't exist in the backend — keep messages local
-    if (activeChatId < 0) {
-      setChats((prev) =>
-        prev.map((c) =>
-          c.id === activeChatId ? { ...c, lastMsg: text, time: optimistic.time } : c
-        )
-      );
-      return;
-    }
-
     setSending(true);
 
     try {
       const res = await fetch(API_SEND, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ chat_id: activeChatId, text }),
+        body: JSON.stringify({ chat_id: activeChatId, topic_id: activeTopicId, text: fullText }),
       });
       const data = await res.json();
-      // Replace optimistic with real
+      if (!res.ok) {
+        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+        return;
+      }
       setMessages((prev) =>
         prev.map((m) => (m.id === optimistic.id ? { ...data } : m))
       );
-      // Update chat last message
       setChats((prev) =>
         prev.map((c) =>
           c.id === activeChatId
@@ -327,6 +340,8 @@ export function useMessaging({
             : c
         )
       );
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
     } finally {
       setSending(false);
     }
@@ -353,13 +368,6 @@ export function useMessaging({
         return { ...m, reactions };
       });
 
-    if (isGroupChat && activeTopicId) {
-      setTopicMessages((prev) => ({
-        ...prev,
-        [activeTopicId]: applyToList(prev[activeTopicId] || []),
-      }));
-      return;
-    }
     if (isBotChat) {
       setBotMessages((prev) => ({
         ...prev,
@@ -383,7 +391,6 @@ export function useMessaging({
         setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions: data.reactions } : m)));
       }
     } catch {
-      // Revert on failure
       setMessages((prev) => applyToList(prev));
     }
   };

@@ -71,7 +71,11 @@ export default function ChatsList({
                   <span className="text-[11px] text-white/30 ml-2 shrink-0">{chat.time}</span>
                 </div>
                 <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-xs text-white/40 truncate">{chat.lastMsg}</span>
+                  {chat.typing && !chat.isGroup ? (
+                    <span className="text-xs text-purple-400 truncate">печатает…</span>
+                  ) : (
+                    <span className="text-xs text-white/40 truncate">{chat.lastMsg}</span>
+                  )}
                   {chat.unread > 0 && (
                     <span className="ml-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full gradient-btn text-[10px] font-bold text-white px-1">
                       {chat.unread}

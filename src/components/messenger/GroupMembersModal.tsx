@@ -34,6 +34,7 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
   const [removingId, setRemovingId] = useState<number | null>(null);
 
   const isLocalChat = chat.id < 0;
+  const authHeaders: Record<string, string> = authUser ? { "X-Session-Id": authUser.sessionId } : {};
 
   const loadMembers = () => {
     if (isLocalChat) {
@@ -41,7 +42,7 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
       return;
     }
     setLoadingMembers(true);
-    fetch(`${API_CHATS}?action=members&chat_id=${chat.id}`)
+    fetch(`${API_CHATS}?action=members&chat_id=${chat.id}`, { headers: authHeaders })
       .then((r) => r.json())
       .then((data) => setMembers(data.members || []))
       .finally(() => setLoadingMembers(false));
@@ -72,7 +73,7 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
     try {
       await fetch(`${API_CHATS}?action=add-member`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ chat_id: chat.id, user_id: userId }),
       });
       loadMembers();
@@ -87,7 +88,7 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
     try {
       await fetch(`${API_CHATS}?action=remove-member`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ chat_id: chat.id, user_id: userId }),
       });
       loadMembers();

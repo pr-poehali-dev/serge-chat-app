@@ -21,6 +21,26 @@
       "bodyMatcher": "partial"
     },
     {
+      "name": "Create group without session returns 401",
+      "method": "POST",
+      "path": "/?action=create-group",
+      "body": {"name": "Тест", "member_ids": [2]},
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get topics for chat 3",
+      "method": "GET",
+      "path": "/?action=topics&chat_id=3",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Get presence status for chat 1",
+      "method": "GET",
+      "path": "/?action=status&chat_id=1",
+      "expectedStatus": 200
+    },
+    {
       "name": "Start chat without user_id returns 400",
       "method": "POST",
       "path": "/?action=start-chat",

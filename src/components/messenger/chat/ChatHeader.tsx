@@ -63,9 +63,30 @@ export default function ChatHeader({
           </div>
           <div className="min-w-0">
             <h2 className="font-bold text-white/95 truncate">{activeChat.name}</h2>
-            <p className="text-xs text-white/35 truncate">
-              {activeChat.isGroup ? "групповой чат" : activeChat.online ? "в сети" : "был(а) недавно"}
-            </p>
+            {!activeChat.isGroup && activeChat.typing ? (
+              <p className="flex items-center gap-1.5 text-xs text-purple-400 truncate">
+                печатает
+                <span className="flex items-center gap-0.5">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="h-1 w-1 rounded-full bg-purple-400 animate-pulse"
+                      style={{ animationDelay: `${i * 150}ms` }}
+                    />
+                  ))}
+                </span>
+              </p>
+            ) : (
+              <p className={`text-xs truncate ${!activeChat.isGroup && activeChat.online ? "text-emerald-400/80" : "text-white/35"}`}>
+                {activeChat.isGroup
+                  ? activeChat.memberCount
+                    ? `групповой чат · ${activeChat.memberCount} уч.`
+                    : "групповой чат"
+                  : activeChat.isBot
+                  ? "бот"
+                  : activeChat.statusText || (activeChat.online ? "в сети" : "был(а) недавно")}
+              </p>
+            )}
           </div>
 
           {showEncryptBadge && (

@@ -67,15 +67,28 @@ export default function MessageList({
               style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
             >
               {!msg.out && (
-                <div
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white mr-2 self-end mb-1"
-                  style={{ background: `linear-gradient(135deg, ${activeChat.color}cc, ${activeChat.color}55)` }}
-                >
-                  {activeChat.avatar[0]}
-                </div>
+                msg.senderAvatarUrl && activeChat.isGroup ? (
+                  <img
+                    src={msg.senderAvatarUrl}
+                    alt={msg.senderName || ""}
+                    className="h-7 w-7 shrink-0 rounded-xl object-cover mr-2 self-end mb-1"
+                  />
+                ) : (
+                  <div
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white mr-2 self-end mb-1"
+                    style={{ background: `linear-gradient(135deg, ${(activeChat.isGroup && msg.senderColor) || activeChat.color}cc, ${(activeChat.isGroup && msg.senderColor) || activeChat.color}55)` }}
+                  >
+                    {activeChat.isGroup ? (msg.senderInitials || msg.senderName || "?")[0] : activeChat.avatar[0]}
+                  </div>
+                )
               )}
               <div className={`max-w-[75%] sm:max-w-[65%] flex items-end gap-1 ${msg.out ? "flex-row-reverse" : ""}`}>
                 <div className="min-w-0">
+                  {activeChat.isGroup && !msg.out && msg.senderName && (
+                    <p className="mb-0.5 px-1 text-[11px] font-medium truncate" style={{ color: msg.senderColor || "#a855f7" }}>
+                      {msg.senderName}
+                    </p>
+                  )}
                   {msg.kind === "circle" && msg.mediaUrl ? (
                     <CircleMessage msg={msg} />
                   ) : (
