@@ -30,7 +30,7 @@ USER_FIELDS = "id, email, login, first_name, last_name, display_name, avatar_ini
 
 
 def get_conn():
-    return psycopg2.connect(os.environ["localhost:3306/u3680192_users"])
+    return psycopg2.connect(os.environ["DATABASE_URL"])
 
 
 def hash_password(password: str, salt: str) -> str:
@@ -60,6 +60,25 @@ def get_origin(event: dict) -> str:
     return "https://poehali.dev"
 
 
+def save_file(key: str, data: bytes, content_type: str) -> str:
+    local_dir = os.environ.get("LOCAL_STORAGE_DIR")
+    if local_dir:
+        path = os.path.join(local_dir, key)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+        return f"{os.environ.get('PUBLIC_FILES_URL', '/files').rstrip('/')}/{key}"
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=os.environ.get("S3_ENDPOINT", "https://bucket.poehali.dev"),
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+    )
+    s3.put_object(Bucket=os.environ.get("S3_BUCKET", "files"), Key=key, Body=data, ContentType=content_type)
+    public_base = os.environ.get("PUBLIC_FILES_URL") or f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket"
+    return f"{public_base.rstrip('/')}/{key}"
+
+
 def upload_avatar(user_id: int, image_base64: str, content_type: str) -> str:
     if "," in image_base64:
         image_base64 = image_base64.split(",", 1)[1]
@@ -75,15 +94,7 @@ def upload_avatar(user_id: int, image_base64: str, content_type: str) -> str:
 
     key = f"avatars/{user_id}-{uuid.uuid4().hex}.{ext}"
 
-    s3 = boto3.client(
-        "s3",
-        endpoint_url="https://bucket.poehali.dev",
-        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-    )
-    s3.put_object(Bucket="files", Key=key, Body=data, ContentType=content_type or "image/png")
-
-    return f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{key}"
+    return save_file(key, data, content_type or "image/png")
 
 
 def handler(event: dict, context) -> dict:

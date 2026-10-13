@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Перенос Трынделки на свой сервер — инструкция</title>
+<style>
+:root{
+  --bg:#f6f6fb;--card:#ffffff;--ink:#181430;--muted:#5d5a75;--line:#e1e0ee;
+  --accent:#8b3dff;--accent2:#e0409a;--code-bg:#14122a;--code-ink:#ece9ff;
+  --ok:#0f9d6b;--warn:#b7791f;--bad:#c53030;--warn-bg:#fff7e6;--ok-bg:#e8f8f1;--bad-bg:#fdecec;--info-bg:#efeaff;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0d0d14;--card:#171626;--ink:#efedff;--muted:#a3a0bd;--line:#2a2840;
+    --warn-bg:#2a2210;--ok-bg:#0f2a21;--bad-bg:#2e1416;--info-bg:#221c3d;--code-bg:#0a0916}
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+header.top{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;padding:36px 20px 40px}
+.wrap{max-width:920px;margin:0 auto;padding:0 16px}
+header.top .wrap{padding:0}
+header.top h1{margin:0 0 8px;font-size:clamp(24px,5vw,36px);line-height:1.2}
+header.top p{margin:0;opacity:.92;max-width:680px}
+nav.toc{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin:-22px 0 28px;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+nav.toc strong{display:block;margin-bottom:8px}
+nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:28px}
+nav.toc li{break-inside:avoid;margin:3px 0}
+nav.toc a{color:var(--accent);text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+section{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 22px 8px;margin:0 0 22px}
+h2{margin:0 0 14px;font-size:clamp(20px,3.6vw,26px);line-height:1.25}
+h3{margin:26px 0 8px;font-size:18px}
+h4{margin:18px 0 6px;font-size:16px}
+p,li{overflow-wrap:anywhere}
+ul,ol{padding-left:22px}
+li{margin:4px 0}
+a{color:var(--accent)}
+code{font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--info-bg);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
+.codebox{position:relative;margin:10px 0 16px}
+pre{margin:0;background:var(--code-bg);color:var(--code-ink);border-radius:12px;padding:14px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;tab-size:2}
+pre code{background:none;padding:0;color:inherit;font:inherit;overflow-wrap:normal}
+.copy{position:absolute;top:8px;right:8px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;border-radius:8px;padding:5px 10px;font:12px system-ui;cursor:pointer;min-height:30px}
+.copy:hover{background:rgba(255,255,255,.2)}
+.note,.warn,.ok,.bad{border-radius:12px;padding:12px 16px;margin:14px 0;border:1px solid transparent}
+.note{background:var(--info-bg);border-color:rgba(139,61,255,.25)}
+.warn{background:var(--warn-bg);border-color:rgba(183,121,31,.35)}
+.ok{background:var(--ok-bg);border-color:rgba(15,157,107,.35)}
+.bad{background:var(--bad-bg);border-color:rgba(197,48,48,.35)}
+.note>b:first-child,.warn>b:first-child,.ok>b:first-child,.bad>b:first-child{display:block;margin-bottom:2px}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:12px 0 16px}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14.5px}
+th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+th{background:var(--info-bg)}
+.steps{counter-reset:s;list-style:none;padding:0}
+.steps>li{counter-increment:s;position:relative;padding-left:46px;margin:16px 0}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:15px}
+.tag{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 10px;margin-left:6px;vertical-align:middle}
+.tag.a{background:var(--ok-bg);color:var(--ok)}
+.tag.b{background:var(--warn-bg);color:var(--warn)}
+.tag.c{background:var(--bad-bg);color:var(--bad)}
+footer{text-align:center;color:var(--muted);font-size:13px;padding:10px 0 36px}
+@media (max-width:640px){
+  nav.toc ol{columns:1}
+  section{padding:18px 14px 4px;border-radius:14px}
+  .steps>li{padding-left:40px}
+  pre{font-size:12.5px;padding:12px}
+  .copy{position:static;display:block;margin:0 0 6px auto;border-color:var(--line);color:var(--ink);background:var(--card)}
+  .codebox{display:flex;flex-direction:column-reverse}
+}
+@media print{header.top{background:none;color:#000}.copy{display:none}section{break-inside:avoid}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <h1>Перенос мессенджера «Трынделка» на свой сервер</h1>
+    <p>Пошаговая инструкция: отдельно для VPS-сервера и отдельно для виртуального хостинга с панелью ISPmanager. Все команды можно копировать кнопкой «Копировать».</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <strong>Содержание</strong>
+  <ol>
+    <li><a href="#what">Из чего состоит проект</a></li>
+    <li><a href="#choose">Какой вариант вам подходит</a></li>
+    <li><a href="#prepare">Что подготовить заранее</a></li>
+    <li><a href="#code">Как получить код</a></li>
+    <li><a href="#vps">Часть 1. VPS-сервер (Ubuntu)</a></li>
+    <li><a href="#isp">Часть 2. Хостинг с ISPmanager</a></li>
+    <li><a href="#isp-vps">Часть 3. VPS, на котором стоит ISPmanager</a></li>
+    <li><a href="#data">Перенос пользователей, переписки и файлов</a></li>
+    <li><a href="#check">Проверка после запуска</a></li>
+    <li><a href="#update">Обновление и резервные копии</a></li>
+    <li><a href="#trouble">Если что-то не работает</a></li>
+    <li><a href="#env">Справочник: переменные настроек</a></li>
+  </ol>
+</nav>
+
+<section id="what">
+  <h2>1. Из чего состоит проект</h2>
+  <p>Сейчас мессенджер работает на платформе poehali.dev и состоит из четырёх частей. При переносе каждую нужно поставить на ваш сервер:</p>
+  <div class="table-wrap"><table>
+    <tr><th>Часть</th><th>Что это</th><th>Где будет на вашем сервере</th></tr>
+    <tr><td>Сайт</td><td>React-приложение, папка <code>src</code>. Собирается командой в папку <code>dist</code> (обычные HTML, JS, CSS)</td><td>Обычная папка сайта</td></tr>
+    <tr><td>Серверная часть</td><td>4 функции на Python 3: <code>auth</code> (вход, профиль), <code>chats</code> (чаты, настройки), <code>send-message</code> (отправка, пересылка, файлы), <code>transcribe</code> (голос в текст)</td><td>Запускаются через готовую обёртку из папки <code>deploy</code> по адресам <code>/api/auth</code>, <code>/api/chats</code> и т. д.</td></tr>
+    <tr><td>База данных</td><td>PostgreSQL. Таблицы создаются файлами из папки <code>db_migrations</code></td><td>PostgreSQL на сервере</td></tr>
+    <tr><td>Файлы</td><td>Аватары, фото, голосовые, кружки, документы. Сейчас лежат в хранилище платформы</td><td>Папка <code>files</code> на сервере</td></tr>
+  </table></div>
+  <div class="note"><b>Что уже подготовлено в проекте</b>
+    В папке <code>deploy</code> лежат готовые файлы: запуск серверной части (<code>app.py</code>), конфиг веб-сервера (<code>nginx.conf</code>), автозапуск (<code>trindelka.service</code>), шаблон настроек (<code>env.example</code>), скрипт замены адресов (<code>replace-api-urls.sh</code>), скрипт переноса файлов (<code>migrate-files.py</code>) и вход для хостинга (<code>passenger_wsgi.py</code>).
+    Сохранение файлов теперь умеет работать и в обычную папку на сервере: достаточно указать её в настройках.
+  </div>
+  <div class="warn"><b>Важно про проверку</b>
+    Обёртку серверной части я запускал у себя: она стартует и отвечает на проверочный адрес. Реальный сервер и панель ISPmanager я не видел, поэтому названия пунктов меню панели могут слегка отличаться у вашего хостера. Перед тем как переключать настоящих пользователей, сделайте пробный запуск и пройдите чек-лист из раздела 9.
+  </div>
+</section>
+
+<section id="choose">
+  <h2>2. Какой вариант вам подходит</h2>
+  <div class="table-wrap"><table>
+    <tr><th>У вас есть</th><th>Что получится</th><th>Куда смотреть</th></tr>
+    <tr><td>VPS с правами root (Ubuntu 22.04 или 24.04)<span class="tag a">лучший вариант</span></td><td>Всё на вашем сервере: сайт, серверная часть, база, файлы</td><td>Часть 1</td></tr>
+    <tr><td>Виртуальный хостинг с ISPmanager, где есть <b>PostgreSQL</b> и <b>Python (WSGI/Passenger)</b><span class="tag b">зависит от тарифа</span></td><td>Всё на хостинге</td><td>Часть 2, сценарий А</td></tr>
+    <tr><td>Хостинг с ISPmanager, где есть только PHP и MySQL<span class="tag b">частичный перенос</span></td><td>Сайт на хостинге, а серверная часть остаётся на poehali.dev или уезжает на отдельный VPS</td><td>Часть 2, сценарии Б и В</td></tr>
+    <tr><td>VPS, где уже стоит ISPmanager и есть root</td><td>Как в части 1, но домен и сертификат ведутся через панель</td><td>Часть 3</td></tr>
+  </table></div>
+  <div class="bad"><b>MySQL не подходит</b>
+    Проект написан под PostgreSQL (используются его схемы, <code>RETURNING</code>, функции времени и другое). На базу MySQL он не запустится, и «переделать одной настройкой» нельзя. Если на хостинге доступен только MySQL, выбирайте сценарии Б или В.
+  </div>
+  <div class="note"><b>Как узнать, что есть на вашем хостинге</b>
+    В ISPmanager откройте «Базы данных» → «Создать» и посмотрите, есть ли в списке типов PostgreSQL. Затем откройте настройки сайта и поищите режим работы Python (WSGI, Passenger). Если не нашли, напишите в поддержку хостера: «Доступен ли PostgreSQL и запуск Python-приложений через Passenger/WSGI на моём тарифе?»
+  </div>
+</section>
+
+<section id="prepare">
+  <h2>3. Что подготовить заранее</h2>
+  <ul>
+    <li><b>Домен</b>, например <code>chat.example.ru</code>. В DNS у регистратора добавьте запись <b>A</b> на IP-адрес вашего сервера. Изменения могут применяться до нескольких часов.</li>
+    <li><b>Доступ на сервер</b>: IP, логин и пароль или SSH-ключ. Для Windows подойдёт программа PuTTY или встроенный <code>ssh</code> в PowerShell.</li>
+    <li><b>Почта для писем восстановления пароля</b>: адрес SMTP-сервера, порт (465 или 587), логин и пароль. Для Яндекса и Gmail нужен специальный «пароль приложения», а не основной пароль.</li>
+    <li><b>Ключ OpenAI</b> нужен только для расшифровки голосовых в текст. Без него мессенджер работает, а эта кнопка нет. С российских серверов доступ к OpenAI может быть закрыт.</li>
+    <li><b>Node.js версии 20 или новее</b> нужен только для сборки сайта. Собрать можно на своём компьютере (nodejs.org) или прямо на VPS.</li>
+  </ul>
+  <div class="warn"><b>Пароли и секреты</b>
+    Придумывайте длинные пароли. Если в пароле есть символы <code>@ : / # ?</code>, в адресе базы их нужно закодировать (например, <code>@</code> превращается в <code>%40</code>). Проще использовать пароль из латинских букв и цифр.
+  </div>
+</section>
+
+<section id="code">
+  <h2>4. Как получить код проекта</h2>
+  <p>Есть два способа, оба в меню проекта на poehali.dev:</p>
+  <ol>
+    <li><b>Скачать → Скачать код</b> — архив со всем проектом. Распакуйте и загрузите на сервер.</li>
+    <li><b>Скачать → Подключить GitHub</b> — код уходит в ваш репозиторий. Это удобнее: на сервере код получают командой <code>git clone</code>, а потом обновляют командой <code>git pull</code>.</li>
+  </ol>
+  <p>Подробности: <a href="https://docs.poehali.dev/deploy/github" target="_blank" rel="noopener">docs.poehali.dev/deploy/github</a>.</p>
+  <div class="note"><b>Что внутри архива</b>
+    <code>src</code> (сайт), <code>backend</code> (4 функции), <code>db_migrations</code> (таблицы базы), <code>deploy</code> (файлы для переноса), <code>public</code> (в том числе эта страница), <code>package.json</code>.
+  </div>
+</section>
+
+<!-- ================= VPS ================= -->
+<section id="vps">
+  <h2>5. Часть 1. Перенос на VPS-сервер (Ubuntu 22.04 / 24.04)</h2>
+  <p>Подойдёт сервер от 1 ядра и 2 ГБ памяти. Все команды выполняются на сервере под пользователем <code>root</code>. Где написано <code>example.ru</code>, подставьте свой домен.</p>
+
+  <ol class="steps">
+    <li>
+      <h4>Подключитесь к серверу и обновите систему</h4>
+      <div class="codebox"><pre><code>ssh root@IP_ВАШЕГО_СЕРВЕРА
+apt update &amp;&amp; apt upgrade -y</code></pre></div>
+    </li>
+
+    <li>
+      <h4>Установите нужные программы</h4>
+      <div class="codebox"><pre><code>apt install -y nginx postgresql postgresql-contrib python3 python3-venv python3-pip git curl ufw certbot python3-certbot-nginx
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs
+node -v</code></pre></div>
+      <p>Последняя команда должна показать версию <code>v20</code> или выше.</p>
+    </li>
+
+    <li>
+      <h4>Включите защиту: открыты только SSH, сайт и защищённый сайт</h4>
+      <div class="codebox"><pre><code>ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw --force enable</code></pre></div>
+      <div class="warn"><b>Не пропускайте <code>ufw allow OpenSSH</code></b> до включения защиты, иначе вы потеряете доступ к серверу.</div>
+    </li>
+
+    <li>
+      <h4>Создайте папки и скачайте код</h4>
+      <p>Если код на GitHub (замените адрес на свой репозиторий):</p>
+      <div class="codebox"><pre><code>mkdir -p /var/www/trindelka/files
+cd /var/www/trindelka
+git clone https://github.com/ВАШ_АККАУНТ/ВАШ_РЕПОЗИТОРИЙ.git app</code></pre></div>
+      <p>Если у вас архив: загрузите его на сервер (программой WinSCP или FileZilla) и распакуйте так, чтобы получилась папка <code>/var/www/trindelka/app</code> с папками <code>src</code>, <code>backend</code>, <code>deploy</code> внутри.</p>
+    </li>
+
+    <li>
+      <h4>Создайте базу данных</h4>
+      <p>Придумайте пароль и вставьте его вместо <code>ПРИДУМАЙТЕ_ПАРОЛЬ</code> (латинские буквы и цифры).</p>
+      <div class="codebox"><pre><code>sudo -u postgres psql -c "CREATE USER trindelka WITH PASSWORD 'ПРИДУМАЙТЕ_ПАРОЛЬ';"
+sudo -u postgres psql -c "CREATE DATABASE trindelka OWNER trindelka;"
+sudo -u postgres psql -d trindelka -c "CREATE SCHEMA t_p64541051_serge_chat_app AUTHORIZATION trindelka;"</code></pre></div>
+      <div class="note"><b>Почему именно такое имя схемы</b>
+        Имя <code>t_p64541051_serge_chat_app</code> прописано и в коде, и в файлах таблиц. Оставьте его как есть, тогда ничего менять не придётся.
+      </div>
+    </li>
+
+    <li>
+      <h4>Создайте таблицы</h4>
+      <p>Файлы применяются по порядку. Два файла с демонстрационными данными (<code>V0003</code> и <code>V0005</code>) пропускаем: второй из них повторно добавляет те же тестовые аккаунты и на чистой базе даст ошибку «уже существует». Это вывод из чтения файлов, на пустой базе я их не прогонял.</p>
+      <div class="codebox"><pre><code>cd /var/www/trindelka/app
+export DATABASE_URL="postgresql://trindelka:ПРИДУМАЙТЕ_ПАРОЛЬ@127.0.0.1:5432/trindelka"
+for f in $(ls db_migrations/*.sql | grep -v -e V0003 -e V0005); do
+  echo "== $f"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f" || break
+done</code></pre></div>
+      <p>Проверьте, что таблицы появились:</p>
+      <div class="codebox"><pre><code>psql "$DATABASE_URL" -c "\dt t_p64541051_serge_chat_app.*"</code></pre></div>
+      <p>В списке должны быть шесть таблиц: <code>users</code>, <code>chats</code>, <code>chat_members</code>, <code>messages</code>, <code>message_reactions</code>, <code>chat_topics</code>.</p>
+    </li>
+
+    <li>
+      <h4>Настройте адреса и соберите сайт</h4>
+      <p>Скрипт заменяет адреса функций poehali.dev на ваши <code>/api/...</code> и убирает служебные скрипты платформы из <code>index.html</code>.</p>
+      <div class="codebox"><pre><code>cd /var/www/trindelka/app
+sh deploy/replace-api-urls.sh /api
+npm ci
+npm run build
+ls dist</code></pre></div>
+      <p>В папке <code>dist</code> должны появиться <code>index.html</code> и папка <code>assets</code>. Сборка занимает 1–3 минуты.</p>
+      <div class="note"><b>Метрика</b>
+        В <code>index.html</code> подключён счётчик Яндекс.Метрики платформы. Если он вам не нужен, удалите блок <code>Yandex.Metrika counter</code> до сборки. Если нужен ваш, замените номер счётчика.
+      </div>
+    </li>
+
+    <li>
+      <h4>Установите серверную часть</h4>
+      <div class="codebox"><pre><code>cd /var/www/trindelka
+python3 -m venv venv
+./venv/bin/pip install -r app/deploy/requirements.txt</code></pre></div>
+    </li>
+
+    <li>
+      <h4>Создайте файл настроек</h4>
+      <p>Здесь хранятся пароли. Файл доступен только администратору.</p>
+      <div class="codebox"><pre><code>cp /var/www/trindelka/app/deploy/env.example /etc/trindelka.env
+chmod 600 /etc/trindelka.env
+nano /etc/trindelka.env</code></pre></div>
+      <p>Заполните значения. Что куда писать, показывает таблица в <a href="#env">справочнике</a>. Минимум для старта:</p>
+      <div class="codebox"><pre><code>DATABASE_URL=postgresql://trindelka:ПРИДУМАЙТЕ_ПАРОЛЬ@127.0.0.1:5432/trindelka
+LOCAL_STORAGE_DIR=/var/www/trindelka/files
+PUBLIC_FILES_URL=https://example.ru/files
+SMTP_HOST=smtp.yandex.ru
+SMTP_PORT=465
+SMTP_USER=ваша_почта@yandex.ru
+SMTP_PASSWORD=пароль_приложения
+SMTP_FROM_EMAIL=ваша_почта@yandex.ru
+OPENAI_API_KEY=</code></pre></div>
+      <p>Сохранить в nano: <code>Ctrl+O</code>, <code>Enter</code>, выйти: <code>Ctrl+X</code>.</p>
+      <div class="warn"><b>Без кавычек</b> и пробелов вокруг знака «=». Строка <code>PUBLIC_FILES_URL</code> должна начинаться с <code>https://</code> и вашего домена.</div>
+    </li>
+
+    <li>
+      <h4>Запустите серверную часть как службу</h4>
+      <div class="codebox"><pre><code>chown -R www-data:www-data /var/www/trindelka/files
+cp /var/www/trindelka/app/deploy/trindelka.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now trindelka
+sleep 2
+curl http://127.0.0.1:8000/api/health</code></pre></div>
+      <p>Ответ должен быть примерно такой: <code>{"functions":["auth","chats","send-message","transcribe"],"status":"ok"}</code>.</p>
+      <p>Если ответа нет, смотрите журнал: <code>journalctl -u trindelka -n 50 --no-pager</code>.</p>
+    </li>
+
+    <li>
+      <h4>Подключите веб-сервер nginx</h4>
+      <div class="codebox"><pre><code>cp /var/www/trindelka/app/deploy/nginx.conf /etc/nginx/sites-available/trindelka
+sed -i 's/example.ru/ВАШ_ДОМЕН/g' /etc/nginx/sites-available/trindelka
+ln -s /etc/nginx/sites-available/trindelka /etc/nginx/sites-enabled/trindelka
+rm -f /etc/nginx/sites-enabled/default
+nginx -t &amp;&amp; systemctl reload nginx</code></pre></div>
+      <p>Команда <code>nginx -t</code> должна написать <code>syntax is ok</code>. Теперь сайт открывается по адресу <code>http://ваш-домен</code>.</p>
+    </li>
+
+    <li>
+      <h4>Включите HTTPS (бесплатный сертификат)</h4>
+      <div class="codebox"><pre><code>certbot --nginx -d ВАШ_ДОМЕН -d www.ВАШ_ДОМЕН --redirect -m ваша_почта@example.ru --agree-tos -n</code></pre></div>
+      <p>Если у домена нет <code>www</code>, уберите часть <code>-d www.ВАШ_ДОМЕН</code>. Сертификат продлевается автоматически.</p>
+      <p>После этого проверьте, что в <code>/etc/trindelka.env</code> адрес <code>PUBLIC_FILES_URL</code> начинается с <code>https://</code>, и перезапустите службу: <code>systemctl restart trindelka</code>.</p>
+    </li>
+
+    <li>
+      <h4>Откройте сайт и зарегистрируйтесь</h4>
+      <p>Зайдите на <code>https://ваш-домен</code>, нажмите «Регистрация» и создайте первый аккаунт. Затем пройдите <a href="#check">чек-лист проверки</a>.</p>
+    </li>
+  </ol>
+</section>
+
+<!-- ================= ISPmanager hosting ================= -->
+<section id="isp">
+  <h2>6. Часть 2. Виртуальный хостинг с ISPmanager</h2>
+  <p>На виртуальном хостинге нет прав администратора, поэтому нельзя поставить свои программы. Что можно сделать, зависит от тарифа. Сначала определите свой сценарий (см. <a href="#choose">раздел 2</a>).</p>
+  <div class="note"><b>Общий порядок действий в панели</b>
+    Названия пунктов в ISPmanager 6: «Сайты» (WWW-домены), «Базы данных», «Менеджер файлов», «SSL-сертификаты». У разных хостеров они могут слегка отличаться. Если пункта нет, возможно, он не включён в тариф.
+  </div>
+
+  <h3>Шаг 0. Соберите сайт на своём компьютере (нужен для всех сценариев)</h3>
+  <p>На хостинге Node.js, как правило, нет, поэтому сайт собирают дома и загружают готовую папку <code>dist</code>.</p>
+  <ol>
+    <li>Установите Node.js 20 или новее с сайта nodejs.org. На Windows ещё установите Git (git-scm.com): вместе с ним появится программа Git Bash, в которой работает команда <code>sh</code>.</li>
+    <li>Откройте папку проекта в терминале (в Windows: Git Bash). Выполните команды из таблицы, выбрав свой сценарий:</li>
+  </ol>
+  <div class="table-wrap"><table>
+    <tr><th>Сценарий</th><th>Команды</th></tr>
+    <tr><td><b>А</b>: серверная часть на этом же хостинге</td><td><code>sh deploy/replace-api-urls.sh /api</code><br><code>npm ci</code><br><code>npm run build</code></td></tr>
+    <tr><td><b>Б</b>: серверная часть остаётся на poehali.dev</td><td><code>npm ci</code><br><code>npm run build</code><br>(скрипт замены <b>не</b> запускать)</td></tr>
+    <tr><td><b>В</b>: серверная часть на отдельном VPS по адресу <code>https://api.example.ru</code></td><td><code>sh deploy/replace-api-urls.sh https://api.example.ru/api</code><br><code>npm ci</code><br><code>npm run build</code></td></tr>
+  </table></div>
+  <p>Результат: папка <code>dist</code> внутри проекта.</p>
+
+  <h3>Шаг 1. Создайте сайт и сертификат</h3>
+  <ol>
+    <li>«Сайты» → «Создать»: введите домен. Если домен куплен не у хостера, у регистратора пропишите NS-серверы хостера или A-запись на IP хостинга.</li>
+    <li>Откройте созданный сайт → включите «SSL-сертификат» → выпустите бесплатный сертификат Let's Encrypt. Включите принудительное перенаправление на HTTPS.</li>
+  </ol>
+
+  <h3>Шаг 2. Загрузите сайт</h3>
+  <ol>
+    <li>Откройте «Менеджер файлов», затем папку сайта. Обычно это <code>/var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен</code>.</li>
+    <li>Удалите оттуда стандартные файлы хостера (например, заглушку <code>index.html</code>).</li>
+    <li>Загрузите <b>содержимое</b> папки <code>dist</code> (не саму папку): <code>index.html</code>, папку <code>assets</code> и остальное. Удобно загрузить zip-архивом и распаковать в менеджере файлов.</li>
+    <li>Загрузите туда же файл <code>public/install.html</code>, если хотите, чтобы инструкция была доступна на сайте. Если нет, пропустите.</li>
+  </ol>
+
+  <h3>Шаг 3. Настройте открытие внутренних адресов</h3>
+  <p>Адрес вида <code>/reset-password</code> (письмо восстановления пароля) физически не существует, его обрабатывает сам сайт. Нужно сказать веб-серверу открывать в этом случае <code>index.html</code>. Создайте в папке сайта файл <code>.htaccess</code> (точка в начале имени обязательна) с таким содержимым:</p>
+  <div class="codebox"><pre><code>RewriteEngine On
+RewriteBase /
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ /index.html [L]
+
+&lt;IfModule mod_expires.c&gt;
+  ExpiresActive On
+  ExpiresByType image/svg+xml "access plus 1 month"
+&lt;/IfModule&gt;</code></pre></div>
+  <div class="warn"><b>Если после этого адрес /reset-password даёт ошибку 404</b>
+    Значит, на вашем тарифе Apache не используется (работает только nginx), и <code>.htaccess</code> игнорируется. Тогда в настройках сайта найдите поле «Дополнительные директивы nginx» (или попросите поддержку добавить правило) и впишите:
+    <pre><code>location / {
+  try_files $uri $uri/ /index.html;
+}</code></pre>
+  </div>
+
+  <h3>Сценарий А. Полный перенос на хостинг (нужны PostgreSQL и Python)</h3>
+  <ol class="steps">
+    <li>
+      <h4>Создайте базу PostgreSQL</h4>
+      <p>«Базы данных» → «Создать» → тип <b>PostgreSQL</b>. Запишите имя базы, пользователя, пароль и адрес сервера (чаще всего <code>localhost</code>, порт 5432). Обычно перед именами ставится префикс вашего аккаунта, например <code>u123456_chat</code>.</p>
+    </li>
+    <li>
+      <h4>Создайте таблицы</h4>
+      <p>Нужна схема с именем <code>t_p64541051_serge_chat_app</code>. Откройте веб-интерфейс базы (в панели рядом с базой есть кнопка «phpPgAdmin» или «Adminer»; если её нет, подключитесь по SSH, если тариф его даёт) и выполните по очереди:</p>
+      <ol>
+        <li>Запрос: <code>CREATE SCHEMA t_p64541051_serge_chat_app;</code></li>
+        <li>Содержимое файлов из папки <code>db_migrations</code> <b>строго по порядку номеров</b>: V0001, V0002, V0004, V0006, V0007, V0008, V0009, V0010, V0011, V0012, V0013, V0014. Файлы V0003 и V0005 (демо-данные) пропустите.</li>
+      </ol>
+      <p>Если у вас есть SSH, проще одной командой (подставьте свои данные):</p>
+      <div class="codebox"><pre><code>cd ~/trindelka-app
+export DATABASE_URL="postgresql://ПОЛЬЗОВАТЕЛЬ:ПАРОЛЬ@localhost:5432/ИМЯ_БАЗЫ"
+for f in $(ls db_migrations/*.sql | grep -v -e V0003 -e V0005); do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f" || break; done</code></pre></div>
+      <p>Если хостинг не разрешает создавать схему, напишите в поддержку. Схему с таким именем создаст и выдаст вам права только администратор.</p>
+    </li>
+    <li>
+      <h4>Загрузите серверную часть</h4>
+      <p>Создайте в корне вашего аккаунта (<b>вне</b> папки сайта) папку <code>trindelka-app</code> и загрузите в неё папки <code>backend</code> и <code>deploy</code>. Сайт при этом остаётся в своей папке.</p>
+    </li>
+    <li>
+      <h4>Включите Python для сайта</h4>
+      <p>«Сайты» → ваш домен → «Изменить» → найдите режим работы Python (может называться «Python», «WSGI», «Passenger»). Если пункта нет, сценарий А на вашем тарифе недоступен, переходите к сценариям Б или В.</p>
+      <p>Укажите:</p>
+      <ul>
+        <li>каталог приложения: <code>~/trindelka-app/deploy</code></li>
+        <li>файл запуска: <code>passenger_wsgi.py</code> (он уже лежит в <code>deploy</code>)</li>
+        <li>версию Python: 3.9 или новее (подойдёт самая новая из списка)</li>
+      </ul>
+    </li>
+    <li>
+      <h4>Установите зависимости</h4>
+      <p>Нужен SSH-доступ (в панели «Пользователи» → ваш пользователь → включить SSH). Команды:</p>
+      <div class="codebox"><pre><code>cd ~/trindelka-app
+python3 -m venv venv
+./venv/bin/pip install -r deploy/requirements.txt</code></pre></div>
+      <p>Если панель просит указать путь к интерпретатору, укажите <code>~/trindelka-app/venv/bin/python</code>. Если SSH на тарифе недоступен, попросите поддержку установить пакеты из файла <code>deploy/requirements.txt</code>.</p>
+    </li>
+    <li>
+      <h4>Файл настроек</h4>
+      <p>Создайте файл <code>~/trindelka-app/deploy/.env</code> (через менеджер файлов или SSH) и заполните по образцу <code>deploy/env.example</code>:</p>
+      <div class="codebox"><pre><code>DATABASE_URL=postgresql://ПОЛЬЗОВАТЕЛЬ:ПАРОЛЬ@localhost:5432/ИМЯ_БАЗЫ
+LOCAL_STORAGE_DIR=/var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен/files
+PUBLIC_FILES_URL=https://ваш-домен/files
+SMTP_HOST=smtp.yandex.ru
+SMTP_PORT=465
+SMTP_USER=ваша_почта@yandex.ru
+SMTP_PASSWORD=пароль_приложения
+SMTP_FROM_EMAIL=ваша_почта@yandex.ru
+OPENAI_API_KEY=</code></pre></div>
+      <p>Затем в папке сайта создайте папку <code>files</code> и дайте ей права на запись (755, владелец ваш пользователь). Путь в <code>LOCAL_STORAGE_DIR</code> должен точно совпадать с реальным путём к этой папке: его видно в менеджере файлов.</p>
+      <div class="warn"><b>Закройте файл настроек от посторонних</b>
+        Файл <code>.env</code> лежит вне папки сайта и поэтому по адресу сайта не открывается. Не копируйте его в папку сайта. Права на него: 600.
+      </div>
+    </li>
+    <li>
+      <h4>Перезапустите приложение и проверьте</h4>
+      <p>Нажмите в панели «Перезапустить» у Python-приложения (или создайте пустой файл <code>~/trindelka-app/deploy/tmp/restart.txt</code>, это перезапускает Passenger). Откройте в браузере <code>https://ваш-домен/api/health</code>: должен появиться ответ <code>status: ok</code>.</p>
+      <p>Если вместо этого открывается сайт или ошибка 404, значит запросы к <code>/api/</code> не доходят до Python-приложения. Проверьте, что в <code>.htaccess</code> есть строка <code>RewriteCond %{REQUEST_URI} !^/api/</code>, и что приложение привязано именно к этому домену.</p>
+    </li>
+  </ol>
+
+  <h3>Сценарий Б. Сайт на хостинге, серверная часть остаётся на poehali.dev</h3>
+  <p>Самый простой вариант: загружаете собранный сайт (шаги 0–3), больше ничего не нужно. Сайт будет обращаться к функциям и базе на poehali.dev, как сейчас.</p>
+  <div class="warn"><b>Что нужно знать</b>
+    <ul>
+      <li>Это не полный перенос: база, пользователи и файлы остаются на платформе.</li>
+      <li>Функции платформы ограничены количеством вызовов по вашему тарифу. Когда лимит исчерпан, сайт перестаёт работать (платформа отвечает 402 «Payment Required»). При моей последней проверке функции уже отвечали этой ошибкой. Если нужно больше вызовов, подписку продлевают на poehali.dev.</li>
+      <li>Письма восстановления пароля содержат ссылку на ваш новый домен: адрес берётся из заголовка запроса.</li>
+    </ul>
+  </div>
+
+  <h3>Сценарий В. Сайт на хостинге, серверная часть на отдельном VPS</h3>
+  <ol>
+    <li>Сделайте <b>часть 1</b> на VPS, но домен для него возьмите отдельный, например <code>api.example.ru</code>, и в конфиге nginx удалите блоки <code>location /files/</code>, <code>location /assets/</code> и <code>location /</code> (оставьте только <code>/api/</code>), а в шаге с адресами сайта не собирайте сайт на VPS.</li>
+    <li>Соберите сайт дома командой для сценария В (шаг 0) и загрузите на хостинг (шаги 1–3).</li>
+    <li>Для файлов в <code>/etc/trindelka.env</code> укажите <code>PUBLIC_FILES_URL=https://api.example.ru/files</code> и в nginx оставьте блок <code>location /files/</code>.</li>
+  </ol>
+  <p>Браузеру разрешено обращаться на другой адрес: серверная часть отдаёт все нужные заголовки.</p>
+</section>
+
+<!-- ================= ISP on VPS ================= -->
+<section id="isp-vps">
+  <h2>7. Часть 3. VPS, на котором стоит ISPmanager</h2>
+  <p>Если у вас VPS с root-доступом и уже установленной панелью, лучше не править конфигурацию nginx вручную: панель перезапишет её. Домен и сертификат ведите через панель, а серверную часть запускайте отдельной службой.</p>
+  <ol class="steps">
+    <li>
+      <h4>Сайт и сертификат в панели</h4>
+      <p>«Сайты» → «Создать» → ваш домен. Затем выпустите сертификат Let's Encrypt и включите перенаправление на HTTPS.</p>
+    </li>
+    <li>
+      <h4>База PostgreSQL</h4>
+      <p>Если PostgreSQL ещё не стоит, включите его в «Настройки → Возможности» (название пункта зависит от версии). Затем «Базы данных» → «Создать» → PostgreSQL. После этого выполните шаги 5–6 из части 1, подставив данные вашей базы.</p>
+    </li>
+    <li>
+      <h4>Код, сборка, серверная часть</h4>
+      <p>Выполните шаги 4, 7, 8, 9 и 10 из части 1 по SSH. Папку приложения можно оставить <code>/var/www/trindelka</code>. Файлы лучше хранить внутри папки сайта, например <code>/var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен/files</code> (и такой же путь в <code>LOCAL_STORAGE_DIR</code>), чтобы они отдавались как обычные файлы сайта.</p>
+    </li>
+    <li>
+      <h4>Положите собранный сайт в папку сайта</h4>
+      <div class="codebox"><pre><code>cp -r /var/www/trindelka/app/dist/. /var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен/
+chown -R ИМЯ_ПОЛЬЗОВАТЕЛЯ: /var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен</code></pre></div>
+    </li>
+    <li>
+      <h4>Подключите /api через панель</h4>
+      <p>В настройках сайта найдите «Дополнительные директивы nginx» (или «Конфигурационные файлы nginx» у сайта) и добавьте:</p>
+      <div class="codebox"><pre><code>location /api/ {
+  proxy_pass http://127.0.0.1:8000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_read_timeout 90s;
+}
+client_max_body_size 25m;
+location / {
+  try_files $uri $uri/ /index.html;
+}</code></pre></div>
+      <p>Сохраните: панель сама проверит и перезагрузит конфигурацию. Если панель пишет, что <code>location /</code> уже есть, уберите последний блок и оставьте только <code>/api/</code>, а открытие внутренних адресов включите в настройках сайта (режим «Обработчик» → «Статика», либо через файл <code>.htaccess</code> из части 2, шаг 3).</p>
+    </li>
+  </ol>
+</section>
+
+<!-- ================= data ================= -->
+<section id="data">
+  <h2>8. Перенос существующих пользователей, переписки и файлов</h2>
+  <p>Шаги выше создают <b>чистый</b> мессенджер без пользователей. Если нужно сохранить уже зарегистрированных людей, их переписку и загруженные файлы, нужны ещё два действия.</p>
+
+  <h3>8.1. Перенос данных базы</h3>
+  <p>В таблицах хранятся адреса почты, хеши паролей и сообщения живых людей. Поэтому я не кладу выгрузку на открытую страницу сайта, и она не может лежать в общедоступной папке. Чтобы получить её, напишите мне в чате: «подготовь выгрузку данных для переноса». Я подготовлю файл данных и скажу, как его безопасно передать на сервер.</p>
+  <p>Когда у вас будет файл выгрузки (например, <code>data.sql</code>), загрузите его на сервер и выполните:</p>
+  <div class="codebox"><pre><code>psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f data.sql</code></pre></div>
+  <div class="warn"><b>Сделайте это до того, как пользователи начнут писать на новом сервере</b>, иначе номера записей пересекутся. После загрузки удалите файл выгрузки с сервера и из своей почты и мессенджеров.</div>
+
+  <h3>8.2. Перенос файлов (аватары, фото, голосовые, документы)</h3>
+  <p>В базе у файлов сохранены ссылки на хранилище платформы. Скрипт <code>deploy/migrate-files.py</code> скачивает все такие файлы в вашу папку <code>files</code> и заменяет ссылки в базе на ваши. Запускать <b>после</b> загрузки данных (пункт 8.1) и <b>пока проект на poehali.dev ещё не удалён</b>, иначе скачивать будет нечего.</p>
+  <div class="codebox"><pre><code>cd /var/www/trindelka/app
+set -a; . /etc/trindelka.env; set +a
+/var/www/trindelka/venv/bin/python deploy/migrate-files.py
+chown -R www-data:www-data /var/www/trindelka/files</code></pre></div>
+  <p>В конце скрипт напишет, сколько файлов перенесено и сколько не удалось. Если часть не скачалась, запустите ещё раз: уже перенесённые повторно обрабатываться не будут.</p>
+  <div class="note"><b>На хостинге ISPmanager (сценарий А)</b>
+    Команды те же, только вместо <code>/etc/trindelka.env</code> укажите <code>~/trindelka-app/deploy/.env</code>, а вместо <code>/var/www/trindelka/venv/bin/python</code> — <code>~/trindelka-app/venv/bin/python</code>. Если на хостинге нет SSH, этот шаг нужно делать с любого компьютера с Python, указав адрес базы, к которой разрешён внешний доступ.
+  </div>
+</section>
+
+<section id="check">
+  <h2>9. Проверка после запуска</h2>
+  <p>Пройдите по списку на новом адресе. Лучше с телефона и с компьютера.</p>
+  <ol>
+    <li><code>https://ваш-домен/api/health</code> показывает <code>status: ok</code>.</li>
+    <li>Главная страница открывается, виден экран входа, замок в адресной строке закрыт.</li>
+    <li>Регистрация нового аккаунта проходит, вход работает.</li>
+    <li>«Забыли пароль?» присылает письмо, а ссылка из письма открывает форму нового пароля (проверяет и SMTP, и открытие адреса <code>/reset-password</code>).</li>
+    <li>Через поиск находится второй аккаунт, создаётся чат, сообщения уходят в обе стороны.</li>
+    <li>Смена фото профиля работает, аватар виден после обновления страницы (проверяет папку файлов и <code>PUBLIC_FILES_URL</code>).</li>
+    <li>Отправка фото и документа работает.</li>
+    <li>Кнопка «Переслать» открывает список чатов и пересылает сообщение.</li>
+    <li>Профиль → «Оформление» меняет тему, а профиль → «Приватность» сохраняет переключатели после обновления страницы.</li>
+  </ol>
+  <div class="ok"><b>Все пункты прошли</b> — можно показывать людям. Старые ссылки на poehali.dev не отключайте, пока не убедитесь, что всё перенесено.</div>
+</section>
+
+<section id="update">
+  <h2>10. Обновление сайта и резервные копии</h2>
+  <h3>Как обновить после новых правок (VPS)</h3>
+  <p>Скрипт замены адресов меняет файлы проекта, поэтому перед обновлением его следы нужно откатить:</p>
+  <div class="codebox"><pre><code>cd /var/www/trindelka/app
+git checkout -- src index.html
+git pull
+sh deploy/replace-api-urls.sh /api
+npm ci
+npm run build
+systemctl restart trindelka</code></pre></div>
+  <p>Если менялись файлы таблиц, примените только новые файлы из <code>db_migrations</code> (с номером больше последнего применённого) командой <code>psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db_migrations/ИМЯ_ФАЙЛА.sql</code>.</p>
+
+  <h3>Резервная копия базы каждую ночь (VPS)</h3>
+  <div class="codebox"><pre><code>mkdir -p /var/backups/trindelka
+crontab -l 2&gt;/dev/null | { cat; echo '30 3 * * * sudo -u postgres pg_dump trindelka | gzip &gt; /var/backups/trindelka/db-$(date +\%F).sql.gz &amp;&amp; find /var/backups/trindelka -name "db-*.sql.gz" -mtime +14 -delete'; } | crontab -</code></pre></div>
+  <p>Копии хранятся 14 дней. Также периодически копируйте на другой компьютер или в облако папки <code>/var/backups/trindelka</code> и <code>/var/www/trindelka/files</code>: копия на том же сервере не спасёт при его потере.</p>
+  <p>На хостинге ISPmanager резервные копии базы и файлов включаются в разделе «Резервные копии» панели или у хостера.</p>
+</section>
+
+<section id="trouble">
+  <h2>11. Если что-то не работает</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Что видите</th><th>Причина и что делать</th></tr>
+    <tr><td>Белая страница</td><td>Загружена не собранная папка <code>dist</code>, или файлы лежат во вложенной папке. В корне сайта должен быть <code>index.html</code> и папка <code>assets</code>.</td></tr>
+    <tr><td>Ошибка 502 Bad Gateway</td><td>Серверная часть не запущена. VPS: <code>systemctl status trindelka</code> и <code>journalctl -u trindelka -n 50 --no-pager</code>.</td></tr>
+    <tr><td>«Не удалось связаться с сервером» при входе</td><td>Запросы не доходят до <code>/api</code>. Откройте в браузере <code>/api/health</code>. Если там не JSON, значит не настроен nginx (шаг 11) или Python на хостинге. Также проверьте, что запускали <code>replace-api-urls.sh</code> <b>до</b> сборки.</td></tr>
+    <tr><td>Вход выдаёт ошибку 500</td><td>Неверный <code>DATABASE_URL</code> или не созданы таблицы. Смотрите журнал службы: там будет текст ошибки базы.</td></tr>
+    <tr><td>Ошибка про отсутствующую таблицу или схему</td><td>Не создана схема <code>t_p64541051_serge_chat_app</code> или не применены файлы из <code>db_migrations</code>.</td></tr>
+    <tr><td>Страница <code>/reset-password</code> даёт 404</td><td>Не настроено открытие внутренних адресов (часть 2, шаг 3, или блок <code>try_files</code> в nginx).</td></tr>
+    <tr><td>Письма не приходят</td><td>Проверьте <code>SMTP_*</code> в настройках. Для Яндекса и Gmail нужен пароль приложения. Порт 465 использует SSL, остальные порты — STARTTLS. Загляните в папку «Спам». Ошибки отправки пишутся в журнал службы.</td></tr>
+    <tr><td>Аватар или картинка не отображается</td><td>Проверьте <code>PUBLIC_FILES_URL</code> (схема <code>https://</code>, ваш домен, <code>/files</code> на конце без слеша), права на папку <code>files</code> и что <code>LOCAL_STORAGE_DIR</code> указывает на неё.</td></tr>
+    <tr><td>Загрузка файла выдаёт ошибку</td><td>Папка <code>files</code> недоступна для записи, либо файл больше лимита. Лимиты в проекте: до 8 МБ для фото и документов, до 6 МБ для голосовых и кружков. В nginx также стоит <code>client_max_body_size 25m</code>.</td></tr>
+    <tr><td>Не работает расшифровка голосовых</td><td>Не указан <code>OPENAI_API_KEY</code>, либо с сервера нет доступа к OpenAI. Остальные функции от этого не зависят.</td></tr>
+    <tr><td>Ошибка 402 Payment Required</td><td>Это ответ платформы poehali.dev: исчерпан лимит вызовов функций. Появляется только в сценарии Б (или пока сайт ещё ходит на poehali.dev). При работе на своём сервере не возникает.</td></tr>
+  </table></div>
+</section>
+
+<section id="env">
+  <h2>12. Справочник: переменные настроек</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Переменная</th><th>Обязательна</th><th>Для чего и пример</th></tr>
+    <tr><td><code>DATABASE_URL</code></td><td>да</td><td>Подключение к PostgreSQL: <code>postgresql://пользователь:пароль@127.0.0.1:5432/имя_базы</code></td></tr>
+    <tr><td><code>LOCAL_STORAGE_DIR</code></td><td>да, для хранения файлов на своём сервере</td><td>Папка для файлов: <code>/var/www/trindelka/files</code>. Если не задана, файлы пытаются уйти в S3-хранилище платформы.</td></tr>
+    <tr><td><code>PUBLIC_FILES_URL</code></td><td>да</td><td>Публичный адрес этой папки: <code>https://example.ru/files</code>. Сохраняется в базу как адрес картинок.</td></tr>
+    <tr><td><code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASSWORD</code></td><td>да, для писем</td><td>Исходящая почта. Без них не работает «Забыли пароль?».</td></tr>
+    <tr><td><code>SMTP_FROM_EMAIL</code></td><td>нет</td><td>Адрес отправителя. Если не указан, берётся <code>SMTP_USER</code>.</td></tr>
+    <tr><td><code>OPENAI_API_KEY</code></td><td>нет</td><td>Расшифровка голосовых в текст.</td></tr>
+    <tr><td><code>S3_ENDPOINT</code>, <code>S3_BUCKET</code>, <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code></td><td>нет</td><td>Только если вместо папки на сервере вы хотите хранить файлы в своём S3-хранилище (тогда не задавайте <code>LOCAL_STORAGE_DIR</code>, но задайте <code>PUBLIC_FILES_URL</code> — публичный адрес бакета).</td></tr>
+    <tr><td><code>ENV_FILE</code></td><td>нет</td><td>Путь к файлу настроек, если он лежит не в <code>deploy/.env</code>.</td></tr>
+  </table></div>
+  <div class="note"><b>Одно из правил безопасности</b>
+    Никогда не выкладывайте файл настроек в GitHub и не отправляйте его в чат или на почту. Если пароль всё-таки утёк, смените его в базе, у почтового сервиса и в файле настроек, затем перезапустите службу.
+  </div>
+</section>
+
+<footer>Инструкция составлена по коду проекта «Трынделка». При сомнениях сделайте пробный запуск на тестовом домене.</footer>
+
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('.codebox').forEach(function(box){
+    var pre = box.querySelector('pre');
+    if(!pre) return;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy';
+    btn.textContent = 'Копировать';
+    btn.addEventListener('click', function(){
+      var text = pre.innerText;
+      var done = function(){ btn.textContent = 'Скопировано'; setTimeout(function(){ btn.textContent = 'Копировать'; }, 1500); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else { fallback(); }
+      function fallback(){
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch(e) {}
+        document.body.removeChild(ta);
+      }
+    });
+    box.appendChild(btn);
+  });
+})();
+</script>
+</body>
+</html>

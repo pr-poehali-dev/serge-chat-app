@@ -55,6 +55,25 @@ def ext_for(content_type: str, kind: str, file_name: str = "") -> str:
     return "webm"
 
 
+def save_file(key: str, data: bytes, content_type: str) -> str:
+    local_dir = os.environ.get("LOCAL_STORAGE_DIR")
+    if local_dir:
+        path = os.path.join(local_dir, key)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+        return f"{os.environ.get('PUBLIC_FILES_URL', '/files').rstrip('/')}/{key}"
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=os.environ.get("S3_ENDPOINT", "https://bucket.poehali.dev"),
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+    )
+    s3.put_object(Bucket=os.environ.get("S3_BUCKET", "files"), Key=key, Body=data, ContentType=content_type)
+    public_base = os.environ.get("PUBLIC_FILES_URL") or f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket"
+    return f"{public_base.rstrip('/')}/{key}"
+
+
 def upload_media(kind: str, data_b64: str, content_type: str, file_name: str = "") -> tuple:
     if "," in data_b64:
         data_b64 = data_b64.split(",", 1)[1]
@@ -63,14 +82,8 @@ def upload_media(kind: str, data_b64: str, content_type: str, file_name: str = "
     if len(data) > limit:
         raise ValueError("Файл слишком большой")
     key = f"messages/{kind}/{uuid.uuid4().hex}.{ext_for(content_type, kind, file_name)}"
-    s3 = boto3.client(
-        "s3",
-        endpoint_url="https://bucket.poehali.dev",
-        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-    )
-    s3.put_object(Bucket="files", Key=key, Body=data, ContentType=content_type or "application/octet-stream")
-    return f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{key}", len(data)
+    url = save_file(key, data, content_type or "application/octet-stream")
+    return url, len(data)
 
 
 def handler(event: dict, context) -> dict:
