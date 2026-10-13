@@ -26,3 +26,7 @@ builds
 
 # warmup/handoff артефакты
 tmp/
+
+# выгрузки данных с личной информацией
+trindelka-data*.sql
+*.dump.sql
