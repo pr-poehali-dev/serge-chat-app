@@ -30,7 +30,7 @@ USER_FIELDS = "id, email, login, first_name, last_name, display_name, avatar_ini
 
 
 def get_conn():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    return psycopg2.connect(os.environ["localhost:3306/u3680192_users"])
 
 
 def hash_password(password: str, salt: str) -> str:
