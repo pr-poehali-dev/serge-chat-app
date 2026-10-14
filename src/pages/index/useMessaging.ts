@@ -2,8 +2,33 @@ import { useState, useEffect, useRef, Dispatch, SetStateAction } from "react";
 import { RecordedMedia, blobToBase64 } from "@/components/messenger/media/useRecorder";
 import { Chat, Message, PinnedMessage, ReplyPreview, Tab, AuthUser, NotificationItem, Attachment } from "@/components/messenger/types";
 import { API_CHATS, API_SEND, API_TRANSCRIBE } from "./config";
+import { readNotifyPrefs } from "@/components/messenger/sidebar/SettingsPanels";
+import { registerServiceWorker } from "@/lib/push";
 
 const POLL_INTERVAL_MS = 3000;
+
+let audioCtx: AudioContext | null = null;
+function playBeep() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx = audioCtx || new Ctx();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(1175, audioCtx.currentTime + 0.09);
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.15, audioCtx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.26);
+  } catch {
+    return;
+  }
+}
 const TYPING_PING_MS = 3000;
 
 interface UseMessagingParams {
@@ -30,6 +55,7 @@ interface UseMessagingParams {
   attachments: Attachment[];
   setAttachments: Dispatch<SetStateAction<Attachment[]>>;
   sendBotMessage: () => void;
+  onIncomingCallHint?: () => void;
 }
 
 export function useMessaging({
@@ -56,6 +82,7 @@ export function useMessaging({
   attachments,
   setAttachments,
   sendBotMessage,
+  onIncomingCallHint,
 }: UseMessagingParams) {
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
@@ -100,6 +127,42 @@ export function useMessaging({
         }
       })
       .finally(() => setLoadingChats(false));
+  }, [authUser]);
+
+  const setChatNotify = (chatId: number, enabled: boolean) => {
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, notifyEnabled: enabled } : c)));
+    fetch(`${API_CHATS}?action=set-chat-notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ chat_id: chatId, enabled }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+      })
+      .catch(() => {
+        setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, notifyEnabled: !enabled } : c)));
+        setSendError("Не удалось сохранить настройку уведомлений");
+      });
+  };
+
+  useEffect(() => {
+    if (!authUser) return;
+    registerServiceWorker();
+    const open = (chatId: number | null) => {
+      if (!chatId) return;
+      setActiveChatId(chatId);
+      setActiveTab("chats");
+    };
+    const fromUrl = new URLSearchParams(window.location.search).get("chat");
+    if (fromUrl) {
+      open(Number(fromUrl));
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === "open-chat") open(e.data.chatId);
+    };
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
   }, [authUser]);
 
   const togglePinChat = (chatId: number) => {
@@ -150,6 +213,8 @@ export function useMessaging({
   const activeTopicIdRef = useRef<number | null>(null);
   const activeTabRef = useRef<Tab>("chats");
   const isBotChatRef = useRef(false);
+  const hintRef = useRef<(() => void) | undefined>(undefined);
+  hintRef.current = onIncomingCallHint;
   const prevChatsRef = useRef<Record<number, { unread: number; lastMsg: string; time: string }>>({});
   const lastMessagesSigRef = useRef("");
   activeChatIdRef.current = activeChatId;
@@ -169,6 +234,7 @@ export function useMessaging({
         const res = await fetch(API_CHATS, { headers: { "X-Session-Id": authUser.sessionId } });
         if (!res.ok || stopped) return;
         const data = await res.json();
+        if (data.incomingCall) hintRef.current?.();
         const fresh: Chat[] = data.chats || [];
         const openId = activeChatIdRef.current;
         const firstRun = Object.keys(prevChatsRef.current).length === 0;
@@ -177,7 +243,7 @@ export function useMessaging({
         const normalized = fresh.map((c) => {
           const prev = prevChatsRef.current[c.id];
           const isOpen = c.id === openId;
-          if (!firstRun && !isOpen && c.unread > (prev?.unread ?? 0)) {
+          if (!firstRun && !isOpen && c.notifyEnabled !== false && c.unread > (prev?.unread ?? 0)) {
             newNotes.push({
               id: Date.now() + c.id,
               icon: "MessageCircle",
@@ -192,7 +258,11 @@ export function useMessaging({
         });
 
         setChats(normalized);
-        if (newNotes.length > 0) setNotifications((prev) => [...newNotes, ...prev].slice(0, 50));
+        if (newNotes.length > 0) {
+          const prefs = readNotifyPrefs();
+          if (prefs.inApp) setNotifications((prev) => [...newNotes, ...prev].slice(0, 50));
+          if (prefs.sound) playBeep();
+        }
 
         if (openId && openId > 0 && !isBotChatRef.current) {
           const topicId = activeTopicIdRef.current;
@@ -427,6 +497,42 @@ export function useMessaging({
     }
   };
 
+  const sendGif = async (url: string) => {
+    if (!activeChatId || activeChatId < 0 || isBotChat || sending) return;
+    const replyTarget = replyTo;
+    const tempId = Date.now();
+    const time = new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    setSendError("");
+    setReplyTo(null);
+    setMessages((prev) => [
+      ...prev,
+      { id: tempId, text: url, out: true, read: false, time, sender_id: authUser?.id ?? 1 },
+    ]);
+    try {
+      const res = await fetch(API_SEND, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          chat_id: activeChatId,
+          topic_id: activeTopicId,
+          reply_to_id: replyTarget?.id ?? null,
+          text: url,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setSendError(data.error || "Не удалось отправить GIF");
+        return;
+      }
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...data } : m)));
+      setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: "🎞 GIF", time: data.time } : c)));
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setSendError("Не удалось связаться с сервером");
+    }
+  };
+
   const pinMessage = async (messageId: number | null) => {
     if (!activeChatId || activeChatId < 0) return;
     const chatId = activeChatId;
@@ -644,9 +750,11 @@ export function useMessaging({
     messagesEndRef,
     startChatWithUser,
     togglePinChat,
+    setChatNotify,
     sendMedia,
     transcribeMessage,
     sendMessage,
+    sendGif,
     toggleReaction,
     replyTo,
     editingMessage,

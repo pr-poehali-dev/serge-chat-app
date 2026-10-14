@@ -1,0 +1,44 @@
+{
+  "tests": [
+    {
+      "name": "Public key is returned",
+      "method": "GET",
+      "path": "/?action=key",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Subscribe without session returns 401",
+      "method": "POST",
+      "path": "/?action=subscribe",
+      "body": {
+        "subscription": {
+          "endpoint": "https://example.com/x",
+          "keys": {
+            "p256dh": "a",
+            "auth": "b"
+          }
+        }
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Call config without session returns 401",
+      "method": "GET",
+      "path": "/?action=config",
+      "expectedStatus": 401
+    },
+    {
+      "name": "Start call without session returns 401",
+      "method": "POST",
+      "path": "/?action=start",
+      "body": {
+        "chat_id": 1,
+        "offer": {
+          "type": "offer",
+          "sdp": "x"
+        }
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

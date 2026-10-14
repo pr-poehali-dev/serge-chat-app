@@ -29,6 +29,7 @@ interface MiscTabsProps {
   onAvatarUpdated: (user: AuthUser) => void;
   notifications: NotificationItem[];
   onStartChatWithUser: (userId: number) => Promise<string | null>;
+  onSetChatNotify: (chatId: number, enabled: boolean) => void;
 }
 
 export default function MiscTabs({
@@ -42,6 +43,7 @@ export default function MiscTabs({
   onAvatarUpdated,
   notifications,
   onStartChatWithUser,
+  onSetChatNotify,
 }: MiscTabsProps) {
   const [login, setLogin] = useState(authUser?.login || "");
   const [firstName, setFirstName] = useState(authUser?.firstName || "");
@@ -294,7 +296,7 @@ export default function MiscTabs({
 
       {/* PROFILE */}
       {activeTab === "profile" && section && (
-        <SettingsPanels section={section} authUser={authUser} onBack={() => setSection(null)} />
+        <SettingsPanels section={section} authUser={authUser} onBack={() => setSection(null)} chats={chats} onSetChatNotify={onSetChatNotify} />
       )}
 
       {activeTab === "profile" && !section && (

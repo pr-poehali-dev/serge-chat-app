@@ -28,6 +28,7 @@ interface SidebarProps {
   onAvatarUpdated: (user: AuthUser) => void;
   notifications: NotificationItem[];
   onStartChatWithUser: (userId: number) => Promise<string | null>;
+  onSetChatNotify: (chatId: number, enabled: boolean) => void;
 }
 
 export default function Sidebar({
@@ -53,6 +54,7 @@ export default function Sidebar({
   onAvatarUpdated,
   notifications,
   onStartChatWithUser,
+  onSetChatNotify,
 }: SidebarProps) {
   const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
   const [groupToLeave, setGroupToLeave] = useState<Chat | null>(null);
@@ -110,6 +112,7 @@ export default function Sidebar({
             onAvatarUpdated={onAvatarUpdated}
             notifications={notifications}
             onStartChatWithUser={onStartChatWithUser}
+            onSetChatNotify={onSetChatNotify}
           />
         </div>
       </div>

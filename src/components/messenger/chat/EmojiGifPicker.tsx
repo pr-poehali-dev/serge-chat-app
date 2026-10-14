@@ -29,6 +29,7 @@ interface EmojiGifPickerProps {
   setGifSearch: Dispatch<SetStateAction<string>>;
   filteredGifs: GifItem[] | null;
   setInputText: Dispatch<SetStateAction<string>>;
+  onPickGif?: (url: string) => void;
 }
 
 export default function EmojiGifPicker({
@@ -43,6 +44,7 @@ export default function EmojiGifPicker({
   setGifSearch,
   filteredGifs,
   setInputText,
+  onPickGif,
 }: EmojiGifPickerProps) {
   return (
     <>
@@ -153,7 +155,8 @@ export default function EmojiGifPicker({
                         <button
                           key={i}
                           onClick={() => {
-                            setInputText((prev) => prev ? prev + " " + gif.url : gif.url);
+                            if (onPickGif) onPickGif(gif.url);
+                            else setInputText((prev) => prev ? prev + " " + gif.url : gif.url);
                             setEmojiPickerOpen(false);
                           }}
                           className="aspect-video rounded-xl overflow-hidden hover:scale-[1.03] transition-transform bg-fg/[0.04]"
@@ -171,7 +174,8 @@ export default function EmojiGifPicker({
                             <button
                               key={gi}
                               onClick={() => {
-                                setInputText((prev) => prev ? prev + " " + gif.url : gif.url);
+                                if (onPickGif) onPickGif(gif.url);
+                                else setInputText((prev) => prev ? prev + " " + gif.url : gif.url);
                                 setEmojiPickerOpen(false);
                               }}
                               className="aspect-video rounded-xl overflow-hidden hover:scale-[1.03] transition-transform bg-fg/[0.04]"

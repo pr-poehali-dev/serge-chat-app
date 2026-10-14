@@ -37,6 +37,9 @@ interface MessageInputProps {
   sendError?: string;
   onCancelContext?: () => void;
   replyAuthorName?: string;
+  onSendGif?: (url: string) => void;
+  onAddFiles?: (files: File[]) => void;
+  fileNotice?: string;
 }
 
 export default function MessageInput({
@@ -68,6 +71,9 @@ export default function MessageInput({
   sendError,
   onCancelContext,
   replyAuthorName,
+  onSendGif,
+  onAddFiles,
+  fileNotice,
 }: MessageInputProps) {
   const [recordingActive, setRecordingActive] = useState(false);
   const hasDraft = inputText.trim().length > 0 || attachments.length > 0 || !!editingMessage;
@@ -76,6 +82,12 @@ export default function MessageInput({
     <>
       {/* Input */}
       <div className="glass-strong safe-bottom border-t border-fg/[0.06] px-2 sm:px-4 py-2.5 sm:py-3">
+        {fileNotice && (
+          <div className="mb-2 flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 animate-fade-in">
+            <Icon name="TriangleAlert" size={13} className="shrink-0 text-amber-400" />
+            <p className="text-xs text-amber-300">{fileNotice}</p>
+          </div>
+        )}
         {sendError && (
           <div className="mb-2 flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 animate-fade-in">
             <Icon name="TriangleAlert" size={13} className="shrink-0 text-red-400" />
@@ -184,6 +196,7 @@ export default function MessageInput({
             setGifSearch={setGifSearch}
             filteredGifs={filteredGifs}
             setInputText={setInputText}
+            onPickGif={onSendGif}
           />
 
           {/* Hidden file inputs */}
@@ -197,6 +210,13 @@ export default function MessageInput({
               placeholder={editingMessage ? "Измените сообщение..." : attachments.length > 0 ? "Добавить подпись..." : "Сообщение..."}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onPaste={(e) => {
+                if (!onAddFiles) return;
+                const files = Array.from(e.clipboardData?.files || []);
+                if (files.length === 0) return;
+                e.preventDefault();
+                onAddFiles(files);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

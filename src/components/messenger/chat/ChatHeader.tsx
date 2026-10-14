@@ -6,7 +6,7 @@ interface ChatHeaderProps {
   activeChat: Chat;
   showEncryptBadge: boolean;
   setShowEncryptBadge: Dispatch<SetStateAction<boolean>>;
-  setCall: Dispatch<SetStateAction<{ isVideo: boolean } | null>>;
+  onStartCall?: (isVideo: boolean) => void;
   topics?: Topic[];
   activeTopicId?: number | null;
   onSelectTopic?: (id: number | null) => void;
@@ -22,7 +22,7 @@ export default function ChatHeader({
   activeChat,
   showEncryptBadge,
   setShowEncryptBadge,
-  setCall,
+  onStartCall,
   topics,
   activeTopicId,
   onSelectTopic,
@@ -117,18 +117,24 @@ export default function ChatHeader({
                 <Icon name="Search" size={16} />
               </button>
             )}
-            <button
-              onClick={() => setCall({ isVideo: false })}
-              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
-            >
-              <Icon name="Phone" size={16} />
-            </button>
-            <button
-              onClick={() => setCall({ isVideo: true })}
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
-            >
-              <Icon name="Video" size={16} />
-            </button>
+            {onStartCall && (
+              <>
+                <button
+                  onClick={() => onStartCall(false)}
+                  title="Голосовой звонок"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
+                >
+                  <Icon name="Phone" size={16} />
+                </button>
+                <button
+                  onClick={() => onStartCall(true)}
+                  title="Видеозвонок"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
+                >
+                  <Icon name="Video" size={16} />
+                </button>
+              </>
+            )}
             {activeChat.isGroup ? (
               <button
                 onClick={onOpenGroupMembers}

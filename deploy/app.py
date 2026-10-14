@@ -23,7 +23,7 @@ def load_env_file(path: str) -> None:
 
 load_env_file(os.environ.get("ENV_FILE") or os.path.join(BASE_DIR, ".env"))
 BACKEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "backend")
-FUNCTIONS = ["auth", "chats", "send-message", "transcribe"]
+FUNCTIONS = ["auth", "chats", "send-message", "transcribe", "push"]
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024

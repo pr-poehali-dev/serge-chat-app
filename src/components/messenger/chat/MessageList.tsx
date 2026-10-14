@@ -5,6 +5,7 @@ import VoiceMessage from "../media/VoiceMessage";
 import CircleMessage from "../media/CircleMessage";
 import ReplyQuote from "./ReplyQuote";
 import { ImageAttachment, FileCard } from "./FileAttachment";
+import { extractGifUrl } from "@/pages/index/config";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -174,7 +175,7 @@ export default function MessageList({
                   ) : msg.kind === "circle" && msg.mediaUrl ? (
                     <CircleMessage msg={msg} />
                   ) : (
-                  <div className={`${msg.kind === "voice" || msg.kind === "image" || /https?:\/\/.*\.gif/.test(msg.text) ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.kind === "file" ? "px-3 py-2.5" : ""} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-fg/85"}`}>
+                  <div className={`${msg.kind === "voice" || msg.kind === "image" || !!extractGifUrl(msg.text) ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.kind === "file" ? "px-3 py-2.5" : ""} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-fg/85"}`}>
                     {msg.forwardedFrom && (
                       <p className={`mb-1 flex items-center gap-1 text-[11px] font-medium opacity-80 ${msg.kind === "image" ? "px-3 pt-1" : ""}`}>
                         <Icon name="Forward" size={11} className="shrink-0" />
@@ -206,9 +207,9 @@ export default function MessageList({
                           </p>
                         )}
                       </>
-                    ) : /https?:\/\/.*\.gif/.test(msg.text) ? (
+                    ) : !!extractGifUrl(msg.text) ? (
                       <img
-                        src={msg.text.match(/https?:\/\/\S+\.gif/)?.[0]}
+                        src={extractGifUrl(msg.text) || ""}
                         alt="GIF"
                         className="rounded-xl max-w-[220px] max-h-[160px] object-cover"
                         loading="lazy"
@@ -263,7 +264,7 @@ export default function MessageList({
                         <Icon name="Reply" size={13} />
                       </button>
                     )}
-                    {msg.out && onEdit && (msg.kind === "text" || msg.kind === "image" || msg.kind === "file" || !msg.kind) && !/https?:\/\/.*\.gif/.test(msg.text) && msg.id < 1e12 && (
+                    {msg.out && onEdit && (msg.kind === "text" || msg.kind === "image" || msg.kind === "file" || !msg.kind) && !!!extractGifUrl(msg.text) && msg.id < 1e12 && (
                       <button
                         onClick={() => onEdit(msg)}
                         className="flex h-6 w-6 items-center justify-center rounded-full text-fg/30 hover:text-purple-400 hover:bg-fg/[0.08] transition-all"

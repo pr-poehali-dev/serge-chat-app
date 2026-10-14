@@ -16,6 +16,7 @@ export interface Chat {
   contactUserId?: number | null;
   memberCount?: number | null;
   pinnedMessage?: PinnedMessage | null;
+  notifyEnabled?: boolean;
 }
 
 export interface PinnedMessage {

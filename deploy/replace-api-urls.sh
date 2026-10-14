@@ -16,6 +16,7 @@ replace auth "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b
 replace chats "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb"
 replace send-message "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6"
 replace transcribe "https://functions.poehali.dev/9c47e0da-18f9-4bab-96c3-0531023fb5cc"
+replace push "https://functions.poehali.dev/8415601d-6478-4ed7-947d-cfbee7dfbb93"
 
 sed -i.bak '/cdn.poehali.dev\/intertnal\/js/d' index.html && rm -f index.html.bak
 

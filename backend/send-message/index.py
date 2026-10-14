@@ -86,6 +86,55 @@ def upload_media(kind: str, data_b64: str, content_type: str, file_name: str = "
     return url, len(data)
 
 
+def preview_for(kind: str, text: str, file_name: str) -> str:
+    if kind == "voice":
+        return "🎤 Голосовое сообщение"
+    if kind == "circle":
+        return "⭕ Видеосообщение"
+    if kind == "image":
+        return "🖼 Фото"
+    if kind == "file":
+        return "📎 " + (file_name or "Файл")
+    if text and (text.lower().endswith(".gif") and " " not in text.strip()):
+        return "🎞 GIF"
+    return (text or "Новое сообщение")[:140]
+
+
+def notify_members(conn, cur, chat_id: int, sender_id: int, topic_id, kind: str, text: str, file_name: str, message_id: int) -> None:
+    cur.execute(f"""
+        SELECT c.is_group, c.name, u.display_name
+        FROM {SCHEMA}.chats c, {SCHEMA}.users u
+        WHERE c.id = %s AND u.id = %s
+    """, (chat_id, sender_id))
+    info = cur.fetchone()
+    if not info:
+        return
+    is_group, chat_name, sender_name = info
+    cur.execute(f"""
+        SELECT user_id FROM {SCHEMA}.chat_members
+        WHERE chat_id = %s AND user_id != %s AND notify_enabled = true
+    """, (chat_id, sender_id))
+    targets = [r[0] for r in cur.fetchall()]
+    if not targets:
+        return
+    body = preview_for(kind, text, file_name)
+    if is_group:
+        title = chat_name or "Группа"
+        body = f"{sender_name}: {body}"
+    else:
+        title = sender_name
+    import push_utils
+    push_utils.send_to_users(conn, targets, {
+        "type": "message",
+        "title": title,
+        "body": body,
+        "chatId": chat_id,
+        "topicId": topic_id,
+        "messageId": message_id,
+        "tag": f"chat-{chat_id}",
+    })
+
+
 def handler(event: dict, context) -> dict:
     """Сохраняет новое сообщение: текст, голосовое, видеокружок, фото или файл, с ответом на другое сообщение"""
     if event.get("httpMethod") == "OPTIONS":
@@ -206,6 +255,11 @@ def handler(event: dict, context) -> dict:
         """, (chat_id, my_user_id))
         cur.execute(f"UPDATE {SCHEMA}.users SET last_seen = NOW(), is_online = true WHERE id = %s", (my_user_id,))
         conn.commit()
+
+        try:
+            notify_members(conn, cur, chat_id, my_user_id, topic_id, kind, text, file_name or "", row[0])
+        except Exception as e:
+            print(f"notify failed: {type(e).__name__}: {e}")
 
         return {
             "statusCode": 200,

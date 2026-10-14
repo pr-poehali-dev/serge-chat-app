@@ -2,7 +2,8 @@ import { ReactNode, useEffect, useState } from "react";
 import Icon from "@/components/ui/icon";
 import { Switch } from "@/components/ui/switch";
 import { ACCENTS, TextSize, ThemeMode, useAppearance } from "@/hooks/use-appearance";
-import { AuthUser } from "../types";
+import { AuthUser, Chat } from "../types";
+import { disablePush, enablePush, getExistingSubscription, pushSupport } from "@/lib/push";
 
 const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
 const NOTIFY_KEY = "trindelka_notify_prefs";
@@ -98,11 +99,25 @@ function PanelHeader({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
-function NotificationsPanel({ onBack }: { onBack: () => void }) {
+function NotificationsPanel({
+  onBack,
+  authUser,
+  chats,
+  onSetChatNotify,
+}: {
+  onBack: () => void;
+  authUser: AuthUser | null;
+  chats: Chat[];
+  onSetChatNotify: (chatId: number, enabled: boolean) => void;
+}) {
   const [prefs, setPrefs] = useState<NotifyPrefs>(readNotifyPrefs);
+  const support = pushSupport();
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
     typeof Notification === "undefined" ? "unsupported" : Notification.permission
   );
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState("");
 
   useEffect(() => {
     try {
@@ -112,47 +127,88 @@ function NotificationsPanel({ onBack }: { onBack: () => void }) {
     }
   }, [prefs]);
 
-  const toggleBrowser = async (on: boolean) => {
-    if (!on) {
-      setPrefs((p) => ({ ...p, browser: false }));
-      return;
+  useEffect(() => {
+    let alive = true;
+    getExistingSubscription().then((sub) => {
+      if (alive) setPushOn(!!sub && Notification.permission === "granted");
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const togglePush = async (on: boolean) => {
+    if (!authUser) return;
+    setPushBusy(true);
+    setPushError("");
+    if (on) {
+      const r = await enablePush(authUser.sessionId);
+      setPushOn(r.ok);
+      if (!r.ok) setPushError(r.error || "Не удалось включить");
+      if (typeof Notification !== "undefined") setPermission(Notification.permission);
+    } else {
+      await disablePush(authUser.sessionId);
+      setPushOn(false);
     }
-    if (typeof Notification === "undefined") return;
-    const result = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-    setPermission(result);
-    setPrefs((p) => ({ ...p, browser: result === "granted" }));
+    setPushBusy(false);
   };
+
+  const pushDesc =
+    support === "needs-install"
+      ? "На iPhone сначала добавьте сайт на экран «Домой» (Поделиться → На экран «Домой»), затем откройте его оттуда"
+      : support === "unsupported"
+      ? "Этот браузер не поддерживает уведомления"
+      : permission === "denied"
+      ? "Запрещено в настройках браузера"
+      : "Приходят, даже когда приложение или вкладка закрыты";
+
+  const realChats = chats.filter((c) => c.id > 0 && !c.isBot);
 
   return (
     <div className="animate-fade-in">
       <PanelHeader title="Уведомления" onBack={onBack} />
       <div className="space-y-2">
+        <Row icon="BellRing" title="Уведомления на устройстве" desc={pushDesc}>
+          <Switch
+            checked={pushOn}
+            disabled={support !== "supported" || permission === "denied" || pushBusy}
+            onCheckedChange={togglePush}
+          />
+        </Row>
+        {pushError && <p className="px-1 text-xs text-red-400">{pushError}</p>}
         <Row icon="Bell" title="В колокольчике" desc="Новые сообщения появляются в разделе уведомлений">
           <Switch checked={prefs.inApp} onCheckedChange={(v) => setPrefs((p) => ({ ...p, inApp: v }))} />
         </Row>
         <Row icon="Volume2" title="Звук" desc="Короткий сигнал при новом сообщении">
           <Switch checked={prefs.sound} onCheckedChange={(v) => setPrefs((p) => ({ ...p, sound: v }))} />
         </Row>
-        <Row
-          icon="MonitorSmartphone"
-          title="Уведомления браузера"
-          desc={
-            permission === "unsupported"
-              ? "Этот браузер не поддерживает уведомления"
-              : permission === "denied"
-              ? "Запрещено в настройках браузера"
-              : "Показывать, когда вкладка в фоне"
-          }
-        >
-          <Switch
-            checked={prefs.browser && permission === "granted"}
-            disabled={permission === "unsupported" || permission === "denied"}
-            onCheckedChange={toggleBrowser}
-          />
-        </Row>
       </div>
+
+      <h4 className="mb-2 mt-6 px-1 text-xs font-semibold uppercase tracking-wider text-fg/35">Уведомления по чатам</h4>
+      {realChats.length === 0 ? (
+        <p className="px-1 text-xs text-fg/35">Чатов пока нет</p>
+      ) : (
+        <div className="space-y-2">
+          {realChats.map((c) => (
+            <div key={c.id} className="flex items-center gap-3 rounded-2xl bg-fg/[0.04] border border-fg/[0.06] px-3 py-2.5">
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white"
+                style={{ background: `linear-gradient(135deg, ${c.color}, ${c.color}88)` }}
+              >
+                {c.avatar}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-fg/85">{c.name}</p>
+                <p className="text-[11px] text-fg/35">{c.isGroup ? "Группа" : "Личный чат"}</p>
+              </div>
+              <Switch checked={c.notifyEnabled !== false} onCheckedChange={(v) => onSetChatNotify(c.id, v)} />
+            </div>
+          ))}
+        </div>
+      )}
       <p className="mt-4 px-1 text-[11px] leading-relaxed text-fg/30">
-        Настройки уведомлений сохраняются на этом устройстве.
+        Уведомления устройства включаются отдельно на каждом телефоне или компьютере. Переключатели чатов действуют на все ваши
+        устройства.
       </p>
     </div>
   );
@@ -305,10 +361,13 @@ interface SettingsPanelsProps {
   section: SettingsSection;
   authUser: AuthUser | null;
   onBack: () => void;
+  chats: Chat[];
+  onSetChatNotify: (chatId: number, enabled: boolean) => void;
 }
 
-export default function SettingsPanels({ section, authUser, onBack }: SettingsPanelsProps) {
-  if (section === "notifications") return <NotificationsPanel onBack={onBack} />;
+export default function SettingsPanels({ section, authUser, onBack, chats, onSetChatNotify }: SettingsPanelsProps) {
+  if (section === "notifications")
+    return <NotificationsPanel onBack={onBack} authUser={authUser} chats={chats} onSetChatNotify={onSetChatNotify} />;
   if (section === "privacy") return <PrivacyPanel authUser={authUser} onBack={onBack} />;
   return <AppearancePanel onBack={onBack} />;
 }

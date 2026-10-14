@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAppHeight } from "@/hooks/use-app-height";
-import { IncomingCall } from "@/components/messenger/CallOverlays";
+import { IncomingCall, CallScreen } from "@/components/messenger/CallOverlays";
 import Sidebar from "@/components/messenger/Sidebar";
 import ChatArea from "@/components/messenger/ChatArea";
 import BotStore from "@/components/messenger/BotStore";
@@ -16,6 +16,7 @@ import { useAuth } from "./index/useAuth";
 import { useComposer } from "./index/useComposer";
 import { useBotsAndGroups } from "./index/useBotsAndGroups";
 import { useMessaging } from "./index/useMessaging";
+import { useCall } from "./index/useCall";
 
 export default function Index() {
   const isMobile = useIsMobile();
@@ -34,12 +35,7 @@ export default function Index() {
   const botsRef = useRef<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
 
-  const [call, setCall] = useState<{ isVideo: boolean } | null>(null);
   const [forwardSource, setForwardSource] = useState<Message | null>(null);
-  const [incomingCall, setIncomingCall] = useState<{
-    caller: { name: string; avatar: string; color: string };
-    isVideo: boolean;
-  } | null>(null);
 
   const {
     authUser,
@@ -52,6 +48,7 @@ export default function Index() {
   } = useAuth({ setChats, setActiveChatId });
 
   const composer = useComposer();
+  const callCtl = useCall({ sessionId: authUser?.sessionId ?? null });
 
   const reloadChats = async () => {
     if (!authUser) return;
@@ -112,6 +109,7 @@ export default function Index() {
     attachments: composer.attachments,
     setAttachments: composer.setAttachments,
     sendBotMessage: bg.sendBotMessage,
+    onIncomingCallHint: callCtl.checkIncoming,
   });
 
   const filteredChats = chats.filter((c) =>
@@ -168,14 +166,24 @@ export default function Index() {
           onAvatarUpdated={handleAvatarUpdated}
           notifications={msg.notifications}
           onStartChatWithUser={msg.startChatWithUser}
+          onSetChatNotify={msg.setChatNotify}
         />
       )}
 
       {(!isMobile || mobileShowChat) && (
       <ChatArea
         activeChat={activeChat}
-        call={call}
-        setCall={setCall}
+        onStartCall={
+          !isBotChat && activeChat && !activeChat.isGroup && activeChat.id > 0 && activeChat.contactUserId
+            ? (isVideo) =>
+                callCtl.startCall(activeChat.id, isVideo, {
+                  name: activeChat.name,
+                  avatar: activeChat.avatar,
+                  color: activeChat.color,
+                  avatarUrl: activeChat.avatarUrl,
+                })
+            : undefined
+        }
         showEncryptBadge={showEncryptBadge}
         setShowEncryptBadge={setShowEncryptBadge}
         loadingMsgs={isBotChat ? false : msg.loadingMsgs}
@@ -230,6 +238,9 @@ export default function Index() {
         onOpenPinned={isBotChat ? undefined : msg.openPinned}
         onForward={isBotChat ? undefined : setForwardSource}
         jumpRequest={msg.jumpRequest}
+        onAddFiles={!isBotChat && activeChatId && activeChatId > 0 ? composer.addFiles : undefined}
+        fileNotice={composer.fileNotice}
+        onSendGif={!isBotChat && activeChatId && activeChatId > 0 ? msg.sendGif : undefined}
       />
       )}
 
@@ -287,17 +298,34 @@ export default function Index() {
         />
       )}
 
-      {/* Incoming call overlay */}
-      {incomingCall && (
-        <IncomingCall
-          caller={incomingCall.caller}
-          isVideo={incomingCall.isVideo}
-          onAccept={() => {
-            setIncomingCall(null);
-            setCall({ isVideo: incomingCall.isVideo });
-          }}
-          onDecline={() => setIncomingCall(null)}
+      {callCtl.call?.incoming && callCtl.call.phase === "ringing" && (
+        <IncomingCall call={callCtl.call} onAccept={callCtl.accept} onDecline={callCtl.decline} />
+      )}
+
+      {callCtl.call && !(callCtl.call.incoming && callCtl.call.phase === "ringing") && (
+        <CallScreen
+          call={callCtl.call}
+          localStream={callCtl.localStream}
+          remoteStream={callCtl.remoteStream}
+          muted={callCtl.muted}
+          camOff={callCtl.camOff}
+          speakerOff={callCtl.speakerOff}
+          onToggleMute={callCtl.toggleMute}
+          onToggleCam={callCtl.toggleCam}
+          onToggleSpeaker={callCtl.toggleSpeaker}
+          onEnd={callCtl.hangUp}
         />
+      )}
+
+      {callCtl.error && (
+        <div className="fixed left-1/2 top-4 z-[120] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 animate-fade-in">
+          <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/15 px-4 py-3 backdrop-blur-xl">
+            <p className="flex-1 text-sm text-red-200">{callCtl.error}</p>
+            <button onClick={callCtl.clearError} className="text-red-200/70 hover:text-red-100" aria-label="Закрыть">
+              ✕
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

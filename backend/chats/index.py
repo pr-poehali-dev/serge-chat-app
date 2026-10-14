@@ -355,6 +355,22 @@ def handler(event: dict, context) -> dict:
             conn.commit()
             return reply(200, {"settings": read_settings(cur, my_user_id)})
 
+        # POST /chats?action=set-chat-notify — включить или выключить уведомления конкретного чата
+        if method == "POST" and action == "set-chat-notify":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = body.get("chat_id")
+            if not isinstance(chat_id, int) or "enabled" not in body:
+                return reply(400, {"error": "Нужны chat_id и enabled"})
+            if not is_member(cur, chat_id, my_user_id):
+                return reply(403, {"error": "Нет доступа к чату"})
+            cur.execute(
+                f"UPDATE {SCHEMA}.chat_members SET notify_enabled = %s WHERE chat_id = %s AND user_id = %s",
+                (bool(body["enabled"]), chat_id, my_user_id),
+            )
+            conn.commit()
+            return reply(200, {"ok": True, "chat_id": chat_id, "enabled": bool(body["enabled"])})
+
         # POST /chats?action=pin-message — закрепить сообщение в чате (message_id = null снимает закрепление)
         if method == "POST" and action == "pin-message":
             if not authed:
@@ -574,6 +590,7 @@ def handler(event: dict, context) -> dict:
                                 WHEN m.kind = 'circle' THEN '⭕ Видеосообщение'
                                 WHEN m.kind = 'image' THEN '🖼 Фото'
                                 WHEN m.kind = 'file' THEN '📎 ' || COALESCE(m.file_name, 'Файл')
+                                WHEN m.kind = 'text' AND m.text ~* '^(https?://[^ ]+|/gifs/[^ ]+)[.]gif$' THEN '🎞 GIF'
                                 ELSE m.text END
                     FROM {SCHEMA}.messages m
                     WHERE m.chat_id = c.id
@@ -600,7 +617,8 @@ def handler(event: dict, context) -> dict:
                 (o.typing_until IS NOT NULL AND o.typing_until > NOW() AND o.show_typing) as other_typing,
                 cm_me.pinned as pinned,
                 (SELECT COUNT(*) FROM {SCHEMA}.chat_members x WHERE x.chat_id = c.id) as members_count,
-                pm.id, pm.text, pm.kind, pm.file_name, pm.topic_id, pu.display_name
+                pm.id, pm.text, pm.kind, pm.file_name, pm.topic_id, pu.display_name,
+                cm_me.notify_enabled
             FROM {SCHEMA}.chats c
             JOIN {SCHEMA}.chat_members cm_me ON cm_me.chat_id = c.id AND cm_me.user_id = %(me)s
             LEFT JOIN {SCHEMA}.messages pm ON pm.id = c.pinned_message_id AND pm.removed_at IS NULL
@@ -647,6 +665,7 @@ def handler(event: dict, context) -> dict:
                 "avatarUrl": None if is_group else r[11],
                 "contactUserId": None if is_group else r[7],
                 "memberCount": int(r[15]) if is_group and r[15] is not None else None,
+                "notifyEnabled": True if r[22] is None else bool(r[22]),
                 "pinnedMessage": None if r[16] is None else {
                     "id": r[16],
                     "text": r[17] or "",
@@ -657,8 +676,16 @@ def handler(event: dict, context) -> dict:
                 },
             })
 
-        return reply(200, {"chats": chats})
+        cur.execute(f"""
+            SELECT 1 FROM {SCHEMA}.calls
+            WHERE callee_id = %s AND status = 'ringing' AND created_at > NOW() - INTERVAL '45 seconds'
+            LIMIT 1
+        """, (my_user_id,))
+        incoming_call = cur.fetchone() is not None
+
+        return reply(200, {"chats": chats, "incomingCall": incoming_call})
 
     finally:
         cur.close()
         conn.close()
+

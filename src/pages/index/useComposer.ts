@@ -62,16 +62,41 @@ export function useComposer() {
     return { icon: "File", color: "#6366f1" };
   };
 
+  const MAX_FILE_BYTES = 8 * 1024 * 1024;
+  const [fileNotice, setFileNotice] = useState("");
+
+  const addFiles = (incoming: File[]) => {
+    if (incoming.length === 0) return;
+    const accepted: File[] = [];
+    const tooBig: string[] = [];
+    for (const f of incoming) {
+      if (f.size > MAX_FILE_BYTES) tooBig.push(f.name || "файл");
+      else if (f.size === 0) tooBig.push(`${f.name || "файл"} (пустой)`);
+      else accepted.push(f);
+    }
+    if (tooBig.length > 0) {
+      setFileNotice(`Не добавлено (лимит 8 МБ): ${tooBig.join(", ")}`);
+      window.setTimeout(() => setFileNotice(""), 6000);
+    }
+    const stamp = Date.now();
+    const newAttachments = accepted.map((f, i) => {
+      const named =
+        f.name && f.name !== "image.png"
+          ? f
+          : new File([f], `Снимок-${stamp}-${i + 1}.${(f.type.split("/")[1] || "png").split("+")[0]}`, { type: f.type });
+      return {
+        name: named.name,
+        size: formatFileSize(named.size),
+        type: named.type,
+        file: named,
+        ...getFileInfo(named),
+      };
+    });
+    if (newAttachments.length > 0) setAttachments((prev) => [...prev, ...newAttachments]);
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const newAttachments = files.map((f) => ({
-      name: f.name,
-      size: formatFileSize(f.size),
-      type: f.type,
-      file: f,
-      ...getFileInfo(f),
-    }));
-    setAttachments((prev) => [...prev, ...newAttachments]);
+    addFiles(Array.from(e.target.files || []));
     setAttachMenuOpen(false);
     e.target.value = "";
   };
@@ -95,5 +120,7 @@ export function useComposer() {
     attachMenuRef,
     filteredGifs,
     handleFileSelect,
+    addFiles,
+    fileNotice,
   };
 }

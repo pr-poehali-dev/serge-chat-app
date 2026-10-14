@@ -1,6 +1,5 @@
 import { RefObject, Dispatch, SetStateAction, useState, useEffect, useMemo } from "react";
 import Icon from "@/components/ui/icon";
-import { CallScreen } from "./CallOverlays";
 import { Chat, Message, Attachment, Topic, PinnedMessage } from "./types";
 import { RecordedMedia } from "./media/useRecorder";
 import ChatHeader from "./chat/ChatHeader";
@@ -12,8 +11,7 @@ import { EmojiCategory, GifCategory, GifItem } from "./chat/EmojiGifPicker";
 
 interface ChatAreaProps {
   activeChat: Chat | undefined;
-  call: { isVideo: boolean } | null;
-  setCall: Dispatch<SetStateAction<{ isVideo: boolean } | null>>;
+  onStartCall?: (isVideo: boolean) => void;
   showEncryptBadge: boolean;
   setShowEncryptBadge: Dispatch<SetStateAction<boolean>>;
   loadingMsgs: boolean;
@@ -68,12 +66,14 @@ interface ChatAreaProps {
   onOpenPinned?: (pinned: PinnedMessage) => void;
   onForward?: (msg: Message) => void;
   jumpRequest?: { id: number; nonce: number } | null;
+  onSendGif?: (url: string) => void;
+  onAddFiles?: (files: File[]) => void;
+  fileNotice?: string;
 }
 
 export default function ChatArea({
   activeChat,
-  call,
-  setCall,
+  onStartCall,
   showEncryptBadge,
   setShowEncryptBadge,
   loadingMsgs,
@@ -124,7 +124,12 @@ export default function ChatArea({
   onOpenPinned,
   onForward,
   jumpRequest,
+  onSendGif,
+  onAddFiles,
+  fileNotice,
 }: ChatAreaProps) {
+  const [dragDepth, setDragDepth] = useState(0);
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types || []).includes("Files");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [matchIndex, setMatchIndex] = useState(0);
@@ -167,23 +172,33 @@ export default function ChatArea({
   const pinned = activeChat?.pinnedMessage || null;
 
   return (
-    <main className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
-      {/* Call overlay */}
-      {call && activeChat && (
-        <CallScreen
-          chat={activeChat}
-          isVideo={call.isVideo}
-          onEnd={() => setCall(null)}
-        />
+    <main
+      className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden"
+      onDragEnter={(e) => { if (onAddFiles && hasFiles(e)) { e.preventDefault(); setDragDepth((d) => d + 1); } }}
+      onDragOver={(e) => { if (onAddFiles && hasFiles(e)) e.preventDefault(); }}
+      onDragLeave={(e) => { if (onAddFiles && hasFiles(e)) setDragDepth((d) => Math.max(0, d - 1)); }}
+      onDrop={(e) => {
+        if (!onAddFiles || !hasFiles(e)) return;
+        e.preventDefault();
+        setDragDepth(0);
+        onAddFiles(Array.from(e.dataTransfer.files));
+      }}
+    >
+      {dragDepth > 0 && onAddFiles && (
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-purple-400/60 px-10 py-8">
+            <Icon name="Upload" size={32} className="text-purple-400" />
+            <p className="text-sm font-medium text-fg/80">Отпустите, чтобы прикрепить файлы</p>
+          </div>
+        </div>
       )}
-
       {activeChat ? (
         <>
           <ChatHeader
             activeChat={activeChat}
             showEncryptBadge={showEncryptBadge}
             setShowEncryptBadge={setShowEncryptBadge}
-            setCall={setCall}
+            onStartCall={onStartCall}
             topics={topics}
             activeTopicId={activeTopicId}
             onSelectTopic={onSelectTopic}
@@ -271,6 +286,9 @@ export default function ChatArea({
             sendError={sendError}
             onCancelContext={onCancelContext}
             replyAuthorName={activeChat.name}
+            onSendGif={onSendGif}
+            onAddFiles={onAddFiles}
+            fileNotice={fileNotice}
           />
         </>
       ) : (
