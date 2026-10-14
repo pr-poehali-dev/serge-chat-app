@@ -99,6 +99,7 @@ footer{text-align:center;color:var(--muted);font-size:13px;padding:10px 0 36px}
     <li><a href="#data">Перенос пользователей, переписки и файлов</a></li>
     <li><a href="#check">Проверка после запуска</a></li>
     <li><a href="#update">Обновление и резервные копии</a></li>
+    <li><a href="#apk">Приложение для Android (APK)</a></li>
     <li><a href="#trouble">Если что-то не работает</a></li>
     <li><a href="#env">Справочник: переменные настроек</a></li>
   </ol>
@@ -584,6 +585,35 @@ systemctl restart trindelka</code></pre></div>
 crontab -l 2&gt;/dev/null | { cat; echo '30 3 * * * sudo -u postgres pg_dump trindelka | gzip &gt; /var/backups/trindelka/db-$(date +\%F).sql.gz &amp;&amp; find /var/backups/trindelka -name "db-*.sql.gz" -mtime +14 -delete'; } | crontab -</code></pre></div>
   <p>Копии хранятся 14 дней. Также периодически копируйте на другой компьютер или в облако папки <code>/var/backups/trindelka</code> и <code>/var/www/trindelka/files</code>: копия на том же сервере не спасёт при его потере.</p>
   <p>На хостинге ISPmanager резервные копии базы и файлов включаются в разделе «Резервные копии» панели или у хостера.</p>
+</section>
+
+<section id="apk">
+  <h2>Приложение для Android (APK)</h2>
+  <p>Проект подготовлен к сборке Android-приложения «Трынделка» (пакет <code>ru.trindelka.messenger</code>). Приложение показывает тот же мессенджер внутри оболочки Android и работает через интернет с вашим сервером. Готовый APK-файл собрать в среде poehali.dev нельзя: там нет Android SDK. Файл собирается у вас на компьютере за 10–20 минут.</p>
+  <div class="note"><b>Куда будет обращаться приложение</b>
+    По умолчанию в код зашиты адреса функций poehali.dev. Если вы уже перенесли проект на свой сервер, перед сборкой замените адреса на свой домен (шаг 2). Приложению нужен именно полный адрес с https://, а не короткий <code>/api</code>.
+  </div>
+  <ol class="steps">
+    <li><h4>Установите программы</h4>
+      <p>Node.js 20+ (nodejs.org), Git и Android Studio (developer.android.com/studio). При первом запуске Android Studio сама скачает Android SDK и нужную версию Java.</p></li>
+    <li><h4>Подготовьте проект</h4>
+      <p>Скачайте код проекта (раздел 4) и в папке проекта выполните. Первую строку выполняйте только если у вас свой сервер, подставив свой домен:</p>
+      <div class="codebox"><pre><code>sh deploy/replace-api-urls.sh https://ВАШ_ДОМЕН/api
+npm ci
+npm run android:sync</code></pre></div>
+      <p>Последняя команда собирает сайт и копирует его в папку <code>android</code>.</p></li>
+    <li><h4>Соберите APK</h4>
+      <p>Вариант А, через Android Studio: откройте папку <code>android</code> (File → Open), дождитесь окончания синхронизации и выберите Build → Build Bundle(s) / APK(s) → Build APK(s). Файл появится в <code>android/app/build/outputs/apk/debug/app-debug.apk</code>.</p>
+      <p>Вариант Б, командой (нужны установленные Android Studio и Java 17):</p>
+      <div class="codebox"><pre><code>npm run android:apk</code></pre></div></li>
+    <li><h4>Установите на телефон</h4>
+      <p>Передайте <code>app-debug.apk</code> на телефон кабелем или через облако, откройте его и разрешите установку из неизвестных источников. Это отладочная сборка: она работает как обычное приложение, но не подходит для Google Play и RuStore.</p></li>
+    <li><h4>Для публикации в магазинах</h4>
+      <p>В Android Studio: Build → Generate Signed Bundle / APK. Создайте ключ подписи и <b>сохраните файл ключа и пароль в надёжном месте</b>: без них нельзя будет выпускать обновления. RuStore принимает APK, Google Play требует формат AAB (в том же меню).</p></li>
+  </ol>
+  <div class="warn"><b>Что не проверено</b>
+    Сборку APK я здесь запустить не мог, поэтому приложение на реальном телефоне не проверялось. Проект Android создан штатными средствами Capacitor, иконка и разрешения (интернет, микрофон, камера) настроены. Вероятные места доработки: запись видеокружков и голосовых в оболочке Android, и ссылка из письма «Забыли пароль», которая откроет сайт в браузере, а не в приложении. Для писем задайте адрес сайта в настройке <code>PUBLIC_SITE_URL</code>.
+  </div>
 </section>
 
 <section id="trouble">

@@ -53,6 +53,9 @@ def user_row_to_dict(r):
 
 
 def get_origin(event: dict) -> str:
+    fixed = (os.environ.get("PUBLIC_SITE_URL") or "").strip()
+    if fixed:
+        return fixed.rstrip("/")
     headers = event.get("headers") or {}
     origin = headers.get("origin") or headers.get("Origin") or headers.get("referer") or headers.get("Referer")
     if origin:
