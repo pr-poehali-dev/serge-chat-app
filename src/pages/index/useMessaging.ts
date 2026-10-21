@@ -1,36 +1,9 @@
-import { useState, useEffect, useRef, Dispatch, SetStateAction } from "react";
-import { RecordedMedia, blobToBase64 } from "@/components/messenger/media/useRecorder";
-import { Chat, Message, PinnedMessage, PollData, ReplyPreview, Tab, AuthUser, NotificationItem, Attachment } from "@/components/messenger/types";
-import { API_CHATS, API_SEND, API_TRANSCRIBE } from "./config";
-import { readNotifyPrefs } from "@/components/messenger/sidebar/SettingsPanels";
-import { registerServiceWorker } from "@/lib/push";
-import { isNativeApp, startNativePush } from "@/lib/nativePush";
-
-const POLL_INTERVAL_MS = 3000;
-
-let audioCtx: AudioContext | null = null;
-function playBeep() {
-  try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    audioCtx = audioCtx || new Ctx();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-    osc.frequency.setValueAtTime(1175, audioCtx.currentTime + 0.09);
-    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.15, audioCtx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25);
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.26);
-  } catch {
-    return;
-  }
-}
-const TYPING_PING_MS = 3000;
+import { Dispatch, SetStateAction } from "react";
+import { Chat, Message, Tab, AuthUser, Attachment } from "@/components/messenger/types";
+import { useChatSync } from "./useChatSync";
+import { useSendMessage } from "./useSendMessage";
+import { useMessageActions } from "./useMessageActions";
+import { useChatActions } from "./useChatActions";
 
 interface UseMessagingParams {
   authUser: AuthUser | null;
@@ -85,846 +58,104 @@ export function useMessaging({
   sendBotMessage,
   onIncomingCallHint,
 }: UseMessagingParams) {
-  const [loadingChats, setLoadingChats] = useState(true);
-  const [loadingMsgs, setLoadingMsgs] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [groupCalls, setGroupCalls] = useState<{ callId: number; chatId: number; isVideo: boolean; participants: number }[]>([]);
-  const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
-  const [sendError, setSendError] = useState("");
-  const [jumpRequest, setJumpRequest] = useState<{ id: number; nonce: number } | null>(null);
-  const pendingJumpRef = useRef<number | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sync = useChatSync({
+    authUser,
+    authHeaders,
+    setChats,
+    setMessages,
+    activeChatId,
+    setActiveChatId,
+    setActiveChatIdRaw,
+    activeTab,
+    setActiveTab,
+    isBotChat,
+    activeTopicId,
+    onIncomingCallHint,
+  });
 
-  const startChatWithUser = async (userId: number): Promise<string | null> => {
-    if (!authUser) return "Не авторизован";
-    try {
-      const res = await fetch(`${API_CHATS}?action=start-chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ user_id: userId }),
-      });
-      const data = await res.json();
-      if (!res.ok) return data.error || "Не удалось начать чат";
-      await reloadChats();
-      setActiveChatId(data.chat_id);
-      setActiveTab("chats");
-      return null;
-    } catch {
-      return "Не удалось связаться с сервером";
-    }
-  };
+  const send = useSendMessage({
+    authUser,
+    authHeaders,
+    chats,
+    setChats,
+    messages,
+    setMessages,
+    activeChatId,
+    activeTopicId,
+    isBotChat,
+    isGroupChat,
+    botMessages,
+    inputText,
+    setInputText,
+    attachments,
+    setAttachments,
+    sendBotMessage,
+    lastMessagesSigRef: sync.lastMessagesSigRef,
+  });
 
-  // Load chats (once authenticated)
-  useEffect(() => {
-    if (!authUser) return;
-    setLoadingChats(true);
-    fetch(API_CHATS, { headers: authHeaders() })
-      .then((r) => r.json())
-      .then((data) => {
-        setChats(data.chats || []);
-        if (data.chats?.length > 0 && !activeChatId) {
-          setActiveChatIdRaw(data.chats[0].id);
-        }
-      })
-      .finally(() => setLoadingChats(false));
-  }, [authUser]);
+  const actions = useMessageActions({
+    authUser,
+    authHeaders,
+    chats,
+    setChats,
+    messages,
+    setMessages,
+    activeChatId,
+    activeTopicId,
+    setActiveTopicId,
+    isBotChat,
+    setBotMessages,
+    setInputText,
+    replyTo: send.replyTo,
+    setReplyTo: send.setReplyTo,
+    editingMessage: send.editingMessage,
+    setEditingMessage: send.setEditingMessage,
+    setSendError: send.setSendError,
+    loadingMsgs: sync.loadingMsgs,
+  });
 
-  const setChatNotify = (chatId: number, enabled: boolean) => {
-    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, notifyEnabled: enabled } : c)));
-    fetch(`${API_CHATS}?action=set-chat-notify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ chat_id: chatId, enabled }),
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error();
-      })
-      .catch(() => {
-        setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, notifyEnabled: !enabled } : c)));
-        setSendError("Не удалось сохранить настройку уведомлений");
-      });
-  };
-
-  useEffect(() => {
-    if (!authUser) return;
-    if (isNativeApp()) {
-      startNativePush(authUser.sessionId, (info) => {
-        if (info.chatId) {
-          setActiveChatId(info.chatId);
-          setActiveTab("chats");
-        }
-      });
-    } else {
-      registerServiceWorker();
-    }
-    const open = (chatId: number | null) => {
-      if (!chatId) return;
-      setActiveChatId(chatId);
-      setActiveTab("chats");
-    };
-    const fromUrl = new URLSearchParams(window.location.search).get("chat");
-    if (fromUrl) {
-      open(Number(fromUrl));
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-    const onMessage = (e: MessageEvent) => {
-      if (e.data?.type === "open-chat") open(e.data.chatId);
-    };
-    navigator.serviceWorker?.addEventListener("message", onMessage);
-    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
-  }, [authUser]);
-
-  const setChatBackground = async (chatId: number, bg: string | null): Promise<string | null> => {
-    const previous = chats.find((c) => c.id === chatId)?.chatBg ?? null;
-    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, chatBg: bg } : c)));
-    try {
-      const res = await fetch(`${API_CHATS}?action=set-chat-bg`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ chat_id: chatId, bg }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Не удалось сохранить фон");
-      return null;
-    } catch (e) {
-      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, chatBg: previous } : c)));
-      return e instanceof Error && e.message ? e.message : "Не удалось связаться с сервером";
-    }
-  };
-
-  const uploadChatBackground = async (chatId: number, file: File): Promise<string | null> => {
-    try {
-      const imageBase64 = await blobToBase64(file);
-      const res = await fetch(`${API_CHATS}?action=set-chat-bg`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ chat_id: chatId, imageBase64, contentType: file.type }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) return data.error || "Не удалось загрузить фото";
-      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, chatBg: data.bg } : c)));
-      return null;
-    } catch {
-      return "Не удалось связаться с сервером";
-    }
-  };
-
-  const togglePinChat = (chatId: number) => {
-    const chat = chats.find((c) => c.id === chatId);
-    if (!chat) return;
-    const nextPinned = !chat.pinned;
-    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinned: nextPinned } : c)));
-    if (chatId < 0) return;
-    fetch(`${API_CHATS}?action=pin`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ chat_id: chatId, pinned: nextPinned }),
-    }).catch(() => {
-      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinned: !nextPinned } : c)));
-    });
-  };
-
-  // Automatically mark notifications as read when the bell tab is opened
-  useEffect(() => {
-    if (activeTab !== "notifications") return;
-    setNotifications((prev) => (prev.some((n) => !n.read) ? prev.map((n) => ({ ...n, read: true })) : prev));
-  }, [activeTab]);
-
-  const messagesUrl = (chatId: number, topicId: number | null) =>
-    `${API_CHATS}?action=messages&chat_id=${chatId}${topicId ? `&topic_id=${topicId}` : ""}`;
-
-  // Load messages when chat or topic changes
-  useEffect(() => {
-    if (!activeChatId || isBotChat || activeChatId < 0 || !authUser) return;
-    let cancelled = false;
-    setLoadingMsgs(true);
-    setMessages([]);
-    setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, unread: 0 } : c)));
-    fetch(messagesUrl(activeChatId, activeTopicId), { headers: authHeaders() })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setMessages(data.messages || []);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingMsgs(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeChatId, activeTopicId, isBotChat, authUser]);
-
-  const activeChatIdRef = useRef<number | null>(null);
-  const activeTopicIdRef = useRef<number | null>(null);
-  const activeTabRef = useRef<Tab>("chats");
-  const isBotChatRef = useRef(false);
-  const hintRef = useRef<(() => void) | undefined>(undefined);
-  hintRef.current = onIncomingCallHint;
-  const prevChatsRef = useRef<Record<number, { unread: number; lastMsg: string; time: string }>>({});
-  const lastMessagesSigRef = useRef("");
-  activeChatIdRef.current = activeChatId;
-  activeTopicIdRef.current = activeTopicId;
-  activeTabRef.current = activeTab;
-  isBotChatRef.current = isBotChat;
-
-  // Poll: refresh chat list (statuses, typing, unread), fill the bell, refresh the open chat
-  useEffect(() => {
-    if (!authUser) return;
-    prevChatsRef.current = {};
-    let stopped = false;
-
-    const tick = async () => {
-      if (document.hidden) return;
-      try {
-        const res = await fetch(API_CHATS, { headers: { "X-Session-Id": authUser.sessionId } });
-        if (!res.ok || stopped) return;
-        const data = await res.json();
-        if (data.incomingCall) hintRef.current?.();
-        setGroupCalls(data.groupCalls || []);
-        const fresh: Chat[] = data.chats || [];
-        const openId = activeChatIdRef.current;
-        const firstRun = Object.keys(prevChatsRef.current).length === 0;
-        const newNotes: NotificationItem[] = [];
-
-        const normalized = fresh.map((c) => {
-          const prev = prevChatsRef.current[c.id];
-          const isOpen = c.id === openId;
-          if (!firstRun && !isOpen && c.notifyEnabled !== false && c.unread > (prev?.unread ?? 0)) {
-            newNotes.push({
-              id: Date.now() + c.id,
-              icon: "MessageCircle",
-              text: `${c.name}: ${c.lastMsg || "новое сообщение"}`,
-              time: c.time || "сейчас",
-              color: c.color,
-              read: activeTabRef.current === "notifications",
-            });
-          }
-          prevChatsRef.current[c.id] = { unread: c.unread, lastMsg: c.lastMsg, time: c.time };
-          return isOpen ? { ...c, unread: 0 } : c;
-        });
-
-        setChats(normalized);
-        if (newNotes.length > 0) {
-          const prefs = readNotifyPrefs();
-          if (prefs.inApp) setNotifications((prev) => [...newNotes, ...prev].slice(0, 50));
-          if (prefs.sound) playBeep();
-        }
-
-        if (openId && openId > 0 && !isBotChatRef.current) {
-          const topicId = activeTopicIdRef.current;
-          const r = await fetch(messagesUrl(openId, topicId), {
-            headers: { "X-Session-Id": authUser.sessionId },
-          });
-          if (r.ok && !stopped && openId === activeChatIdRef.current && topicId === activeTopicIdRef.current) {
-            const d = await r.json();
-            const fetched: Message[] = d.messages || [];
-            const sig = JSON.stringify(fetched);
-            if (sig !== lastMessagesSigRef.current) {
-              lastMessagesSigRef.current = sig;
-              setMessages((cur) => {
-                const pending = cur.filter((m) => m.id > 1e12);
-                return [...fetched, ...pending];
-              });
-            }
-          }
-        }
-      } catch {
-        return;
-      }
-    };
-
-    tick();
-    const timer = window.setInterval(tick, POLL_INTERVAL_MS);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, [authUser]);
-
-  useEffect(() => {
-    lastMessagesSigRef.current = "";
-    setReplyTo(null);
-    setEditingMessage(null);
-    setSendError("");
-  }, [activeChatId, activeTopicId]);
-
-  useEffect(() => {
-    if (!sendError) return;
-    const t = window.setTimeout(() => setSendError(""), 5000);
-    return () => window.clearTimeout(t);
-  }, [sendError]);
-
-  // Tell the server we are typing (direct chats only)
-  const lastTypingPingRef = useRef(0);
-  useEffect(() => {
-    if (!authUser || !activeChatId || activeChatId < 0 || isBotChat || isGroupChat) return;
-    if (!inputText.trim() || editingMessage) return;
-    const now = Date.now();
-    if (now - lastTypingPingRef.current < TYPING_PING_MS) return;
-    lastTypingPingRef.current = now;
-    fetch(`${API_CHATS}?action=typing`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ chat_id: activeChatId }),
-    }).catch(() => undefined);
-  }, [inputText, activeChatId, isBotChat, isGroupChat, authUser]);
-
-  const sendMedia = async (kind: "voice" | "circle", media: RecordedMedia) => {
-    if (!activeChatId || activeChatId < 0 || isBotChat || sending) return;
-    setSending(true);
-    setSendError("");
-    try {
-      const base64 = await blobToBase64(media.blob);
-      const res = await fetch(API_SEND, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({
-          chat_id: activeChatId,
-          topic_id: activeTopicId,
-          kind,
-          media: base64,
-          contentType: media.mime,
-          duration: media.duration,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setSendError(data.error || "Не удалось отправить сообщение");
-        return;
-      }
-      setMessages((prev) => [...prev, data]);
-      const label = kind === "voice" ? "🎤 Голосовое сообщение" : "⭕ Видеосообщение";
-      setChats((prev) =>
-        prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: label, time: data.time } : c))
-      );
-    } catch {
-      setSendError("Не удалось связаться с сервером");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const transcribeMessage = async (messageId: number): Promise<string | null> => {
-    try {
-      const res = await fetch(API_TRANSCRIBE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ message_id: messageId }),
-      });
-      const data = await res.json();
-      if (!res.ok) return null;
-      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, transcript: data.transcript } : m)));
-      return data.transcript as string;
-    } catch {
-      return null;
-    }
-  };
-
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, botMessages]);
-
-  const sendMessage = async () => {
-    if (isBotChat) {
-      sendBotMessage();
-      return;
-    }
-    const hasText = inputText.trim();
-    const hasAttachments = attachments.length > 0;
-    if ((!hasText && !hasAttachments) || !activeChatId || sending) return;
-
-    if (editingMessage) {
-      await submitEdit(inputText.trim());
-      return;
-    }
-
-    const toSend = attachments;
-    const caption = inputText.trim();
-    const replyTarget = replyTo;
-
-    setInputText("");
-    setAttachments([]);
-    setReplyTo(null);
-    setSendError("");
-    setSending(true);
-
-    const nowTime = () => new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-    const replyPreview = replyTarget
-      ? {
-          id: replyTarget.id,
-          text: replyTarget.text,
-          kind: (replyTarget.kind || "text") as ReplyPreview["kind"],
-          senderName: replyTarget.out ? "Вы" : replyTarget.senderName || chats.find((c) => c.id === activeChatId)?.name,
-        }
-      : null;
-
-    const post = async (payload: Record<string, unknown>, optimistic: Message) => {
-      setMessages((prev) => [...prev, optimistic]);
-      try {
-        const res = await fetch(API_SEND, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({
-            chat_id: activeChatId,
-            topic_id: activeTopicId,
-            reply_to_id: replyTarget?.id ?? null,
-            ...payload,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
-          setSendError(data.error || "Не удалось отправить сообщение");
-          return false;
-        }
-        setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? { ...data } : m)));
-        return data as Message;
-      } catch {
-        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
-        setSendError("Не удалось связаться с сервером");
-        return false;
-      }
-    };
-
-    try {
-      let lastLabel = caption;
-      let lastTime = nowTime();
-
-      if (toSend.length === 0) {
-        const sent = await post(
-          { text: caption },
-          {
-            id: Date.now(),
-            text: caption,
-            out: true,
-            read: false,
-            time: lastTime,
-            sender_id: authUser?.id ?? 1,
-            replyTo: replyPreview,
-          }
-        );
-        if (sent) lastTime = sent.time;
-        else return;
-      } else {
-        for (let i = 0; i < toSend.length; i++) {
-          const att = toSend[i];
-          const isImage = att.type.startsWith("image/");
-          const kind = isImage ? "image" : "file";
-          const base64 = att.file ? await blobToBase64(att.file) : "";
-          const text = i === 0 ? caption : "";
-          const sent = await post(
-            { kind, media: base64, contentType: att.type || "application/octet-stream", fileName: att.name, text },
-            {
-              id: Date.now() + i,
-              text,
-              out: true,
-              read: false,
-              time: nowTime(),
-              sender_id: authUser?.id ?? 1,
-              kind,
-              mediaUrl: att.file && isImage ? URL.createObjectURL(att.file) : null,
-              fileName: att.name,
-              fileSize: att.file?.size ?? null,
-              replyTo: i === 0 ? replyPreview : null,
-            }
-          );
-          if (!sent) return;
-          lastTime = sent.time;
-          lastLabel = isImage ? "🖼 Фото" : `📎 ${att.name}`;
-        }
-      }
-
-      setChats((prev) =>
-        prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: lastLabel || caption, time: lastTime } : c))
-      );
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const sendSticker = async (path: string) => {
-    if (!activeChatId || activeChatId < 0 || isBotChat || sending) return;
-    const replyTarget = replyTo;
-    const tempId = Date.now();
-    const time = new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-    setSendError("");
-    setReplyTo(null);
-    setMessages((prev) => [...prev, { id: tempId, text: path, out: true, read: false, time, sender_id: authUser?.id ?? 1 }]);
-    try {
-      const res = await fetch(API_SEND, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ chat_id: activeChatId, topic_id: activeTopicId, reply_to_id: replyTarget?.id ?? null, text: path }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        setSendError(data.error || "Не удалось отправить стикер");
-        return;
-      }
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...data } : m)));
-      setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: "🖼 Стикер", time: data.time } : c)));
-    } catch {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setSendError("Не удалось связаться с сервером");
-    }
-  };
-
-  const createPoll = async (question: string, options: string[], multiple: boolean): Promise<string | null> => {
-    if (!activeChatId || activeChatId < 0) return "Откройте группу, чтобы создать опрос";
-    try {
-      const res = await fetch(`${API_CHATS}?action=create-poll`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ chat_id: activeChatId, topic_id: activeTopicId, question, options, multiple }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) return data.error || "Не удалось создать опрос";
-      const poll = data.poll;
-      setMessages((prev) => [
-        ...prev,
-        { id: data.messageId, text: "📊 " + question, out: true, read: false, time: data.time, sender_id: authUser?.id ?? 1, poll },
-      ]);
-      setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: "📊 " + question, time: data.time } : c)));
-      return null;
-    } catch {
-      return "Не удалось связаться с сервером";
-    }
-  };
-
-  const replacePoll = (poll: PollData) =>
-    setMessages((prev) => prev.map((m) => (m.poll && m.poll.id === poll.id ? { ...m, poll } : m)));
-
-  const votePoll = async (pollId: number, optionIds: number[]) => {
-    const previous = messages.find((m) => m.poll?.id === pollId)?.poll;
-    if (previous) {
-      const picked = new Set(optionIds);
-      const voters = previous.voters + (previous.myVoted ? 0 : optionIds.length ? 1 : 0) - (previous.myVoted && optionIds.length === 0 ? 1 : 0);
-      replacePoll({
-        ...previous,
-        myVoted: optionIds.length > 0,
-        voters,
-        options: previous.options.map((o) => {
-          const votes = o.votes - (o.mine ? 1 : 0) + (picked.has(o.id) ? 1 : 0);
-          return { ...o, votes, mine: picked.has(o.id), percent: voters > 0 ? Math.round((votes * 100) / voters) : 0 };
-        }),
-      });
-    }
-    try {
-      const res = await fetch(`${API_CHATS}?action=vote-poll`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ poll_id: pollId, option_ids: optionIds }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (previous) replacePoll(previous);
-        setSendError(data.error || "Не удалось проголосовать");
-        return;
-      }
-      replacePoll(data.poll);
-    } catch {
-      if (previous) replacePoll(previous);
-      setSendError("Не удалось связаться с сервером");
-    }
-  };
-
-  const closePoll = async (pollId: number) => {
-    try {
-      const res = await fetch(`${API_CHATS}?action=close-poll`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ poll_id: pollId }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setSendError(data.error || "Не удалось завершить опрос");
-        return;
-      }
-      replacePoll(data.poll);
-    } catch {
-      setSendError("Не удалось связаться с сервером");
-    }
-  };
-
-  const sendGif = async (url: string) => {
-    if (!activeChatId || activeChatId < 0 || isBotChat || sending) return;
-    const replyTarget = replyTo;
-    const tempId = Date.now();
-    const time = new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-    setSendError("");
-    setReplyTo(null);
-    setMessages((prev) => [
-      ...prev,
-      { id: tempId, text: url, out: true, read: false, time, sender_id: authUser?.id ?? 1 },
-    ]);
-    try {
-      const res = await fetch(API_SEND, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({
-          chat_id: activeChatId,
-          topic_id: activeTopicId,
-          reply_to_id: replyTarget?.id ?? null,
-          text: url,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        setSendError(data.error || "Не удалось отправить GIF");
-        return;
-      }
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...data } : m)));
-      setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: "🎞 GIF", time: data.time } : c)));
-    } catch {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setSendError("Не удалось связаться с сервером");
-    }
-  };
-
-  const pinMessage = async (messageId: number | null) => {
-    if (!activeChatId || activeChatId < 0) return;
-    const chatId = activeChatId;
-    const previous = chats.find((c) => c.id === chatId)?.pinnedMessage ?? null;
-    const target = messageId ? messages.find((m) => m.id === messageId) : null;
-
-    setChats((prev) =>
-      prev.map((c) =>
-        c.id === chatId
-          ? {
-              ...c,
-              pinnedMessage:
-                messageId && target
-                  ? {
-                      id: target.id,
-                      text: target.text,
-                      kind: (target.kind || "text") as PinnedMessage["kind"],
-                      fileName: target.fileName,
-                      topicId: activeTopicId,
-                      senderName: target.out ? "Вы" : target.senderName || c.name,
-                    }
-                  : null,
-            }
-          : c
-      )
-    );
-
-    try {
-      const res = await fetch(`${API_CHATS}?action=pin-message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
-      });
-      if (!res.ok) {
-        setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinnedMessage: previous } : c)));
-        setSendError("Не удалось закрепить сообщение");
-      }
-    } catch {
-      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinnedMessage: previous } : c)));
-      setSendError("Не удалось связаться с сервером");
-    }
-  };
-
-  const openPinned = (pinned: PinnedMessage) => {
-    const targetTopic = pinned.topicId ?? null;
-    if (targetTopic !== activeTopicId) {
-      pendingJumpRef.current = pinned.id;
-      setActiveTopicId(targetTopic);
-      return;
-    }
-    setJumpRequest({ id: pinned.id, nonce: Date.now() });
-  };
-
-  useEffect(() => {
-    if (pendingJumpRef.current == null || loadingMsgs) return;
-    const id = pendingJumpRef.current;
-    if (messages.some((m) => m.id === id)) {
-      pendingJumpRef.current = null;
-      setJumpRequest({ id, nonce: Date.now() });
-    }
-  }, [messages, loadingMsgs]);
-
-  const forwardMessage = async (message: Message, targetChatId: number): Promise<string | null> => {
-    try {
-      const res = await fetch(API_SEND, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ chat_id: targetChatId, forward_message_id: message.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) return data.error || "Не удалось переслать сообщение";
-      const label =
-        data.kind === "voice" ? "🎤 Голосовое сообщение"
-        : data.kind === "circle" ? "⭕ Видеосообщение"
-        : data.kind === "image" ? "🖼 Фото"
-        : data.kind === "file" ? `📎 ${data.fileName || "Файл"}`
-        : data.text;
-      setChats((prev) =>
-        prev.map((c) => (c.id === targetChatId ? { ...c, lastMsg: label, time: data.time } : c))
-      );
-      if (targetChatId === activeChatId && !activeTopicId) {
-        setMessages((prev) => [...prev, data]);
-      }
-      return null;
-    } catch {
-      return "Не удалось связаться с сервером";
-    }
-  };
-
-  const startReply = (msg: Message) => {
-    setEditingMessage(null);
-    setReplyTo(msg);
-  };
-
-  const startEdit = (msg: Message) => {
-    setReplyTo(null);
-    setEditingMessage(msg);
-    setInputText(msg.text);
-  };
-
-  const cancelComposerContext = () => {
-    if (editingMessage) setInputText("");
-    setReplyTo(null);
-    setEditingMessage(null);
-  };
-
-  const submitEdit = async (text: string) => {
-    if (!editingMessage || !text) return;
-    const target = editingMessage;
-    setSending(true);
-    try {
-      const res = await fetch(`${API_CHATS}?action=edit-message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ message_id: target.id, text }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setSendError(data.error || "Не удалось изменить сообщение");
-        return;
-      }
-      setMessages((prev) => prev.map((m) => (m.id === target.id ? { ...m, text: data.text, edited: true } : m)));
-      setEditingMessage(null);
-      setInputText("");
-    } catch {
-      setSendError("Не удалось связаться с сервером");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const removeMessage = async (messageId: number) => {
-    const snapshot = messages;
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === messageId
-          ? { ...m, removed: true, text: "", kind: "text", mediaUrl: null, fileName: null, reactions: {} }
-          : m
-      )
-    );
-    if (replyTo?.id === messageId) setReplyTo(null);
-    if (editingMessage?.id === messageId) {
-      setEditingMessage(null);
-      setInputText("");
-    }
-    try {
-      const res = await fetch(`${API_CHATS}?action=remove-message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ message_id: messageId }),
-      });
-      if (!res.ok) {
-        setMessages(snapshot);
-        setSendError("Не удалось удалить сообщение");
-      }
-    } catch {
-      setMessages(snapshot);
-      setSendError("Не удалось связаться с сервером");
-    }
-  };
-
-  const toggleReaction = async (messageId: number, emoji: string) => {
-    const applyToList = (list: Message[]): Message[] =>
-      list.map((m) => {
-        if (m.id !== messageId) return m;
-        const reactions = { ...(m.reactions || {}) };
-        const users = new Set(reactions[emoji] || []);
-        const myId = authUser?.id ?? 1;
-        if (users.has(myId)) {
-          users.delete(myId);
-        } else {
-          users.add(myId);
-        }
-        const nextUsers = Array.from(users);
-        if (nextUsers.length > 0) {
-          reactions[emoji] = nextUsers;
-        } else {
-          delete reactions[emoji];
-        }
-        return { ...m, reactions };
-      });
-
-    if (isBotChat) {
-      setBotMessages((prev) => ({
-        ...prev,
-        [activeChatId as number]: applyToList(prev[activeChatId as number] || []),
-      }));
-      return;
-    }
-
-    setMessages((prev) => applyToList(prev));
-
-    if (!activeChatId || activeChatId < 0) return;
-
-    try {
-      const res = await fetch(`${API_CHATS}?action=toggle-reaction`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ message_id: messageId, emoji }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions: data.reactions } : m)));
-      }
-    } catch {
-      setMessages((prev) => applyToList(prev));
-    }
-  };
+  const chatActions = useChatActions({
+    authUser,
+    authHeaders,
+    reloadChats,
+    chats,
+    setChats,
+    setActiveChatId,
+    setActiveTab,
+    setSendError: send.setSendError,
+  });
 
   return {
-    loadingChats,
-    loadingMsgs,
-    sending,
-    notifications,
-    groupCalls,
-    messagesEndRef,
-    startChatWithUser,
-    togglePinChat,
-    setChatBackground,
-    uploadChatBackground,
-    setChatNotify,
-    sendMedia,
-    transcribeMessage,
-    sendMessage,
-    sendGif,
-    sendSticker,
-    createPoll,
-    votePoll,
-    closePoll,
-    toggleReaction,
-    replyTo,
-    editingMessage,
-    sendError,
-    startReply,
-    startEdit,
-    cancelComposerContext,
-    removeMessage,
-    pinMessage,
-    openPinned,
-    forwardMessage,
-    jumpRequest,
+    loadingChats: sync.loadingChats,
+    loadingMsgs: sync.loadingMsgs,
+    sending: send.sending,
+    notifications: sync.notifications,
+    groupCalls: sync.groupCalls,
+    messagesEndRef: send.messagesEndRef,
+    startChatWithUser: chatActions.startChatWithUser,
+    togglePinChat: chatActions.togglePinChat,
+    setChatBackground: chatActions.setChatBackground,
+    uploadChatBackground: chatActions.uploadChatBackground,
+    setChatNotify: chatActions.setChatNotify,
+    sendMedia: send.sendMedia,
+    transcribeMessage: actions.transcribeMessage,
+    sendMessage: send.sendMessage,
+    sendGif: send.sendGif,
+    sendSticker: send.sendSticker,
+    createPoll: actions.createPoll,
+    votePoll: actions.votePoll,
+    closePoll: actions.closePoll,
+    toggleReaction: actions.toggleReaction,
+    replyTo: send.replyTo,
+    editingMessage: send.editingMessage,
+    sendError: send.sendError,
+    startReply: send.startReply,
+    startEdit: send.startEdit,
+    cancelComposerContext: send.cancelComposerContext,
+    removeMessage: actions.removeMessage,
+    pinMessage: actions.pinMessage,
+    openPinned: actions.openPinned,
+    forwardMessage: actions.forwardMessage,
+    jumpRequest: actions.jumpRequest,
   };
 }
