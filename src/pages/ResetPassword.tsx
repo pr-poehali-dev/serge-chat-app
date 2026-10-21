@@ -44,7 +44,7 @@ export default function ResetPassword() {
       }
       localStorage.setItem(SESSION_STORAGE_KEY, data.user.sessionId);
       setSuccess(true);
-      setTimeout(() => navigate("/"), 1500);
+      setTimeout(() => navigate("/app"), 1500);
     } catch {
       setError("Не удалось связаться с сервером");
     } finally {

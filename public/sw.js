@@ -40,7 +40,7 @@ self.addEventListener("notificationclick", (event) => {
         target.postMessage({ type: "open-chat", chatId: info.chatId });
         return;
       }
-      await self.clients.openWindow(info.chatId ? "/?chat=" + info.chatId : "/");
+      await self.clients.openWindow(info.chatId ? "/app?chat=" + info.chatId : "/app");
     })()
   );
 });
