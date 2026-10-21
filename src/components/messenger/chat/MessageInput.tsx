@@ -19,8 +19,8 @@ interface MessageInputProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
   emojiPickerRef: RefObject<HTMLDivElement>;
-  emojiTab: "emoji" | "icq" | "gif";
-  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "gif">>;
+  emojiTab: "emoji" | "icq" | "stickers" | "gif";
+  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "stickers" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];
   GIF_CATEGORIES: GifCategory[];
   gifSearch: string;
@@ -38,6 +38,9 @@ interface MessageInputProps {
   onCancelContext?: () => void;
   replyAuthorName?: string;
   onSendGif?: (url: string) => void;
+  onSendSticker?: (path: string) => void;
+  sessionId?: string | null;
+  onCreatePoll?: () => void;
   onAddFiles?: (files: File[]) => void;
   fileNotice?: string;
 }
@@ -72,6 +75,9 @@ export default function MessageInput({
   onCancelContext,
   replyAuthorName,
   onSendGif,
+  onSendSticker,
+  sessionId,
+  onCreatePoll,
   onAddFiles,
   fileNotice,
 }: MessageInputProps) {
@@ -160,10 +166,16 @@ export default function MessageInput({
                   { label: "Фото и видео", icon: "Image", color: "#a855f7", ref: imageInputRef, accept: "image/*,video/*" },
                   { label: "Файл", icon: "File", color: "#38bdf8", ref: fileInputRef, accept: "*" },
                   { label: "Документ", icon: "FileText", color: "#34d399", ref: null, accept: ".pdf,.doc,.docx,.xls,.xlsx" },
+                  ...(onCreatePoll ? [{ label: "Опрос", icon: "BarChart3", color: "#f59e0b", ref: null, accept: "", poll: true }] : []),
                 ].map((item) => (
                   <button
                     key={item.label}
                     onClick={() => {
+                      if ("poll" in item && item.poll) {
+                        setAttachMenuOpen(false);
+                        onCreatePoll?.();
+                        return;
+                      }
                       if (item.ref) {
                         item.ref.current?.click();
                       } else {
@@ -197,6 +209,8 @@ export default function MessageInput({
             filteredGifs={filteredGifs}
             setInputText={setInputText}
             onPickGif={onSendGif}
+            onPickSticker={onSendSticker}
+            sessionId={sessionId}
           />
 
           {/* Hidden file inputs */}

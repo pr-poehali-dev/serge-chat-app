@@ -36,8 +36,8 @@ interface ChatAreaProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
   emojiPickerRef: RefObject<HTMLDivElement>;
-  emojiTab: "emoji" | "icq" | "gif";
-  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "gif">>;
+  emojiTab: "emoji" | "icq" | "stickers" | "gif";
+  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "stickers" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];
   GIF_CATEGORIES: GifCategory[];
   gifSearch: string;
@@ -72,6 +72,13 @@ interface ChatAreaProps {
   onForward?: (msg: Message) => void;
   jumpRequest?: { id: number; nonce: number } | null;
   onSendGif?: (url: string) => void;
+  onSendSticker?: (path: string) => void;
+  sessionId?: string | null;
+  onCreatePoll?: () => void;
+  onVotePoll?: (pollId: number, optionIds: number[]) => void;
+  onClosePoll?: (pollId: number) => void;
+  onOpenProfile?: (userId: number) => void;
+  onOpenChatInfo?: () => void;
   onAddFiles?: (files: File[]) => void;
   fileNotice?: string;
 }
@@ -135,6 +142,13 @@ export default function ChatArea({
   onForward,
   jumpRequest,
   onSendGif,
+  onSendSticker,
+  sessionId,
+  onCreatePoll,
+  onVotePoll,
+  onClosePoll,
+  onOpenProfile,
+  onOpenChatInfo,
   onAddFiles,
   fileNotice,
 }: ChatAreaProps) {
@@ -213,6 +227,7 @@ export default function ChatArea({
             activeGroupCall={activeGroupCall}
             onJoinGroupCall={onJoinGroupCall}
             onOpenBackground={onOpenBackground}
+            onOpenChatInfo={onOpenChatInfo}
             topics={topics}
             activeTopicId={activeTopicId}
             onSelectTopic={onSelectTopic}
@@ -270,6 +285,11 @@ export default function ChatArea({
             onForward={onForward}
             jumpRequest={jumpRequest}
             onOpenReadBy={onOpenReadBy}
+            onVotePoll={onVotePoll}
+            onClosePoll={onClosePoll}
+            canModerate={activeChat.myRole === "owner" || activeChat.myRole === "admin"}
+            sessionId={sessionId}
+            onOpenProfile={onOpenProfile}
           />
 
           <MessageInput
@@ -302,6 +322,9 @@ export default function ChatArea({
             onCancelContext={onCancelContext}
             replyAuthorName={activeChat.name}
             onSendGif={onSendGif}
+            onSendSticker={onSendSticker}
+            sessionId={sessionId}
+            onCreatePoll={onCreatePoll}
             onAddFiles={onAddFiles}
             fileNotice={fileNotice}
           />

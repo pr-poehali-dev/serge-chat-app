@@ -89,6 +89,49 @@ def promote_successor(cur, chat_id: int, leaving_user: int) -> None:
         cur.execute(f"UPDATE {SCHEMA}.chat_members SET role = 'owner' WHERE chat_id = %s AND user_id = %s", (chat_id, row[0]))
 
 
+STICKER_RE = re.compile(r"^/stickers/(animals|food|hearts|party)/[a-z0-9-]{1,30}\.png$")
+MOOD_EMOJI_RE = re.compile(r"^[^\w\s<>&\"'`]{1,8}$")
+MAX_POLL_OPTIONS = 10
+MIN_POLL_OPTIONS = 2
+
+
+def clean_text(value, limit: int) -> str:
+    return re.sub(r"[\u0000-\u0008\u000b\u000c\u000e-\u001f]", "", str(value or "")).strip()[:limit]
+
+
+def load_poll(cur, poll_id: int, me: int) -> dict:
+    cur.execute(f"""
+        SELECT p.id, p.chat_id, p.message_id, p.question, p.multiple, p.closed, p.created_by
+        FROM {SCHEMA}.polls p WHERE p.id = %s
+    """, (poll_id,))
+    p = cur.fetchone()
+    if not p:
+        return {}
+    cur.execute(f"""
+        SELECT o.id, o.text, COUNT(v.user_id)
+        FROM {SCHEMA}.poll_options o
+        LEFT JOIN {SCHEMA}.poll_votes v ON v.option_id = o.id
+        WHERE o.poll_id = %s
+        GROUP BY o.id, o.text, o.position
+        ORDER BY o.position, o.id
+    """, (poll_id,))
+    rows = cur.fetchall()
+    cur.execute(f"SELECT option_id FROM {SCHEMA}.poll_votes WHERE poll_id = %s AND user_id = %s", (poll_id, me))
+    mine = {r[0] for r in cur.fetchall()}
+    cur.execute(f"SELECT COUNT(DISTINCT user_id) FROM {SCHEMA}.poll_votes WHERE poll_id = %s", (poll_id,))
+    voters = cur.fetchone()[0]
+    total_votes = sum(r[2] for r in rows)
+    options = []
+    for oid, text, count in rows:
+        percent = round(count * 100 / voters) if voters else 0
+        options.append({"id": oid, "text": text, "votes": int(count), "percent": percent, "mine": oid in mine})
+    return {
+        "id": p[0], "messageId": p[2], "question": p[3], "multiple": bool(p[4]), "closed": bool(p[5]),
+        "createdBy": p[6], "voters": int(voters), "totalVotes": int(total_votes), "options": options,
+        "myVoted": bool(mine),
+    }
+
+
 def reply(status: int, payload: dict) -> dict:
     return {"statusCode": status, "headers": CORS, "body": json.dumps(payload)}
 
@@ -231,6 +274,11 @@ def handler(event: dict, context) -> dict:
             others = cur.fetchall()
             counted = [o for o in others if o[2]]
             chat_is_group = len(others) > 1
+            polls_by_msg: dict = {}
+            if message_ids:
+                cur.execute(f"SELECT id, message_id FROM {SCHEMA}.polls WHERE message_id = ANY(%s)", (message_ids,))
+                for pid, mid in cur.fetchall():
+                    polls_by_msg[mid] = load_poll(cur, pid, my_user_id)
             messages = []
             for r in rows:
                 removed = r[17] is not None
@@ -279,6 +327,7 @@ def handler(event: dict, context) -> dict:
                     "removed": removed,
                     "replyTo": reply_to,
                     "reactions": {} if removed else reactions_by_msg.get(r[0], {}),
+                    "poll": None if removed else polls_by_msg.get(r[0]),
                 })
             return reply(200, {"messages": messages})
 
@@ -585,7 +634,8 @@ def handler(event: dict, context) -> dict:
             if not is_member(cur, chat_id, my_user_id):
                 return reply(403, {"error": "Нет доступа к чату"})
             cur.execute(f"""
-                SELECT u.id, u.display_name, u.avatar_initials, u.avatar_color, u.avatar_url, cm.role
+                SELECT u.id, u.display_name, u.avatar_initials, u.avatar_color, u.avatar_url, cm.role,
+                       u.mood_emoji, u.mood_text
                 FROM {SCHEMA}.users u
                 JOIN {SCHEMA}.chat_members cm ON cm.user_id = u.id
                 WHERE cm.chat_id = %s
@@ -595,6 +645,7 @@ def handler(event: dict, context) -> dict:
             members = [{
                 "id": r[0], "displayName": r[1], "avatarInitials": r[2],
                 "avatarColor": r[3], "avatarUrl": r[4], "role": r[5],
+                "moodEmoji": r[6] or "", "moodText": r[7] or "",
             } for r in rows]
             cur.execute(f"SELECT name, description, avatar_url, avatar_color FROM {SCHEMA}.chats WHERE id = %s", (chat_id,))
             info = cur.fetchone()
@@ -824,6 +875,210 @@ def handler(event: dict, context) -> dict:
                     unread.append(person)
             return reply(200, {"readers": readers, "unread": unread, "hidden": hidden})
 
+        # POST /chats?action=create-poll — опрос в группе
+        if method == "POST" and action == "create-poll":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = body.get("chat_id")
+            if not isinstance(chat_id, int) or not is_group_chat(cur, chat_id):
+                return reply(400, {"error": "Опросы доступны только в группах"})
+            if not is_member(cur, chat_id, my_user_id):
+                return reply(403, {"error": "Нет доступа к чату"})
+            question = clean_text(body.get("question"), 300)
+            raw_options = body.get("options") if isinstance(body.get("options"), list) else []
+            options = []
+            for o in raw_options:
+                t = clean_text(o, 120)
+                if t and t.lower() not in [x.lower() for x in options]:
+                    options.append(t)
+            if not question:
+                return reply(400, {"error": "Напишите вопрос"})
+            if len(options) < MIN_POLL_OPTIONS:
+                return reply(400, {"error": "Нужно минимум два разных варианта ответа"})
+            if len(options) > MAX_POLL_OPTIONS:
+                return reply(400, {"error": f"Не больше {MAX_POLL_OPTIONS} вариантов"})
+            topic_id = body.get("topic_id")
+            if topic_id:
+                cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_topics WHERE id = %s AND chat_id = %s", (topic_id, chat_id))
+                if not cur.fetchone():
+                    return reply(400, {"error": "Тема не найдена"})
+            else:
+                topic_id = None
+            cur.execute(f"""
+                INSERT INTO {SCHEMA}.messages (chat_id, sender_id, text, is_read, kind, topic_id)
+                VALUES (%s, %s, %s, false, 'text', %s) RETURNING id, TO_CHAR(created_at, 'HH24:MI')
+            """, (chat_id, my_user_id, "📊 " + question, topic_id))
+            mid, mtime = cur.fetchone()
+            cur.execute(f"""
+                INSERT INTO {SCHEMA}.polls (chat_id, message_id, question, multiple, created_by)
+                VALUES (%s, %s, %s, %s, %s) RETURNING id
+            """, (chat_id, mid, question, bool(body.get("multiple")), my_user_id))
+            poll_id = cur.fetchone()[0]
+            for i, t in enumerate(options):
+                cur.execute(f"INSERT INTO {SCHEMA}.poll_options (poll_id, text, position) VALUES (%s, %s, %s)", (poll_id, t, i))
+            conn.commit()
+            poll = load_poll(cur, poll_id, my_user_id)
+            return reply(200, {"messageId": mid, "time": mtime, "poll": poll})
+
+        # POST /chats?action=vote-poll — проголосовать (повторный запрос заменяет прежний выбор)
+        if method == "POST" and action == "vote-poll":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            poll_id = body.get("poll_id")
+            option_ids = body.get("option_ids")
+            if not isinstance(poll_id, int) or not isinstance(option_ids, list):
+                return reply(400, {"error": "Нужны poll_id и option_ids"})
+            cur.execute(f"SELECT chat_id, multiple, closed FROM {SCHEMA}.polls WHERE id = %s", (poll_id,))
+            p = cur.fetchone()
+            if not p:
+                return reply(404, {"error": "Опрос не найден"})
+            if not is_member(cur, p[0], my_user_id):
+                return reply(403, {"error": "Нет доступа к опросу"})
+            if p[2]:
+                return reply(409, {"error": "Опрос уже закрыт", "code": "closed"})
+            wanted = sorted({int(x) for x in option_ids if isinstance(x, int)})
+            if len(wanted) != len(option_ids) and len(set(option_ids)) != len(wanted):
+                return reply(400, {"error": "Некорректные варианты"})
+            if not p[1] and len(wanted) > 1:
+                return reply(400, {"error": "В этом опросе можно выбрать только один вариант"})
+            if wanted:
+                cur.execute(f"SELECT id FROM {SCHEMA}.poll_options WHERE poll_id = %s AND id = ANY(%s)", (poll_id, wanted))
+                if len(cur.fetchall()) != len(wanted):
+                    return reply(400, {"error": "Такого варианта нет в этом опросе"})
+            cur.execute(f"DELETE FROM {SCHEMA}.poll_votes WHERE poll_id = %s AND user_id = %s", (poll_id, my_user_id))
+            for oid in wanted:
+                cur.execute(f"INSERT INTO {SCHEMA}.poll_votes (poll_id, option_id, user_id) VALUES (%s, %s, %s)", (poll_id, oid, my_user_id))
+            conn.commit()
+            return reply(200, {"poll": load_poll(cur, poll_id, my_user_id)})
+
+        # POST /chats?action=close-poll — закрыть опрос (автор, администратор или владелец)
+        if method == "POST" and action == "close-poll":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            poll_id = body.get("poll_id")
+            if not isinstance(poll_id, int):
+                return reply(400, {"error": "Нужен poll_id"})
+            cur.execute(f"SELECT chat_id, created_by FROM {SCHEMA}.polls WHERE id = %s", (poll_id,))
+            p = cur.fetchone()
+            if not p:
+                return reply(404, {"error": "Опрос не найден"})
+            role = get_role(cur, p[0], my_user_id)
+            if role is None:
+                return reply(403, {"error": "Нет доступа к опросу"})
+            if p[1] != my_user_id and role not in ("owner", "admin"):
+                return reply(403, {"error": "Закрыть опрос может автор или администратор"})
+            cur.execute(f"UPDATE {SCHEMA}.polls SET closed = true WHERE id = %s", (poll_id,))
+            conn.commit()
+            return reply(200, {"poll": load_poll(cur, poll_id, my_user_id)})
+
+        # GET /chats?action=poll-voters&poll_id=X — кто как проголосовал (не анонимно, как в группе)
+        if method == "GET" and action == "poll-voters":
+            try:
+                poll_id = int(params.get("poll_id"))
+            except (TypeError, ValueError):
+                return reply(400, {"error": "Нужен poll_id"})
+            cur.execute(f"SELECT chat_id FROM {SCHEMA}.polls WHERE id = %s", (poll_id,))
+            p = cur.fetchone()
+            if not p or not is_member(cur, p[0], my_user_id):
+                return reply(403, {"error": "Нет доступа к опросу"})
+            cur.execute(f"""
+                SELECT v.option_id, u.id, u.display_name, u.avatar_initials, u.avatar_color, u.avatar_url
+                FROM {SCHEMA}.poll_votes v JOIN {SCHEMA}.users u ON u.id = v.user_id
+                WHERE v.poll_id = %s ORDER BY v.created_at
+            """, (poll_id,))
+            by_option: dict = {}
+            for oid, uid, name, ini, color, url in cur.fetchall():
+                by_option.setdefault(oid, []).append({"id": uid, "displayName": name, "avatarInitials": ini, "avatarColor": color, "avatarUrl": url})
+            return reply(200, {"voters": by_option})
+
+        # GET /chats?action=stickers-favorite — мои избранные стикеры
+        if method == "GET" and action == "stickers-favorite":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            cur.execute(f"SELECT sticker FROM {SCHEMA}.favorite_stickers WHERE user_id = %s ORDER BY created_at DESC", (my_user_id,))
+            return reply(200, {"stickers": [r[0] for r in cur.fetchall()]})
+
+        # POST /chats?action=stickers-toggle — добавить стикер в избранное или убрать
+        if method == "POST" and action == "stickers-toggle":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            sticker = body.get("sticker")
+            if not isinstance(sticker, str) or not STICKER_RE.match(sticker):
+                return reply(400, {"error": "Некорректный стикер"})
+            cur.execute(f"SELECT 1 FROM {SCHEMA}.favorite_stickers WHERE user_id = %s AND sticker = %s", (my_user_id, sticker))
+            if cur.fetchone():
+                cur.execute(f"DELETE FROM {SCHEMA}.favorite_stickers WHERE user_id = %s AND sticker = %s", (my_user_id, sticker))
+                favorite = False
+            else:
+                cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.favorite_stickers WHERE user_id = %s", (my_user_id,))
+                if cur.fetchone()[0] >= 60:
+                    return reply(400, {"error": "В избранном уже 60 стикеров. Уберите лишние"})
+                cur.execute(f"INSERT INTO {SCHEMA}.favorite_stickers (user_id, sticker) VALUES (%s, %s)", (my_user_id, sticker))
+                favorite = True
+            conn.commit()
+            return reply(200, {"favorite": favorite})
+
+        # GET /chats?action=profile&user_id=X — краткий профиль человека
+        if method == "GET" and action == "profile":
+            try:
+                target = int(params.get("user_id"))
+            except (TypeError, ValueError):
+                return reply(400, {"error": "Нужен user_id"})
+            cur.execute(f"""
+                SELECT u.id, u.display_name, u.login, u.avatar_initials, u.avatar_color, u.avatar_url,
+                       u.mood_emoji, u.mood_text, u.bio, u.show_online,
+                       EXTRACT(EPOCH FROM (NOW() - u.last_seen))
+                FROM {SCHEMA}.users u WHERE u.id = %s
+            """, (target,))
+            u = cur.fetchone()
+            if not u:
+                return reply(404, {"error": "Пользователь не найден"})
+            cur.execute(f"""
+                SELECT 1 FROM {SCHEMA}.chat_members a JOIN {SCHEMA}.chat_members b ON b.chat_id = a.chat_id
+                WHERE a.user_id = %s AND b.user_id = %s LIMIT 1
+            """, (my_user_id, target))
+            if target != my_user_id and not cur.fetchone():
+                return reply(403, {"error": "Профиль доступен тем, с кем у вас есть общий чат"})
+            cur.execute(f"""
+                SELECT c.id, c.name FROM {SCHEMA}.chats c
+                JOIN {SCHEMA}.chat_members a ON a.chat_id = c.id AND a.user_id = %s
+                JOIN {SCHEMA}.chat_members b ON b.chat_id = c.id AND b.user_id = %s
+                WHERE c.is_group ORDER BY c.name LIMIT 20
+            """, (my_user_id, target))
+            common = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
+            cur.execute(f"""
+                SELECT c.id FROM {SCHEMA}.chats c
+                JOIN {SCHEMA}.chat_members a ON a.chat_id = c.id AND a.user_id = %s
+                JOIN {SCHEMA}.chat_members b ON b.chat_id = c.id AND b.user_id = %s
+                WHERE NOT c.is_group LIMIT 1
+            """, (my_user_id, target))
+            direct = cur.fetchone()
+            seen = float(u[10]) if u[10] is not None else None
+            return reply(200, {"profile": {
+                "id": u[0], "displayName": u[1], "login": u[2], "avatarInitials": u[3], "avatarColor": u[4], "avatarUrl": u[5],
+                "moodEmoji": u[6] or "", "moodText": u[7] or "", "bio": u[8] or "",
+                "statusText": status_text(seen) if u[9] else "",
+                "online": bool(u[9]) and is_online(seen),
+                "commonGroups": common,
+                "directChatId": direct[0] if direct else None,
+                "isMe": target == my_user_id,
+            }})
+
+        # POST /chats?action=update-mood — моё настроение и «о себе»
+        if method == "POST" and action == "update-mood":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            emoji = clean_text(body.get("moodEmoji"), 8)
+            text = clean_text(body.get("moodText"), 80)
+            bio = clean_text(body.get("bio"), 200)
+            if emoji and not MOOD_EMOJI_RE.match(emoji):
+                return reply(400, {"error": "В поле настроения подойдёт один эмодзи"})
+            cur.execute(f"""
+                UPDATE {SCHEMA}.users SET mood_emoji = %s, mood_text = %s, bio = %s WHERE id = %s
+            """, (emoji or None, text or None, bio or None, my_user_id))
+            conn.commit()
+            return reply(200, {"moodEmoji": emoji, "moodText": text, "bio": bio})
+
         # GET /chats — список чатов
         cur.execute(f"""
             SELECT
@@ -838,6 +1093,8 @@ def handler(event: dict, context) -> dict:
                                 WHEN m.kind = 'image' THEN '🖼 Фото'
                                 WHEN m.kind = 'file' THEN '📎 ' || COALESCE(m.file_name, 'Файл')
                                 WHEN m.kind = 'text' AND m.text ~* '^(https?://[^ ]+|/gifs/[^ ]+)[.]gif$' THEN '🎞 GIF'
+                                WHEN m.kind = 'text' AND m.text ~ '^/stickers/[a-z]+/[a-z0-9-]+[.]png$' THEN '🖼 Стикер'
+                                WHEN EXISTS (SELECT 1 FROM {SCHEMA}.polls pp WHERE pp.message_id = m.id) THEN m.text
                                 ELSE m.text END
                     FROM {SCHEMA}.messages m
                     WHERE m.chat_id = c.id
@@ -866,7 +1123,8 @@ def handler(event: dict, context) -> dict:
                 (SELECT COUNT(*) FROM {SCHEMA}.chat_members x WHERE x.chat_id = c.id) as members_count,
                 pm.id, pm.text, pm.kind, pm.file_name, pm.topic_id, pu.display_name,
                 cm_me.notify_enabled,
-                c.avatar_url, c.description, cm_me.role, cm_me.chat_bg
+                c.avatar_url, c.description, cm_me.role, cm_me.chat_bg,
+                o.mood_emoji, o.mood_text, o.bio
             FROM {SCHEMA}.chats c
             JOIN {SCHEMA}.chat_members cm_me ON cm_me.chat_id = c.id AND cm_me.user_id = %(me)s
             LEFT JOIN {SCHEMA}.messages pm ON pm.id = c.pinned_message_id AND pm.removed_at IS NULL
@@ -874,7 +1132,7 @@ def handler(event: dict, context) -> dict:
             LEFT JOIN LATERAL (
                 SELECT u.id, u.display_name, u.avatar_color, u.avatar_initials, u.avatar_url,
                        CASE WHEN u.show_online THEN u.last_seen ELSE NULL END AS last_seen,
-                       cm.typing_until, u.show_typing
+                       cm.typing_until, u.show_typing, u.mood_emoji, u.mood_text, u.bio
                 FROM {SCHEMA}.chat_members cm
                 JOIN {SCHEMA}.users u ON u.id = cm.user_id
                 WHERE cm.chat_id = c.id AND cm.user_id != %(me)s AND NOT c.is_group
@@ -914,6 +1172,9 @@ def handler(event: dict, context) -> dict:
                 "description": (r[24] or "") if is_group else "",
                 "myRole": r[25] if is_group else None,
                 "chatBg": r[26],
+                "moodEmoji": "" if is_group else (r[27] or ""),
+                "moodText": "" if is_group else (r[28] or ""),
+                "bio": "" if is_group else (r[29] or ""),
                 "contactUserId": None if is_group else r[7],
                 "memberCount": int(r[15]) if is_group and r[15] is not None else None,
                 "notifyEnabled": True if r[22] is None else bool(r[22]),

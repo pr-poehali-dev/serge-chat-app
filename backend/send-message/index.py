@@ -2,6 +2,7 @@
 import base64
 import json
 import os
+import re
 import uuid
 
 import boto3
@@ -99,6 +100,8 @@ def preview_for(kind: str, text: str, file_name: str) -> str:
         return "📎 " + (file_name or "Файл")
     if text and (text.lower().endswith(".gif") and " " not in text.strip()):
         return "🎞 GIF"
+    if text and re.match(r"^/stickers/[a-z]+/[a-z0-9-]+\.png$", text):
+        return "🖼 Стикер"
     return (text or "Новое сообщение")[:140]
 
 

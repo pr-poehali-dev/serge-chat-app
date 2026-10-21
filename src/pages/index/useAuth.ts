@@ -92,6 +92,10 @@ export function useAuth({ setChats, setActiveChatId }: UseAuthParams) {
     setAuthUser(user);
   };
 
+  const handleMoodSaved = (mood: { moodEmoji: string; moodText: string; bio: string }) => {
+    setAuthUser((u) => (u ? { ...u, ...mood } : u));
+  };
+
   const authHeaders = (): Record<string, string> =>
     authUser ? { "X-Session-Id": authUser.sessionId } : {};
 
@@ -102,6 +106,7 @@ export function useAuth({ setChats, setActiveChatId }: UseAuthParams) {
     handleLogout,
     handleUpdateProfile,
     handleAvatarUpdated,
+    handleMoodSaved,
     authHeaders,
   };
 }

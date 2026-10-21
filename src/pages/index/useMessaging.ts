@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Dispatch, SetStateAction } from "react";
 import { RecordedMedia, blobToBase64 } from "@/components/messenger/media/useRecorder";
-import { Chat, Message, PinnedMessage, ReplyPreview, Tab, AuthUser, NotificationItem, Attachment } from "@/components/messenger/types";
+import { Chat, Message, PinnedMessage, PollData, ReplyPreview, Tab, AuthUser, NotificationItem, Attachment } from "@/components/messenger/types";
 import { API_CHATS, API_SEND, API_TRANSCRIBE } from "./config";
 import { readNotifyPrefs } from "@/components/messenger/sidebar/SettingsPanels";
 import { registerServiceWorker } from "@/lib/push";
@@ -544,6 +544,111 @@ export function useMessaging({
     }
   };
 
+  const sendSticker = async (path: string) => {
+    if (!activeChatId || activeChatId < 0 || isBotChat || sending) return;
+    const replyTarget = replyTo;
+    const tempId = Date.now();
+    const time = new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    setSendError("");
+    setReplyTo(null);
+    setMessages((prev) => [...prev, { id: tempId, text: path, out: true, read: false, time, sender_id: authUser?.id ?? 1 }]);
+    try {
+      const res = await fetch(API_SEND, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ chat_id: activeChatId, topic_id: activeTopicId, reply_to_id: replyTarget?.id ?? null, text: path }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setSendError(data.error || "Не удалось отправить стикер");
+        return;
+      }
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...data } : m)));
+      setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: "🖼 Стикер", time: data.time } : c)));
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setSendError("Не удалось связаться с сервером");
+    }
+  };
+
+  const createPoll = async (question: string, options: string[], multiple: boolean): Promise<string | null> => {
+    if (!activeChatId || activeChatId < 0) return "Откройте группу, чтобы создать опрос";
+    try {
+      const res = await fetch(`${API_CHATS}?action=create-poll`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ chat_id: activeChatId, topic_id: activeTopicId, question, options, multiple }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return data.error || "Не удалось создать опрос";
+      const poll = data.poll;
+      setMessages((prev) => [
+        ...prev,
+        { id: data.messageId, text: "📊 " + question, out: true, read: false, time: data.time, sender_id: authUser?.id ?? 1, poll },
+      ]);
+      setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, lastMsg: "📊 " + question, time: data.time } : c)));
+      return null;
+    } catch {
+      return "Не удалось связаться с сервером";
+    }
+  };
+
+  const replacePoll = (poll: PollData) =>
+    setMessages((prev) => prev.map((m) => (m.poll && m.poll.id === poll.id ? { ...m, poll } : m)));
+
+  const votePoll = async (pollId: number, optionIds: number[]) => {
+    const previous = messages.find((m) => m.poll?.id === pollId)?.poll;
+    if (previous) {
+      const picked = new Set(optionIds);
+      const voters = previous.voters + (previous.myVoted ? 0 : optionIds.length ? 1 : 0) - (previous.myVoted && optionIds.length === 0 ? 1 : 0);
+      replacePoll({
+        ...previous,
+        myVoted: optionIds.length > 0,
+        voters,
+        options: previous.options.map((o) => {
+          const votes = o.votes - (o.mine ? 1 : 0) + (picked.has(o.id) ? 1 : 0);
+          return { ...o, votes, mine: picked.has(o.id), percent: voters > 0 ? Math.round((votes * 100) / voters) : 0 };
+        }),
+      });
+    }
+    try {
+      const res = await fetch(`${API_CHATS}?action=vote-poll`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ poll_id: pollId, option_ids: optionIds }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (previous) replacePoll(previous);
+        setSendError(data.error || "Не удалось проголосовать");
+        return;
+      }
+      replacePoll(data.poll);
+    } catch {
+      if (previous) replacePoll(previous);
+      setSendError("Не удалось связаться с сервером");
+    }
+  };
+
+  const closePoll = async (pollId: number) => {
+    try {
+      const res = await fetch(`${API_CHATS}?action=close-poll`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ poll_id: pollId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSendError(data.error || "Не удалось завершить опрос");
+        return;
+      }
+      replacePoll(data.poll);
+    } catch {
+      setSendError("Не удалось связаться с сервером");
+    }
+  };
+
   const sendGif = async (url: string) => {
     if (!activeChatId || activeChatId < 0 || isBotChat || sending) return;
     const replyTarget = replyTo;
@@ -805,6 +910,10 @@ export function useMessaging({
     transcribeMessage,
     sendMessage,
     sendGif,
+    sendSticker,
+    createPoll,
+    votePoll,
+    closePoll,
     toggleReaction,
     replyTo,
     editingMessage,

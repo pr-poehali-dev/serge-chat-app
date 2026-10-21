@@ -29,6 +29,7 @@ interface SidebarProps {
   notifications: NotificationItem[];
   onStartChatWithUser: (userId: number) => Promise<string | null>;
   onSetChatNotify: (chatId: number, enabled: boolean) => void;
+  onMoodSaved?: (mood: { moodEmoji: string; moodText: string; bio: string }) => void;
 }
 
 export default function Sidebar({
@@ -55,6 +56,7 @@ export default function Sidebar({
   notifications,
   onStartChatWithUser,
   onSetChatNotify,
+  onMoodSaved,
 }: SidebarProps) {
   const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
   const [groupToLeave, setGroupToLeave] = useState<Chat | null>(null);
@@ -113,6 +115,7 @@ export default function Sidebar({
             notifications={notifications}
             onStartChatWithUser={onStartChatWithUser}
             onSetChatNotify={onSetChatNotify}
+            onMoodSaved={onMoodSaved}
           />
         </div>
       </div>

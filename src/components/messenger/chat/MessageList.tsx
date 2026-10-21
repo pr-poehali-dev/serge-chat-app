@@ -8,6 +8,8 @@ import { ImageAttachment, FileCard } from "./FileAttachment";
 import { extractGifUrl } from "@/pages/index/config";
 import { Smiley, splitSmileys } from "../smileys/Smiley";
 import { resolveBg } from "../background/chatBackgrounds";
+import PollCard from "../polls/PollCard";
+import { extractStickerPath, stickerTitle } from "../stickers/stickerCatalog";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -67,6 +69,11 @@ interface MessageListProps {
   onForward?: (msg: Message) => void;
   jumpRequest?: { id: number; nonce: number } | null;
   onOpenReadBy?: (messageId: number) => void;
+  onVotePoll?: (pollId: number, optionIds: number[]) => void;
+  onClosePoll?: (pollId: number) => void;
+  canModerate?: boolean;
+  sessionId?: string | null;
+  onOpenProfile?: (userId: number) => void;
 }
 
 export default function MessageList({
@@ -90,6 +97,11 @@ export default function MessageList({
   onForward,
   jumpRequest = null,
   onOpenReadBy,
+  onVotePoll,
+  onClosePoll,
+  canModerate = false,
+  sessionId = null,
+  onOpenProfile,
 }: MessageListProps) {
   const [reactionPickerFor, setReactionPickerFor] = useState<number | null>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
@@ -162,22 +174,36 @@ export default function MessageList({
               onClick={matchIdSet.has(msg.id) && onSelectMatch ? () => onSelectMatch(msg.id) : undefined}
               style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
             >
-              {!msg.out && (
-                msg.senderAvatarUrl && activeChat.isGroup ? (
-                  <img
-                    src={msg.senderAvatarUrl}
-                    alt={msg.senderName || ""}
-                    className="h-7 w-7 shrink-0 rounded-xl object-cover mr-2 self-end mb-1"
-                  />
-                ) : (
-                  <div
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white mr-2 self-end mb-1"
-                    style={{ background: `linear-gradient(135deg, ${(activeChat.isGroup && msg.senderColor) || activeChat.color}cc, ${(activeChat.isGroup && msg.senderColor) || activeChat.color}55)` }}
+              {!msg.out && (() => {
+                const avatar =
+                  msg.senderAvatarUrl && activeChat.isGroup ? (
+                    <img
+                      src={msg.senderAvatarUrl}
+                      alt={msg.senderName || ""}
+                      className="h-7 w-7 shrink-0 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white"
+                      style={{ background: `linear-gradient(135deg, ${(activeChat.isGroup && msg.senderColor) || activeChat.color}cc, ${(activeChat.isGroup && msg.senderColor) || activeChat.color}55)` }}
+                    >
+                      {activeChat.isGroup ? (msg.senderInitials || msg.senderName || "?")[0] : activeChat.avatar[0]}
+                    </div>
+                  );
+                return activeChat.isGroup && onOpenProfile && msg.sender_id > 0 && msg.id < 1e12 ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenProfile(msg.sender_id)}
+                    title={msg.senderName ? `Профиль: ${msg.senderName}` : "Профиль"}
+                    aria-label={msg.senderName ? `Профиль: ${msg.senderName}` : "Профиль"}
+                    className="mr-2 mb-1 self-end rounded-xl transition-transform hover:scale-105"
                   >
-                    {activeChat.isGroup ? (msg.senderInitials || msg.senderName || "?")[0] : activeChat.avatar[0]}
-                  </div>
-                )
-              )}
+                    {avatar}
+                  </button>
+                ) : (
+                  <div className="mr-2 mb-1 self-end">{avatar}</div>
+                );
+              })()}
               <div className={`max-w-[82%] sm:max-w-[70%] lg:max-w-[62%] flex items-end gap-1 ${msg.out ? "flex-row-reverse" : ""}`}>
                 <div className="min-w-0">
                   {activeChat.isGroup && !msg.out && msg.senderName && (
@@ -193,7 +219,7 @@ export default function MessageList({
                   ) : msg.kind === "circle" && msg.mediaUrl ? (
                     <CircleMessage msg={msg} />
                   ) : (
-                  <div className={`${msg.kind === "voice" || msg.kind === "image" || extractGifUrl(msg.text) !== null ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.kind === "file" ? "px-3 py-2.5" : ""} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-fg/85"}`}>
+                  <div className={`${msg.kind === "voice" || msg.kind === "image" || extractGifUrl(msg.text) !== null ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.kind === "file" ? "px-3 py-2.5" : ""} ${extractStickerPath(msg.text) && !msg.removed ? "!p-0 !bg-transparent !border-0 !shadow-none" : msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-fg/85"}`}>
                     {msg.forwardedFrom && (
                       <p className={`mb-1 flex items-center gap-1 text-[11px] font-medium opacity-80 ${msg.kind === "image" ? "px-3 pt-1" : ""}`}>
                         <Icon name="Forward" size={11} className="shrink-0" />
@@ -225,6 +251,23 @@ export default function MessageList({
                           </p>
                         )}
                       </>
+                    ) : msg.poll && !msg.removed ? (
+                      <PollCard
+                        poll={msg.poll}
+                        out={msg.out}
+                        canClose={msg.out || canModerate}
+                        sessionId={sessionId}
+                        onVote={onVotePoll}
+                        onClose={onClosePoll}
+                      />
+                    ) : extractStickerPath(msg.text) && !msg.removed ? (
+                      <img
+                        src={extractStickerPath(msg.text) || ""}
+                        alt={stickerTitle(extractStickerPath(msg.text) || "")}
+                        className="h-32 w-32 object-contain sm:h-40 sm:w-40 drop-shadow-lg"
+                        loading="lazy"
+                        draggable={false}
+                      />
                     ) : extractGifUrl(msg.text) !== null ? (
                       <img
                         src={extractGifUrl(msg.text) || ""}

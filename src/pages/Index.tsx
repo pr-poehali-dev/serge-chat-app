@@ -11,6 +11,8 @@ import AuthScreen from "@/components/messenger/AuthScreen";
 import GroupMembersModal from "@/components/messenger/GroupMembersModal";
 import ForwardModal from "@/components/messenger/chat/ForwardModal";
 import ReadByModal from "@/components/messenger/chat/ReadByModal";
+import CreatePollModal from "@/components/messenger/polls/CreatePollModal";
+import ProfileSheet from "@/components/messenger/profile/ProfileSheet";
 import ChatBackgroundPicker from "@/components/messenger/background/ChatBackgroundPicker";
 import { Chat, Message, Tab } from "@/components/messenger/types";
 import { EMOJI_CATEGORIES, GIF_CATEGORIES, API_CHATS } from "./index/config";
@@ -41,6 +43,9 @@ export default function Index() {
   const [forwardSource, setForwardSource] = useState<Message | null>(null);
   const [readByMessageId, setReadByMessageId] = useState<number | null>(null);
   const [bgPickerOpen, setBgPickerOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [profileUserId, setProfileUserId] = useState<number | null>(null);
+  const [groupInfoOpen, setGroupInfoOpen] = useState(false);
 
   const {
     authUser,
@@ -49,6 +54,7 @@ export default function Index() {
     handleLogout,
     handleUpdateProfile,
     handleAvatarUpdated,
+    handleMoodSaved,
     authHeaders,
   } = useAuth({ setChats, setActiveChatId });
 
@@ -173,12 +179,24 @@ export default function Index() {
           notifications={msg.notifications}
           onStartChatWithUser={msg.startChatWithUser}
           onSetChatNotify={msg.setChatNotify}
+          onMoodSaved={handleMoodSaved}
         />
       )}
 
       {(!isMobile || mobileShowChat) && (
       <ChatArea
         activeChat={activeChat}
+        sessionId={authUser?.sessionId ?? null}
+        onSendSticker={!isBotChat && activeChatId && activeChatId > 0 ? msg.sendSticker : undefined}
+        onCreatePoll={!isBotChat && activeChat?.isGroup && activeChat.id > 0 ? () => setPollOpen(true) : undefined}
+        onVotePoll={!isBotChat ? msg.votePoll : undefined}
+        onClosePoll={!isBotChat ? msg.closePoll : undefined}
+        onOpenProfile={!isBotChat ? (id) => setProfileUserId(id) : undefined}
+        onOpenChatInfo={
+          !isBotChat && activeChat && activeChat.id > 0
+            ? () => (activeChat.isGroup ? setGroupInfoOpen(true) : activeChat.contactUserId ? setProfileUserId(activeChat.contactUserId) : undefined)
+            : undefined
+        }
         onOpenBackground={!isBotChat && activeChat && activeChat.id > 0 ? () => setBgPickerOpen(true) : undefined}
         onOpenReadBy={!isBotChat ? (id) => setReadByMessageId(id) : undefined}
         onStartGroupCall={
@@ -318,6 +336,7 @@ export default function Index() {
           onInstallBot={bg.installBot}
           onClose={() => bg.setGroupMembersOpen(false)}
           onGroupChanged={reloadChats}
+          onOpenProfile={(id) => setProfileUserId(id)}
           onLeft={() => {
             bg.setGroupMembersOpen(false);
             if (activeChat) {
@@ -346,6 +365,40 @@ export default function Index() {
           onToggleCam={callCtl.toggleCam}
           onToggleSpeaker={callCtl.toggleSpeaker}
           onEnd={callCtl.hangUp}
+        />
+      )}
+
+      {pollOpen && (
+        <CreatePollModal onCreate={msg.createPoll} onClose={() => setPollOpen(false)} />
+      )}
+
+      {authUser && (profileUserId !== null || (groupInfoOpen && activeChat?.isGroup)) && (
+        <ProfileSheet
+          sessionId={authUser.sessionId}
+          userId={profileUserId ?? undefined}
+          group={
+            profileUserId === null && activeChat?.isGroup
+              ? {
+                  name: activeChat.name,
+                  description: activeChat.description || "",
+                  avatar: activeChat.avatar,
+                  color: activeChat.color,
+                  avatarUrl: activeChat.avatarUrl,
+                  memberCount: activeChat.memberCount,
+                  myRole: activeChat.myRole,
+                }
+              : undefined
+          }
+          onClose={() => {
+            setProfileUserId(null);
+            setGroupInfoOpen(false);
+          }}
+          onWrite={(id) => msg.startChatWithUser(id)}
+          onOpenChat={(id) => {
+            setActiveChatId(id);
+            setActiveTab("chats");
+          }}
+          onOpenMembers={() => bg.setGroupMembersOpen(true)}
         />
       )}
 

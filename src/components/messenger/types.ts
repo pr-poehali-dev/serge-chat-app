@@ -17,6 +17,9 @@ export interface Chat {
   memberCount?: number | null;
   pinnedMessage?: PinnedMessage | null;
   notifyEnabled?: boolean;
+  moodEmoji?: string;
+  moodText?: string;
+  bio?: string;
   description?: string;
   myRole?: "owner" | "admin" | "member" | null;
   chatBg?: string | null;
@@ -56,6 +59,28 @@ export interface Message {
   forwardedFrom?: string | null;
   removed?: boolean;
   replyTo?: ReplyPreview | null;
+  poll?: PollData | null;
+}
+
+export interface PollOption {
+  id: number;
+  text: string;
+  votes: number;
+  percent: number;
+  mine: boolean;
+}
+
+export interface PollData {
+  id: number;
+  messageId: number;
+  question: string;
+  multiple: boolean;
+  closed: boolean;
+  createdBy: number;
+  voters: number;
+  totalVotes: number;
+  myVoted: boolean;
+  options: PollOption[];
 }
 
 export interface ReplyPreview {
@@ -95,6 +120,9 @@ export interface AuthUser {
   avatarColor: string;
   avatarUrl?: string | null;
   sessionId: string;
+  moodEmoji?: string;
+  moodText?: string;
+  bio?: string;
 }
 
 export interface NotificationItem {

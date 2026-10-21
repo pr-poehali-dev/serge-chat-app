@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 import { Chat, Tab, AuthUser, NotificationItem, DirectoryUser } from "../types";
 import SettingsPanels, { SettingsSection } from "./SettingsPanels";
+import { API_CHATS } from "@/pages/index/config";
 import { useAppearance } from "@/hooks/use-appearance";
 
 const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
@@ -30,6 +31,7 @@ interface MiscTabsProps {
   notifications: NotificationItem[];
   onStartChatWithUser: (userId: number) => Promise<string | null>;
   onSetChatNotify: (chatId: number, enabled: boolean) => void;
+  onMoodSaved?: (mood: { moodEmoji: string; moodText: string; bio: string }) => void;
 }
 
 export default function MiscTabs({
@@ -44,10 +46,17 @@ export default function MiscTabs({
   notifications,
   onStartChatWithUser,
   onSetChatNotify,
+  onMoodSaved,
 }: MiscTabsProps) {
   const [login, setLogin] = useState(authUser?.login || "");
   const [firstName, setFirstName] = useState(authUser?.firstName || "");
   const [lastName, setLastName] = useState(authUser?.lastName || "");
+  const [moodEmoji, setMoodEmoji] = useState(authUser?.moodEmoji || "");
+  const [moodText, setMoodText] = useState(authUser?.moodText || "");
+  const [bio, setBio] = useState(authUser?.bio || "");
+  const [moodSaving, setMoodSaving] = useState(false);
+  const [moodSaved, setMoodSaved] = useState(false);
+  const [moodError, setMoodError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -72,6 +81,9 @@ export default function MiscTabs({
     setLogin(authUser?.login || "");
     setFirstName(authUser?.firstName || "");
     setLastName(authUser?.lastName || "");
+    setMoodEmoji(authUser?.moodEmoji || "");
+    setMoodText(authUser?.moodText || "");
+    setBio(authUser?.bio || "");
   }, [authUser]);
 
   const handleSave = async () => {
@@ -127,6 +139,31 @@ export default function MiscTabs({
       setAvatarError("Не удалось загрузить фото");
     } finally {
       setAvatarUploading(false);
+    }
+  };
+
+  const saveMood = async () => {
+    if (!authUser) return;
+    setMoodSaving(true);
+    setMoodError("");
+    try {
+      const res = await fetch(`${API_CHATS}?action=update-mood`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": authUser.sessionId },
+        body: JSON.stringify({ moodEmoji: moodEmoji.trim(), moodText: moodText.trim(), bio: bio.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMoodError(data.error || "Не удалось сохранить");
+        return;
+      }
+      onMoodSaved?.({ moodEmoji: data.moodEmoji, moodText: data.moodText, bio: data.bio });
+      setMoodSaved(true);
+      window.setTimeout(() => setMoodSaved(false), 2000);
+    } catch {
+      setMoodError("Не удалось связаться с сервером");
+    } finally {
+      setMoodSaving(false);
     }
   };
 
@@ -373,6 +410,52 @@ export default function MiscTabs({
               className="w-full rounded-2xl gradient-btn text-white text-sm font-medium py-3 sm:py-2.5 transition-all disabled:opacity-40 hover:-translate-y-0.5"
             >
               {saving ? <Icon name="Loader" size={14} className="animate-spin mx-auto" /> : saved ? "Сохранено ✓" : "Сохранить профиль"}
+            </button>
+          </div>
+
+          <div className="space-y-2 mb-4">
+            <p className="text-xs text-fg/40 font-medium mb-2 px-1">НАСТРОЕНИЕ И О СЕБЕ</p>
+            <div className="flex flex-wrap gap-1.5 px-0.5">
+              {["😊", "😎", "🥳", "😴", "🤔", "😍", "🔥", "💪", "🎧", "☕", "🏖️", "🚗"].map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => setMoodEmoji(moodEmoji === e ? "" : e)}
+                  aria-label={`Настроение ${e}`}
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl text-lg transition-all ${
+                    moodEmoji === e ? "bg-purple-500/25 ring-1 ring-purple-400/60" : "bg-fg/[0.05] hover:bg-fg/[0.1]"
+                  }`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5 focus-within:border-purple-500/40 transition-all">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center text-lg">{moodEmoji || "🙂"}</span>
+              <input
+                className="flex-1 bg-transparent text-sm text-fg/85 placeholder:text-fg/30 outline-none min-w-0"
+                placeholder="Что у вас сейчас? Например: на работе"
+                maxLength={80}
+                value={moodText}
+                onChange={(e) => setMoodText(e.target.value)}
+              />
+            </div>
+            <textarea
+              className="w-full resize-none rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-2.5 text-sm text-fg/85 placeholder:text-fg/30 outline-none focus:border-purple-500/40 transition-all"
+              placeholder="Коротко о себе (до 200 символов)"
+              maxLength={200}
+              rows={3}
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+            />
+            <p className="px-1 text-right text-[10px] text-fg/30">{bio.length}/200</p>
+            {moodError && <p className="text-xs text-red-400 px-1 break-words">{moodError}</p>}
+            <button
+              onClick={saveMood}
+              disabled={moodSaving || !authUser}
+              className="w-full rounded-2xl gradient-btn text-white text-sm font-medium py-3 sm:py-2.5 transition-all disabled:opacity-40 hover:-translate-y-0.5"
+            >
+              {moodSaving ? <Icon name="Loader" size={14} className="animate-spin mx-auto" /> : moodSaved ? "Сохранено ✓" : "Сохранить настроение"}
             </button>
           </div>
 

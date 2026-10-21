@@ -26,7 +26,7 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 RESET_TOKEN_TTL_MINUTES = 60
 
-USER_FIELDS = "id, email, login, first_name, last_name, display_name, avatar_initials, avatar_color, avatar_url, session_id"
+USER_FIELDS = "id, email, login, first_name, last_name, display_name, avatar_initials, avatar_color, avatar_url, session_id, mood_emoji, mood_text, bio"
 
 
 def get_conn():
@@ -49,6 +49,9 @@ def user_row_to_dict(r):
         "avatarColor": r[7],
         "avatarUrl": r[8],
         "sessionId": r[9],
+        "moodEmoji": (r[10] if len(r) > 10 else None) or "",
+        "moodText": (r[11] if len(r) > 11 else None) or "",
+        "bio": (r[12] if len(r) > 12 else None) or "",
     }
 
 
@@ -210,17 +213,17 @@ def handler(event: dict, context) -> dict:
                 FROM {SCHEMA}.users WHERE email = %s
             """, (email,))
             row = cur.fetchone()
-            if not row or not row[10] or not row[11]:
+            if not row or not row[13] or not row[14]:
                 return {"statusCode": 401, "headers": CORS, "body": json.dumps({"error": "Неверный email или пароль"})}
 
-            if hash_password(password, row[11]) != row[10]:
+            if hash_password(password, row[14]) != row[13]:
                 return {"statusCode": 401, "headers": CORS, "body": json.dumps({"error": "Неверный email или пароль"})}
 
             session_id = secrets.token_hex(32)
             cur.execute(f"UPDATE {SCHEMA}.users SET session_id = %s, session_expires_at = NOW() + INTERVAL '6 months', is_online = true WHERE id = %s", (session_id, row[0]))
             conn.commit()
 
-            user_dict = user_row_to_dict((row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], session_id))
+            user_dict = user_row_to_dict((row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], session_id, row[10], row[11], row[12]))
             return {"statusCode": 200, "headers": CORS, "body": json.dumps({"user": user_dict})}
 
         if method == "POST" and action == "forgot-password":

@@ -11,6 +11,7 @@ interface ChatHeaderProps {
   activeGroupCall?: { callId: number; isVideo: boolean; participants: number } | null;
   onJoinGroupCall?: () => void;
   onOpenBackground?: () => void;
+  onOpenChatInfo?: () => void;
   topics?: Topic[];
   activeTopicId?: number | null;
   onSelectTopic?: (id: number | null) => void;
@@ -31,6 +32,7 @@ export default function ChatHeader({
   activeGroupCall,
   onJoinGroupCall,
   onOpenBackground,
+  onOpenChatInfo,
   topics,
   activeTopicId,
   onSelectTopic,
@@ -54,6 +56,14 @@ export default function ChatHeader({
               <Icon name="ArrowLeft" size={18} />
             </button>
           )}
+          <div
+            role={onOpenChatInfo ? "button" : undefined}
+            tabIndex={onOpenChatInfo ? 0 : undefined}
+            onClick={onOpenChatInfo}
+            onKeyDown={(e) => { if (onOpenChatInfo && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpenChatInfo(); } }}
+            title={onOpenChatInfo ? (activeChat.isGroup ? "О группе" : "Профиль") : undefined}
+            className={`flex min-w-0 flex-1 items-center gap-2 sm:gap-4 ${onOpenChatInfo ? "cursor-pointer rounded-2xl -m-1 p-1 transition-colors hover:bg-fg/[0.04]" : ""}`}
+          >
           <div className="relative">
             {activeChat.avatarUrl ? (
               <img
@@ -74,7 +84,14 @@ export default function ChatHeader({
             )}
           </div>
           <div className="min-w-0">
-            <h2 className="font-bold text-fg/95 truncate">{activeChat.name}</h2>
+            <h2 className="flex items-center gap-1.5 font-bold text-fg/95">
+              <span className="truncate">{activeChat.name}</span>
+              {!activeChat.isGroup && activeChat.moodEmoji && (
+                <span className="shrink-0 text-base leading-none" title={activeChat.moodText || "Настроение"}>
+                  {activeChat.moodEmoji}
+                </span>
+              )}
+            </h2>
             {!activeChat.isGroup && activeChat.typing ? (
               <p className="flex items-center gap-1.5 text-xs text-purple-400 truncate">
                 печатает
@@ -99,6 +116,12 @@ export default function ChatHeader({
                   : activeChat.statusText || (activeChat.online ? "в сети" : "был(а) недавно")}
               </p>
             )}
+            {!activeChat.isGroup && !activeChat.isBot && (activeChat.moodText || activeChat.bio) && (
+              <p className="truncate text-[11px] text-fg/45" title={activeChat.bio || activeChat.moodText}>
+                {activeChat.moodText || activeChat.bio}
+              </p>
+            )}
+          </div>
           </div>
 
           {showEncryptBadge && (

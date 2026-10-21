@@ -2,6 +2,7 @@ import { RefObject, Dispatch, SetStateAction } from "react";
 import Icon from "@/components/ui/icon";
 import { SMILEYS, Smiley } from "../smileys/Smiley";
 import { useGifSearch } from "@/pages/index/useGifSearch";
+import StickerPanel from "../stickers/StickerPanel";
 
 export interface EmojiCategory {
   label: string;
@@ -23,8 +24,8 @@ interface EmojiGifPickerProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
   emojiPickerRef: RefObject<HTMLDivElement>;
-  emojiTab: "emoji" | "icq" | "gif";
-  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "gif">>;
+  emojiTab: "emoji" | "icq" | "stickers" | "gif";
+  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "stickers" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];
   GIF_CATEGORIES: GifCategory[];
   gifSearch: string;
@@ -32,6 +33,8 @@ interface EmojiGifPickerProps {
   filteredGifs: GifItem[] | null;
   setInputText: Dispatch<SetStateAction<string>>;
   onPickGif?: (url: string) => void;
+  onPickSticker?: (path: string) => void;
+  sessionId?: string | null;
 }
 
 export default function EmojiGifPicker({
@@ -47,6 +50,8 @@ export default function EmojiGifPicker({
   filteredGifs,
   setInputText,
   onPickGif,
+  onPickSticker,
+  sessionId = null,
 }: EmojiGifPickerProps) {
   const remote = useGifSearch(gifSearch, emojiPickerOpen && emojiTab === "gif");
   const useRemote = remote.enabled;
@@ -75,6 +80,7 @@ export default function EmojiGifPicker({
               {[
                 { id: "emoji" as const, label: "😊 Эмодзи" },
                 { id: "icq" as const, label: "🌼 ICQ" },
+                ...(onPickSticker ? [{ id: "stickers" as const, label: "🖼 Стикеры" }] : []),
                 { id: "gif" as const, label: "🎬 GIF" },
               ].map((t) => (
                 <button
@@ -155,6 +161,16 @@ export default function EmojiGifPicker({
                   Можно набирать и вручную: например :-) или ;-) превратятся в смайл.
                 </p>
               </div>
+            )}
+
+            {emojiTab === "stickers" && onPickSticker && (
+              <StickerPanel
+                sessionId={sessionId}
+                onPick={(path) => {
+                  onPickSticker(path);
+                  setEmojiPickerOpen(false);
+                }}
+              />
             )}
 
             {emojiTab === "gif" && (

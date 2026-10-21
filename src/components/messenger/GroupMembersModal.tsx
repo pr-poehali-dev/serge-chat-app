@@ -15,6 +15,8 @@ interface GroupMember {
   avatarColor: string;
   avatarUrl?: string | null;
   role?: GroupRole;
+  moodEmoji?: string;
+  moodText?: string;
 }
 
 const ROLE_LABEL: Record<GroupRole, string> = { owner: "Владелец", admin: "Администратор", member: "" };
@@ -27,6 +29,7 @@ interface GroupMembersModalProps {
   onClose: () => void;
   onGroupChanged?: () => void;
   onLeft?: () => void;
+  onOpenProfile?: (userId: number) => void;
 }
 
 type Tab = "members" | "add-people" | "add-bots" | "settings";
@@ -41,7 +44,7 @@ const fileToBase64 = (file: File) =>
     r.readAsDataURL(file);
   });
 
-export default function GroupMembersModal({ chat, authUser, installedBotUsernames, onInstallBot, onClose, onGroupChanged, onLeft }: GroupMembersModalProps) {
+export default function GroupMembersModal({ chat, authUser, installedBotUsernames, onInstallBot, onClose, onGroupChanged, onLeft, onOpenProfile }: GroupMembersModalProps) {
   const [tab, setTab] = useState<Tab>("members");
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
@@ -338,11 +341,19 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
                         {m.avatarInitials}
                       </div>
                     )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-fg/90 truncate">
-                        {m.displayName}
-                        {authUser?.id === m.id && <span className="ml-1 text-xs font-normal text-fg/35">(вы)</span>}
+                    <div
+                      className={`flex-1 min-w-0 ${onOpenProfile ? "cursor-pointer" : ""}`}
+                      onClick={onOpenProfile ? () => onOpenProfile(m.id) : undefined}
+                      role={onOpenProfile ? "button" : undefined}
+                      tabIndex={onOpenProfile ? 0 : undefined}
+                      onKeyDown={onOpenProfile ? (e) => { if (e.key === "Enter") onOpenProfile(m.id); } : undefined}
+                    >
+                      <p className="flex items-center gap-1.5 text-sm font-semibold text-fg/90">
+                        <span className="truncate">{m.displayName}</span>
+                        {m.moodEmoji && <span className="shrink-0 text-base leading-none" title={m.moodText || "Настроение"}>{m.moodEmoji}</span>}
+                        {authUser?.id === m.id && <span className="shrink-0 text-xs font-normal text-fg/35">(вы)</span>}
                       </p>
+                      {m.moodText && <p className="truncate text-[11px] text-fg/45">{m.moodText}</p>}
                       {role !== "member" && (
                         <p className={`flex items-center gap-1 text-[11px] font-medium ${role === "owner" ? "text-amber-400" : "text-purple-400"}`}>
                           <Icon name={role === "owner" ? "Crown" : "Shield"} size={11} />

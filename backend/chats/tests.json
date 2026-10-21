@@ -130,6 +130,56 @@
       "method": "GET",
       "path": "/?action=read-by",
       "expectedStatus": 400
+    },
+    {
+      "name": "Create poll without session returns 401",
+      "method": "POST",
+      "path": "/?action=create-poll",
+      "body": {
+        "chat_id": 1,
+        "question": "Q",
+        "options": [
+          "a",
+          "b"
+        ]
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Vote poll without session returns 401",
+      "method": "POST",
+      "path": "/?action=vote-poll",
+      "body": {
+        "poll_id": 1,
+        "option_ids": [
+          1
+        ]
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Toggle sticker without session returns 401",
+      "method": "POST",
+      "path": "/?action=stickers-toggle",
+      "body": {
+        "sticker": "/stickers/animals/cat.png"
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Update mood without session returns 401",
+      "method": "POST",
+      "path": "/?action=update-mood",
+      "body": {
+        "moodEmoji": "x"
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Profile without user id returns 400",
+      "method": "GET",
+      "path": "/?action=profile",
+      "expectedStatus": 400
     }
   ]
 }
