@@ -2,24 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 import { Chat, DirectoryUser, BotInfo, AuthUser } from "./types";
 import { BOT_CATALOG } from "./BotStore";
+import { GroupRole, GroupMember, ConfirmState } from "./groupMembers/types";
+import MembersTab from "./groupMembers/MembersTab";
+import { AddPeopleTab, AddBotsTab } from "./groupMembers/AddTabs";
+import GroupSettingsTab from "./groupMembers/GroupSettingsTab";
+import ConfirmDialog from "./groupMembers/ConfirmDialog";
 
 const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
 const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
-
-type GroupRole = "owner" | "admin" | "member";
-
-interface GroupMember {
-  id: number;
-  displayName: string;
-  avatarInitials: string;
-  avatarColor: string;
-  avatarUrl?: string | null;
-  role?: GroupRole;
-  moodEmoji?: string;
-  moodText?: string;
-}
-
-const ROLE_LABEL: Record<GroupRole, string> = { owner: "Владелец", admin: "Администратор", member: "" };
 
 interface GroupMembersModalProps {
   chat: Chat;
@@ -54,7 +44,7 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [myRole, setMyRole] = useState<GroupRole>(chat.myRole || "member");
   const [menuFor, setMenuFor] = useState<number | null>(null);
-  const [confirm, setConfirm] = useState<{ kind: "transfer" | "remove" | "leave"; member?: GroupMember } | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [groupName, setGroupName] = useState(chat.name);
@@ -319,238 +309,56 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {tab === "members" && (
-            loadingMembers ? (
-              <div className="flex items-center justify-center py-8">
-                <Icon name="Loader" size={20} className="animate-spin text-fg/30" />
-              </div>
-            ) : members.length === 0 ? (
-              <p className="text-center text-xs text-fg/25 py-8">Нет данных об участниках</p>
-            ) : (
-              members.map((m) => {
-                const role = m.role || "member";
-                const showMenu = !isLocalChat && isOwner && authUser?.id !== m.id && role !== "owner";
-                return (
-                  <div key={m.id} className="relative group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-fg/[0.04] transition-all">
-                    {m.avatarUrl ? (
-                      <img src={m.avatarUrl} alt={m.displayName} className="h-10 w-10 shrink-0 rounded-2xl object-cover" />
-                    ) : (
-                      <div
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-bold text-white"
-                        style={{ background: `linear-gradient(135deg, ${m.avatarColor}cc, ${m.avatarColor}55)` }}
-                      >
-                        {m.avatarInitials}
-                      </div>
-                    )}
-                    <div
-                      className={`flex-1 min-w-0 ${onOpenProfile ? "cursor-pointer" : ""}`}
-                      onClick={onOpenProfile ? () => onOpenProfile(m.id) : undefined}
-                      role={onOpenProfile ? "button" : undefined}
-                      tabIndex={onOpenProfile ? 0 : undefined}
-                      onKeyDown={onOpenProfile ? (e) => { if (e.key === "Enter") onOpenProfile(m.id); } : undefined}
-                    >
-                      <p className="flex items-center gap-1.5 text-sm font-semibold text-fg/90">
-                        <span className="truncate">{m.displayName}</span>
-                        {m.moodEmoji && <span className="shrink-0 text-base leading-none" title={m.moodText || "Настроение"}>{m.moodEmoji}</span>}
-                        {authUser?.id === m.id && <span className="shrink-0 text-xs font-normal text-fg/35">(вы)</span>}
-                      </p>
-                      {m.moodText && <p className="truncate text-[11px] text-fg/45">{m.moodText}</p>}
-                      {role !== "member" && (
-                        <p className={`flex items-center gap-1 text-[11px] font-medium ${role === "owner" ? "text-amber-400" : "text-purple-400"}`}>
-                          <Icon name={role === "owner" ? "Crown" : "Shield"} size={11} />
-                          {ROLE_LABEL[role]}
-                        </p>
-                      )}
-                    </div>
-                    {showMenu && (
-                      <button
-                        onClick={() => setMenuFor(menuFor === m.id ? null : m.id)}
-                        aria-label="Действия с участником"
-                        className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-fg/30 hover:text-fg/80 hover:bg-fg/[0.08] transition-all"
-                      >
-                        <Icon name="MoreVertical" size={16} />
-                      </button>
-                    )}
-                    {!showMenu && canRemove(m) && (
-                      <button
-                        onClick={() => setConfirm({ kind: "remove", member: m })}
-                        disabled={removingId === m.id}
-                        aria-label="Удалить из группы"
-                        className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-fg/30 hover:text-red-400 hover:bg-red-400/10 transition-all disabled:opacity-50"
-                      >
-                        <Icon name={removingId === m.id ? "Loader" : "UserMinus"} size={14} className={removingId === m.id ? "animate-spin" : ""} />
-                      </button>
-                    )}
-                    {menuFor === m.id && (
-                      <div
-                        className="absolute right-3 top-12 z-20 w-60 overflow-hidden rounded-2xl animate-fade-in"
-                        style={{ background: "hsl(var(--popover))", border: "1px solid rgb(var(--fg) / calc(0.12 * var(--fg-gain)))", boxShadow: "0 12px 40px rgba(0,0,0,0.35)" }}
-                      >
-                        {role === "member" ? (
-                          <button onClick={() => changeRole(m.id, "admin")} className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-fg/80 hover:bg-fg/[0.06]">
-                            <Icon name="Shield" size={14} className="text-purple-400" />
-                            Сделать администратором
-                          </button>
-                        ) : (
-                          <button onClick={() => changeRole(m.id, "member")} className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-fg/80 hover:bg-fg/[0.06]">
-                            <Icon name="ShieldOff" size={14} className="text-fg/50" />
-                            Снять права администратора
-                          </button>
-                        )}
-                        <button
-                          onClick={() => { setMenuFor(null); setConfirm({ kind: "transfer", member: m }); }}
-                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-fg/80 hover:bg-fg/[0.06]"
-                        >
-                          <Icon name="Crown" size={14} className="text-amber-400" />
-                          Передать группу ему
-                        </button>
-                        <button
-                          onClick={() => { setMenuFor(null); setConfirm({ kind: "remove", member: m }); }}
-                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-red-400 hover:bg-red-400/10"
-                        >
-                          <Icon name="UserMinus" size={14} />
-                          Удалить из группы
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )
+            <MembersTab
+              loadingMembers={loadingMembers}
+              members={members}
+              isLocalChat={isLocalChat}
+              isOwner={isOwner}
+              authUser={authUser}
+              onOpenProfile={onOpenProfile}
+              menuFor={menuFor}
+              setMenuFor={setMenuFor}
+              canRemove={canRemove}
+              setConfirm={setConfirm}
+              removingId={removingId}
+              changeRole={changeRole}
+            />
           )}
 
           {tab === "add-people" && (
-            availableUsers.length === 0 ? (
-              <p className="text-center text-xs text-fg/25 py-8">Никого не найдено</p>
-            ) : (
-              availableUsers.map((u) => (
-                <div key={u.id} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-fg/[0.04] transition-all">
-                  {u.avatarUrl ? (
-                    <img src={u.avatarUrl} alt={u.displayName} className="h-10 w-10 shrink-0 rounded-2xl object-cover" />
-                  ) : (
-                    <div
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-bold text-white"
-                      style={{ background: `linear-gradient(135deg, ${u.avatarColor}cc, ${u.avatarColor}55)` }}
-                    >
-                      {u.avatarInitials}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-fg/90 truncate">{u.displayName}</p>
-                    <p className="text-xs text-fg/35 truncate">@{u.login}</p>
-                  </div>
-                  <button
-                    onClick={() => addMember(u.id)}
-                    disabled={isLocalChat || addingId === u.id}
-                    className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-medium gradient-btn text-white transition-all disabled:opacity-40 hover:-translate-y-0.5"
-                  >
-                    {addingId === u.id ? <Icon name="Loader" size={13} className="animate-spin" /> : "Добавить"}
-                  </button>
-                </div>
-              ))
-            )
+            <AddPeopleTab
+              availableUsers={availableUsers}
+              isLocalChat={isLocalChat}
+              addingId={addingId}
+              addMember={addMember}
+            />
           )}
 
           {tab === "settings" && (
-            <div className="space-y-5 px-2 py-2">
-              <div className="flex items-center gap-4">
-                {groupAvatar ? (
-                  <img src={groupAvatar} alt={groupName} className="h-20 w-20 rounded-3xl object-cover" />
-                ) : (
-                  <div
-                    className="flex h-20 w-20 items-center justify-center rounded-3xl text-2xl font-black text-white"
-                    style={{ background: `linear-gradient(135deg, ${chat.color}cc, ${chat.color}55)` }}
-                  >
-                    {chat.avatar}
-                  </div>
-                )}
-                {canManage && !isLocalChat ? (
-                  <div className="flex flex-col gap-2">
-                    <button
-                      onClick={() => avatarInputRef.current?.click()}
-                      disabled={busy}
-                      className="flex items-center gap-2 rounded-xl gradient-btn px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
-                    >
-                      <Icon name={busy ? "Loader" : "ImagePlus"} size={13} className={busy ? "animate-spin" : ""} />
-                      Сменить фото
-                    </button>
-                    {groupAvatar && (
-                      <button onClick={removeAvatar} disabled={busy} className="text-left text-xs text-fg/45 hover:text-red-400 disabled:opacity-50">
-                        Убрать фото
-                      </button>
-                    )}
-                    <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={changeAvatar} />
-                  </div>
-                ) : (
-                  <p className="text-xs text-fg/40">Фото группы меняют владелец и администраторы</p>
-                )}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-fg/30">Название</label>
-                <input
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                  readOnly={!canManage || isLocalChat}
-                  maxLength={100}
-                  className="w-full rounded-2xl border border-fg/[0.08] bg-fg/[0.06] px-4 py-2.5 text-sm text-fg/85 outline-none focus:border-purple-500/40 read-only:opacity-70"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-fg/30">Описание</label>
-                <textarea
-                  value={groupDesc}
-                  onChange={(e) => setGroupDesc(e.target.value)}
-                  readOnly={!canManage || isLocalChat}
-                  maxLength={300}
-                  rows={3}
-                  placeholder={canManage ? "О чём эта группа" : "Описания нет"}
-                  className="w-full resize-none rounded-2xl border border-fg/[0.08] bg-fg/[0.06] px-4 py-2.5 text-sm text-fg/85 outline-none placeholder:text-fg/25 focus:border-purple-500/40 read-only:opacity-70"
-                />
-              </div>
-              {canManage && !isLocalChat && (
-                <button onClick={saveInfo} disabled={busy} className="w-full rounded-2xl gradient-btn py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-                  {busy ? "Сохраняем..." : "Сохранить"}
-                </button>
-              )}
-              {!isLocalChat && (
-                <button
-                  onClick={() => setConfirm({ kind: "leave" })}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/20"
-                >
-                  <Icon name="LogOut" size={14} />
-                  Покинуть группу
-                </button>
-              )}
-            </div>
+            <GroupSettingsTab
+              chat={chat}
+              groupAvatar={groupAvatar}
+              groupName={groupName}
+              setGroupName={setGroupName}
+              groupDesc={groupDesc}
+              setGroupDesc={setGroupDesc}
+              canManage={canManage}
+              isLocalChat={isLocalChat}
+              busy={busy}
+              avatarInputRef={avatarInputRef}
+              changeAvatar={changeAvatar}
+              removeAvatar={removeAvatar}
+              saveInfo={saveInfo}
+              setConfirm={setConfirm}
+            />
           )}
 
           {tab === "add-bots" && (
-            filteredBots.map((bot) => {
-              const installed = installedBotUsernames.includes(bot.username);
-              return (
-                <div key={bot.username} className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-fg/[0.04] transition-all">
-                  <div
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-lg"
-                    style={{ background: `${bot.color}22`, border: `1px solid ${bot.color}33` }}
-                  >
-                    {bot.avatar}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-fg/90 truncate">{bot.name}</p>
-                    <p className="text-xs text-fg/35 truncate">{bot.description}</p>
-                  </div>
-                  <button
-                    onClick={() => !installed && onInstallBot(bot)}
-                    disabled={installed}
-                    className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
-                      installed ? "bg-fg/[0.06] text-fg/30 cursor-default" : "gradient-btn text-white hover:-translate-y-0.5"
-                    }`}
-                  >
-                    {installed ? "Добавлен" : "Добавить"}
-                  </button>
-                </div>
-              );
-            })
+            <AddBotsTab
+              filteredBots={filteredBots}
+              installedBotUsernames={installedBotUsernames}
+              onInstallBot={onInstallBot}
+            />
           )}
         </div>
 
@@ -561,42 +369,15 @@ export default function GroupMembersModal({ chat, authUser, installedBotUsername
         )}
 
         {confirm && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55 p-5" onClick={() => setConfirm(null)}>
-            <div
-              className="w-full max-w-xs rounded-3xl p-5 animate-fade-in"
-              style={{ background: "hsl(var(--popover))", border: "1px solid rgb(var(--fg) / calc(0.12 * var(--fg-gain)))" }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-base font-bold text-fg/95">
-                {confirm.kind === "transfer" ? "Передать группу?" : confirm.kind === "remove" ? "Удалить из группы?" : "Покинуть группу?"}
-              </h3>
-              <p className="mt-2 text-sm leading-snug text-fg/55">
-                {confirm.kind === "transfer"
-                  ? `${confirm.member?.displayName} станет владельцем, а вы останетесь администратором. Вернуть права сможет только он.`
-                  : confirm.kind === "remove"
-                  ? `${confirm.member?.displayName} больше не увидит переписку группы.`
-                  : isOwner
-                  ? "Вы владелец: права перейдут старшему администратору или самому давнему участнику."
-                  : "Вы перестанете получать сообщения этой группы."}
-              </p>
-              <div className="mt-4 flex gap-2">
-                <button onClick={() => setConfirm(null)} className="flex-1 rounded-2xl border border-fg/10 py-2.5 text-sm text-fg/70 hover:bg-fg/[0.06]">
-                  Отмена
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={() => {
-                    if (confirm.kind === "transfer" && confirm.member) transferOwner(confirm.member.id);
-                    else if (confirm.kind === "remove" && confirm.member) removeMember(confirm.member.id);
-                    else leaveGroup();
-                  }}
-                  className={`flex-1 rounded-2xl py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${confirm.kind === "transfer" ? "gradient-btn" : "bg-red-500 hover:bg-red-600"}`}
-                >
-                  {confirm.kind === "transfer" ? "Передать" : confirm.kind === "remove" ? "Удалить" : "Покинуть"}
-                </button>
-              </div>
-            </div>
-          </div>
+          <ConfirmDialog
+            confirm={confirm}
+            isOwner={isOwner}
+            busy={busy}
+            setConfirm={setConfirm}
+            transferOwner={transferOwner}
+            removeMember={removeMember}
+            leaveGroup={leaveGroup}
+          />
         )}
       </div>
     </div>
