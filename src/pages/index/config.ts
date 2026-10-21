@@ -6,6 +6,7 @@ export const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e
 export const API_TRANSCRIBE = "https://functions.poehali.dev/9c47e0da-18f9-4bab-96c3-0531023fb5cc";
 export const API_PUSH = "https://functions.poehali.dev/8415601d-6478-4ed7-947d-cfbee7dfbb93";
 export const SESSION_STORAGE_KEY = "trindelka_session_id";
+export const SESSION_EXPIRED_KEY = "trindelka_session_expired";
 
 export const GROUP_COLORS = ["#a855f7", "#ec4899", "#38bdf8", "#34d399", "#f59e0b", "#6366f1"];
 
@@ -41,7 +42,7 @@ export const GIF_CATEGORIES = [
   ]},
 ];
 
-const GIF_URL_RE = /(?:https?:\/\/[^\s]+|\/gifs\/[^\s]+)\.gif/i;
+const GIF_URL_RE = /(?:https?:\/\/[^\s]+|\/gifs\/[^\s]+)\.gif(?:\?[^\s]*)?$/i;
 
 export const extractGifUrl = (text: string): string | null => {
   const trimmed = (text || "").trim();

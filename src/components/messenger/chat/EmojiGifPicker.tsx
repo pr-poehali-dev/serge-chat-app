@@ -1,5 +1,7 @@
 import { RefObject, Dispatch, SetStateAction } from "react";
 import Icon from "@/components/ui/icon";
+import { SMILEYS, Smiley } from "../smileys/Smiley";
+import { useGifSearch } from "@/pages/index/useGifSearch";
 
 export interface EmojiCategory {
   label: string;
@@ -21,8 +23,8 @@ interface EmojiGifPickerProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
   emojiPickerRef: RefObject<HTMLDivElement>;
-  emojiTab: "emoji" | "gif";
-  setEmojiTab: Dispatch<SetStateAction<"emoji" | "gif">>;
+  emojiTab: "emoji" | "icq" | "gif";
+  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];
   GIF_CATEGORIES: GifCategory[];
   gifSearch: string;
@@ -46,6 +48,8 @@ export default function EmojiGifPicker({
   setInputText,
   onPickGif,
 }: EmojiGifPickerProps) {
+  const remote = useGifSearch(gifSearch, emojiPickerOpen && emojiTab === "gif");
+  const useRemote = remote.enabled;
   return (
     <>
       {/* Emoji / GIF picker */}
@@ -70,6 +74,7 @@ export default function EmojiGifPicker({
             <div className="flex border-b border-fg/[0.07] shrink-0">
               {[
                 { id: "emoji" as const, label: "😊 Эмодзи" },
+                { id: "icq" as const, label: "🌼 ICQ" },
                 { id: "gif" as const, label: "🎬 GIF" },
               ].map((t) => (
                 <button
@@ -128,6 +133,30 @@ export default function EmojiGifPicker({
               </div>
             )}
 
+            {emojiTab === "icq" && (
+              <div className="flex-1 overflow-y-auto p-3">
+                <p className="mb-2 px-1 text-[10px] font-medium uppercase tracking-wider text-fg/25">Классические смайлы</p>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {SMILEYS.map((sm) => (
+                    <button
+                      key={sm.id}
+                      title={`${sm.title}  ${sm.codes[0]}`}
+                      onClick={() => {
+                        setInputText((prev) => (prev && !prev.endsWith(" ") ? prev + " " : prev) + sm.codes[0] + " ");
+                        setEmojiPickerOpen(false);
+                      }}
+                      className="flex h-11 w-full items-center justify-center rounded-xl transition-transform hover:scale-110 hover:bg-fg/[0.08]"
+                    >
+                      <Smiley def={sm} size={30} />
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-3 px-1 text-[11px] leading-snug text-fg/30">
+                  Можно набирать и вручную: например :-) или ;-) превратятся в смайл.
+                </p>
+              </div>
+            )}
+
             {emojiTab === "gif" && (
               <div className="flex flex-col flex-1 overflow-hidden">
                 {/* Search */}
@@ -148,15 +177,53 @@ export default function EmojiGifPicker({
                   </div>
                 </div>
                 {/* GIF grid */}
-                <div className="flex-1 overflow-y-auto p-2">
-                  {filteredGifs ? (
+                <div
+                  className="flex-1 overflow-y-auto p-2"
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    if (useRemote && el.scrollTop + el.clientHeight >= el.scrollHeight - 80) remote.loadMore();
+                  }}
+                >
+                  {useRemote ? (
+                    <>
+                      {!gifSearch.trim() && remote.items.length > 0 && (
+                        <p className="mb-2 px-1 text-[10px] font-medium uppercase tracking-wider text-fg/25">Популярные</p>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                        {remote.items.map((gif) => (
+                          <button
+                            key={gif.id}
+                            title={gif.title}
+                            onClick={() => {
+                              if (onPickGif) onPickGif(gif.url);
+                              else setInputText((prev) => (prev ? prev + " " + gif.url : gif.url));
+                              setEmojiPickerOpen(false);
+                            }}
+                            className="aspect-video rounded-xl overflow-hidden hover:scale-[1.03] transition-transform bg-fg/[0.04]"
+                          >
+                            <img src={gif.preview} alt={gif.title} className="w-full h-full object-cover" loading="lazy" />
+                          </button>
+                        ))}
+                      </div>
+                      {remote.loading && (
+                        <div className="flex justify-center py-4">
+                          <Icon name="Loader" size={18} className="animate-spin text-fg/40" />
+                        </div>
+                      )}
+                      {!remote.loading && remote.error && <p className="py-4 text-center text-xs text-red-400">{remote.error}</p>}
+                      {!remote.loading && !remote.error && remote.items.length === 0 && (
+                        <p className="py-6 text-center text-xs text-fg/35">Ничего не найдено. Попробуйте другое слово</p>
+                      )}
+                      <p className="pt-3 text-center text-[10px] text-fg/25">GIF от KLIPY</p>
+                    </>
+                  ) : filteredGifs ? (
                     <div className="grid grid-cols-2 gap-2">
                       {filteredGifs.map((gif, i) => (
                         <button
                           key={i}
                           onClick={() => {
                             if (onPickGif) onPickGif(gif.url);
-                            else setInputText((prev) => prev ? prev + " " + gif.url : gif.url);
+                            else setInputText((prev) => (prev ? prev + " " + gif.url : gif.url));
                             setEmojiPickerOpen(false);
                           }}
                           className="aspect-video rounded-xl overflow-hidden hover:scale-[1.03] transition-transform bg-fg/[0.04]"
@@ -175,7 +242,7 @@ export default function EmojiGifPicker({
                               key={gi}
                               onClick={() => {
                                 if (onPickGif) onPickGif(gif.url);
-                                else setInputText((prev) => prev ? prev + " " + gif.url : gif.url);
+                                else setInputText((prev) => (prev ? prev + " " + gif.url : gif.url));
                                 setEmojiPickerOpen(false);
                               }}
                               className="aspect-video rounded-xl overflow-hidden hover:scale-[1.03] transition-transform bg-fg/[0.04]"

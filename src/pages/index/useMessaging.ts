@@ -4,6 +4,7 @@ import { Chat, Message, PinnedMessage, ReplyPreview, Tab, AuthUser, Notification
 import { API_CHATS, API_SEND, API_TRANSCRIBE } from "./config";
 import { readNotifyPrefs } from "@/components/messenger/sidebar/SettingsPanels";
 import { registerServiceWorker } from "@/lib/push";
+import { isNativeApp, startNativePush } from "@/lib/nativePush";
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -88,6 +89,7 @@ export function useMessaging({
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [sending, setSending] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [groupCalls, setGroupCalls] = useState<{ callId: number; chatId: number; isVideo: boolean; participants: number }[]>([]);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [sendError, setSendError] = useState("");
@@ -147,7 +149,16 @@ export function useMessaging({
 
   useEffect(() => {
     if (!authUser) return;
-    registerServiceWorker();
+    if (isNativeApp()) {
+      startNativePush(authUser.sessionId, (info) => {
+        if (info.chatId) {
+          setActiveChatId(info.chatId);
+          setActiveTab("chats");
+        }
+      });
+    } else {
+      registerServiceWorker();
+    }
     const open = (chatId: number | null) => {
       if (!chatId) return;
       setActiveChatId(chatId);
@@ -235,6 +246,7 @@ export function useMessaging({
         if (!res.ok || stopped) return;
         const data = await res.json();
         if (data.incomingCall) hintRef.current?.();
+        setGroupCalls(data.groupCalls || []);
         const fresh: Chat[] = data.chats || [];
         const openId = activeChatIdRef.current;
         const firstRun = Object.keys(prevChatsRef.current).length === 0;
@@ -747,6 +759,7 @@ export function useMessaging({
     loadingMsgs,
     sending,
     notifications,
+    groupCalls,
     messagesEndRef,
     startChatWithUser,
     togglePinChat,

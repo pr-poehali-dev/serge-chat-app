@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAppHeight } from "@/hooks/use-app-height";
-import { IncomingCall, CallScreen } from "@/components/messenger/CallOverlays";
+import { IncomingCall, CallScreen, GroupCallScreen } from "@/components/messenger/CallOverlays";
 import Sidebar from "@/components/messenger/Sidebar";
 import ChatArea from "@/components/messenger/ChatArea";
 import BotStore from "@/components/messenger/BotStore";
@@ -17,6 +17,7 @@ import { useComposer } from "./index/useComposer";
 import { useBotsAndGroups } from "./index/useBotsAndGroups";
 import { useMessaging } from "./index/useMessaging";
 import { useCall } from "./index/useCall";
+import { useGroupCall } from "./index/useGroupCall";
 
 export default function Index() {
   const isMobile = useIsMobile();
@@ -49,6 +50,7 @@ export default function Index() {
 
   const composer = useComposer();
   const callCtl = useCall({ sessionId: authUser?.sessionId ?? null });
+  const groupCtl = useGroupCall(authUser?.sessionId ?? null, authUser?.id ?? null);
 
   const reloadChats = async () => {
     if (!authUser) return;
@@ -173,6 +175,20 @@ export default function Index() {
       {(!isMobile || mobileShowChat) && (
       <ChatArea
         activeChat={activeChat}
+        onStartGroupCall={
+          !isBotChat && activeChat?.isGroup && activeChat.id > 0 && !callCtl.call
+            ? (isVideo) => groupCtl.startCall(activeChat.id, activeChat.name, isVideo)
+            : undefined
+        }
+        activeGroupCall={
+          !isBotChat && activeChat?.isGroup && !groupCtl.call
+            ? msg.groupCalls.find((g) => g.chatId === activeChat.id) || null
+            : null
+        }
+        onJoinGroupCall={() => {
+          const g = msg.groupCalls.find((x) => x.chatId === activeChat?.id);
+          if (g && activeChat) groupCtl.joinCall(g.callId, g.chatId, activeChat.name, g.isVideo);
+        }}
         onStartCall={
           !isBotChat && activeChat && !activeChat.isGroup && activeChat.id > 0 && activeChat.contactUserId
             ? (isVideo) =>
@@ -317,11 +333,27 @@ export default function Index() {
         />
       )}
 
-      {callCtl.error && (
+      {groupCtl.call && authUser && (
+        <GroupCallScreen
+          call={groupCtl.call}
+          myUserId={authUser.id}
+          localStream={groupCtl.localStream}
+          remoteStreams={groupCtl.remoteStreams}
+          muted={groupCtl.muted}
+          camOff={groupCtl.camOff}
+          speakerOff={groupCtl.speakerOff}
+          onToggleMute={groupCtl.toggleMute}
+          onToggleCam={groupCtl.toggleCam}
+          onToggleSpeaker={groupCtl.toggleSpeaker}
+          onLeave={groupCtl.leave}
+        />
+      )}
+
+      {(callCtl.error || groupCtl.error) && (
         <div className="fixed left-1/2 top-4 z-[120] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 animate-fade-in">
           <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/15 px-4 py-3 backdrop-blur-xl">
-            <p className="flex-1 text-sm text-red-200">{callCtl.error}</p>
-            <button onClick={callCtl.clearError} className="text-red-200/70 hover:text-red-100" aria-label="Закрыть">
+            <p className="flex-1 text-sm text-red-200">{callCtl.error || groupCtl.error}</p>
+            <button onClick={() => { callCtl.clearError(); groupCtl.clearError(); }} className="text-red-200/70 hover:text-red-100" aria-label="Закрыть">
               ✕
             </button>
           </div>

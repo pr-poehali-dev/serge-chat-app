@@ -12,6 +12,9 @@ import { EmojiCategory, GifCategory, GifItem } from "./chat/EmojiGifPicker";
 interface ChatAreaProps {
   activeChat: Chat | undefined;
   onStartCall?: (isVideo: boolean) => void;
+  onStartGroupCall?: (isVideo: boolean) => void;
+  activeGroupCall?: { callId: number; isVideo: boolean; participants: number } | null;
+  onJoinGroupCall?: () => void;
   showEncryptBadge: boolean;
   setShowEncryptBadge: Dispatch<SetStateAction<boolean>>;
   loadingMsgs: boolean;
@@ -31,8 +34,8 @@ interface ChatAreaProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
   emojiPickerRef: RefObject<HTMLDivElement>;
-  emojiTab: "emoji" | "gif";
-  setEmojiTab: Dispatch<SetStateAction<"emoji" | "gif">>;
+  emojiTab: "emoji" | "icq" | "gif";
+  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];
   GIF_CATEGORIES: GifCategory[];
   gifSearch: string;
@@ -74,6 +77,9 @@ interface ChatAreaProps {
 export default function ChatArea({
   activeChat,
   onStartCall,
+  onStartGroupCall,
+  activeGroupCall,
+  onJoinGroupCall,
   showEncryptBadge,
   setShowEncryptBadge,
   loadingMsgs,
@@ -199,6 +205,9 @@ export default function ChatArea({
             showEncryptBadge={showEncryptBadge}
             setShowEncryptBadge={setShowEncryptBadge}
             onStartCall={onStartCall}
+            onStartGroupCall={onStartGroupCall}
+            activeGroupCall={activeGroupCall}
+            onJoinGroupCall={onJoinGroupCall}
             topics={topics}
             activeTopicId={activeTopicId}
             onSelectTopic={onSelectTopic}

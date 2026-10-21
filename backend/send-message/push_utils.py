@@ -7,6 +7,8 @@ from cryptography.hazmat.primitives import serialization
 from py_vapid import Vapid
 from pywebpush import WebPushException, webpush
 
+import fcm_utils
+
 SCHEMA = "t_p64541051_serge_chat_app"
 TOTAL_TIMEOUT_SEC = 2.5
 
@@ -38,7 +40,8 @@ def load_vapid(cur, conn) -> tuple:
 
 
 def send_to_users(conn, user_ids, payload: dict, ttl: int = 86400, urgency: str = "normal") -> int:
-    """Отправляет push всем устройствам пользователей. Мёртвые подписки удаляются. Возвращает число доставленных."""
+    """Отправляет push на все устройства пользователей: браузеры через Web Push, Android через Firebase.
+    Мёртвые подписки удаляются. Возвращает число доставленных."""
     ids = list(user_ids)
     if not ids:
         return 0
@@ -48,41 +51,70 @@ def send_to_users(conn, user_ids, payload: dict, ttl: int = 86400, urgency: str 
         (ids,),
     )
     subs = cur.fetchall()
-    if not subs:
+    cur.execute(f"SELECT id, token FROM {SCHEMA}.push_tokens WHERE user_id = ANY(%s)", (ids,))
+    tokens = cur.fetchall()
+    if not subs and not tokens:
         return 0
 
-    private_pem, _ = load_vapid(cur, conn)
-    vapid = Vapid.from_pem(private_pem.encode())
-    contact = os.environ.get("PUSH_CONTACT") or os.environ.get("SMTP_FROM_EMAIL") or "push@example.com"
-    body = json.dumps(payload, ensure_ascii=False)
+    jobs = []
 
-    def send_one(sub):
+    if subs:
+        private_pem, _ = load_vapid(cur, conn)
+        vapid = Vapid.from_pem(private_pem.encode())
+        contact = os.environ.get("PUSH_CONTACT") or os.environ.get("SMTP_FROM_EMAIL") or "push@example.com"
+        body = json.dumps(payload, ensure_ascii=False)
+
+        def send_web(sub):
+            try:
+                webpush(
+                    subscription_info={"endpoint": sub[1], "keys": {"p256dh": sub[2], "auth": sub[3]}},
+                    data=body,
+                    vapid_private_key=vapid,
+                    vapid_claims={"sub": f"mailto:{contact}"},
+                    ttl=ttl,
+                    headers={"Urgency": urgency},
+                    timeout=3,
+                )
+                return ("web", sub[0], True, False)
+            except WebPushException as e:
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                return ("web", sub[0], False, code in (404, 410))
+            except Exception as e:
+                print(f"push failed: {type(e).__name__}: {e}")
+                return ("web", sub[0], False, False)
+
+        jobs += [(send_web, s) for s in subs]
+
+    account = fcm_utils.load_account() if tokens else None
+    if tokens and account:
         try:
-            webpush(
-                subscription_info={"endpoint": sub[1], "keys": {"p256dh": sub[2], "auth": sub[3]}},
-                data=body,
-                vapid_private_key=vapid,
-                vapid_claims={"sub": f"mailto:{contact}"},
-                ttl=ttl,
-                headers={"Urgency": urgency},
-                timeout=3,
-            )
-            return (sub[0], True, False)
-        except WebPushException as e:
-            code = getattr(getattr(e, "response", None), "status_code", None)
-            return (sub[0], False, code in (404, 410))
+            access = fcm_utils.access_token(conn, account)
         except Exception as e:
-            print(f"push failed: {type(e).__name__}: {e}")
-            return (sub[0], False, False)
+            print(f"fcm auth failed: {type(e).__name__}: {e}")
+            access = None
+        if access:
+            urgent = urgency == "high"
 
+            def send_fcm(t):
+                result = fcm_utils.send_one(account, access, t[1], payload, ttl, urgent)
+                return ("fcm", t[0], result == "ok", result == "dead")
+
+            jobs += [(send_fcm, t) for t in tokens]
+
+    if not jobs:
+        return 0
     pool = ThreadPoolExecutor(max_workers=8)
-    futures = [pool.submit(send_one, s) for s in subs]
+    futures = [pool.submit(fn, arg) for fn, arg in jobs]
     done, _ = wait(futures, timeout=TOTAL_TIMEOUT_SEC)
     pool.shutdown(wait=False, cancel_futures=True)
 
     results = [f.result() for f in done]
-    dead = [r[0] for r in results if r[2]]
-    if dead:
-        cur.execute(f"DELETE FROM {SCHEMA}.push_subscriptions WHERE id = ANY(%s)", (dead,))
+    dead_web = [r[1] for r in results if r[0] == "web" and r[3]]
+    dead_fcm = [r[1] for r in results if r[0] == "fcm" and r[3]]
+    if dead_web:
+        cur.execute(f"DELETE FROM {SCHEMA}.push_subscriptions WHERE id = ANY(%s)", (dead_web,))
+    if dead_fcm:
+        cur.execute(f"DELETE FROM {SCHEMA}.push_tokens WHERE id = ANY(%s)", (dead_fcm,))
+    if dead_web or dead_fcm:
         conn.commit()
-    return sum(1 for r in results if r[1])
+    return sum(1 for r in results if r[2])

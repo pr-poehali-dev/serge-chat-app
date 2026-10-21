@@ -30,3 +30,8 @@ tmp/
 # выгрузки данных с личной информацией
 trindelka-data*.sql
 *.dump.sql
+
+# ключи Firebase
+google-services.json
+android/app/google-services.json
+*-firebase-adminsdk-*.json

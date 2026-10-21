@@ -7,6 +7,9 @@ interface ChatHeaderProps {
   showEncryptBadge: boolean;
   setShowEncryptBadge: Dispatch<SetStateAction<boolean>>;
   onStartCall?: (isVideo: boolean) => void;
+  onStartGroupCall?: (isVideo: boolean) => void;
+  activeGroupCall?: { callId: number; isVideo: boolean; participants: number } | null;
+  onJoinGroupCall?: () => void;
   topics?: Topic[];
   activeTopicId?: number | null;
   onSelectTopic?: (id: number | null) => void;
@@ -23,6 +26,9 @@ export default function ChatHeader({
   showEncryptBadge,
   setShowEncryptBadge,
   onStartCall,
+  onStartGroupCall,
+  activeGroupCall,
+  onJoinGroupCall,
   topics,
   activeTopicId,
   onSelectTopic,
@@ -117,6 +123,24 @@ export default function ChatHeader({
                 <Icon name="Search" size={16} />
               </button>
             )}
+            {onStartGroupCall && !activeGroupCall && (
+              <>
+                <button
+                  onClick={() => onStartGroupCall(false)}
+                  title="Групповой звонок"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
+                >
+                  <Icon name="Phone" size={16} />
+                </button>
+                <button
+                  onClick={() => onStartGroupCall(true)}
+                  title="Групповой видеозвонок"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
+                >
+                  <Icon name="Video" size={16} />
+                </button>
+              </>
+            )}
             {onStartCall && (
               <>
                 <button
@@ -151,6 +175,21 @@ export default function ChatHeader({
           </div>
         </div>
       </header>
+
+      {activeGroupCall && onJoinGroupCall && (
+        <div className="flex items-center gap-3 border-b border-emerald-500/20 bg-emerald-500/10 px-4 py-2 animate-fade-in">
+          <Icon name={activeGroupCall.isVideo ? "Video" : "Phone"} size={16} className="shrink-0 text-emerald-400" />
+          <p className="min-w-0 flex-1 truncate text-xs text-emerald-200">
+            Идёт {activeGroupCall.isVideo ? "групповой видеозвонок" : "групповой звонок"} · участников: {activeGroupCall.participants}
+          </p>
+          <button
+            onClick={onJoinGroupCall}
+            className="shrink-0 rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg shadow-emerald-500/30 transition-all hover:bg-emerald-600 active:scale-95"
+          >
+            Присоединиться
+          </button>
+        </div>
+      )}
 
       {/* Topics bar (group chats only) */}
       {activeChat.isGroup && topics && (

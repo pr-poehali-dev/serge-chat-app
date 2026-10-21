@@ -71,7 +71,7 @@ def handler(event: dict, context) -> dict:
 
         cur.execute(
             f"SELECT 1 FROM {SCHEMA}.chat_members cm JOIN {SCHEMA}.users u ON u.id = cm.user_id "
-            f"WHERE cm.chat_id = %s AND u.session_id = %s",
+            f"WHERE cm.chat_id = %s AND u.session_id = %s AND (u.session_expires_at IS NULL OR u.session_expires_at > NOW())",
             (row[2], session_id),
         )
         if not cur.fetchone():

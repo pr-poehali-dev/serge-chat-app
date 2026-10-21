@@ -19,8 +19,8 @@ interface MessageInputProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
   emojiPickerRef: RefObject<HTMLDivElement>;
-  emojiTab: "emoji" | "gif";
-  setEmojiTab: Dispatch<SetStateAction<"emoji" | "gif">>;
+  emojiTab: "emoji" | "icq" | "gif";
+  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];
   GIF_CATEGORIES: GifCategory[];
   gifSearch: string;

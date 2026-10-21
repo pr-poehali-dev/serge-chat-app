@@ -1,6 +1,6 @@
-import { useState, useEffect, Dispatch, SetStateAction } from "react";
+import { useState, useEffect, useRef, Dispatch, SetStateAction } from "react";
 import { Chat, AuthUser } from "@/components/messenger/types";
-import { API_AUTH, SESSION_STORAGE_KEY } from "./config";
+import { API_AUTH, API_CHATS, API_PUSH, API_SEND, API_TRANSCRIBE, SESSION_STORAGE_KEY, SESSION_EXPIRED_KEY } from "./config";
 
 interface UseAuthParams {
   setChats: Dispatch<SetStateAction<Chat[]>>;
@@ -11,6 +11,35 @@ export function useAuth({ setChats, setActiveChatId }: UseAuthParams) {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  const logoutRef = useRef<() => void>(() => undefined);
+
+  useEffect(() => {
+    const own = [API_AUTH, API_CHATS, API_PUSH, API_SEND, API_TRANSCRIBE];
+    const original = window.fetch;
+    window.fetch = async (...args: Parameters<typeof fetch>) => {
+      const res = await original(...args);
+      if (res.status === 401) {
+        const input = args[0];
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (own.some((base) => url.startsWith(base))) {
+          try {
+            const data = await res.clone().json();
+            if (data?.code === "session_expired") {
+              localStorage.setItem(SESSION_EXPIRED_KEY, "1");
+              logoutRef.current();
+            }
+          } catch {
+            return res;
+          }
+        }
+      }
+      return res;
+    };
+    return () => {
+      window.fetch = original;
+    };
+  }, []);
+
   // Restore session on load
   useEffect(() => {
     const sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -19,13 +48,17 @@ export function useAuth({ setChats, setActiveChatId }: UseAuthParams) {
       return;
     }
     fetch(`${API_AUTH}?action=me`, { headers: { "X-Session-Id": sessionId } })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((data) => setAuthUser(data.user))
-      .catch(() => localStorage.removeItem(SESSION_STORAGE_KEY))
+      .catch((status) => {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        if (status === 401) localStorage.setItem(SESSION_EXPIRED_KEY, "1");
+      })
       .finally(() => setAuthLoading(false));
   }, []);
 
   const handleAuthenticated = (user: AuthUser) => {
+    localStorage.removeItem(SESSION_EXPIRED_KEY);
     localStorage.setItem(SESSION_STORAGE_KEY, user.sessionId);
     setAuthUser(user);
   };
@@ -36,6 +69,7 @@ export function useAuth({ setChats, setActiveChatId }: UseAuthParams) {
     setChats([]);
     setActiveChatId(null);
   };
+  logoutRef.current = handleLogout;
 
   const handleUpdateProfile = async (login: string, firstName: string, lastName: string): Promise<string | null> => {
     if (!authUser) return "Не авторизован";

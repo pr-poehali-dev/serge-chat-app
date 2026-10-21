@@ -4,6 +4,7 @@ import { Switch } from "@/components/ui/switch";
 import { ACCENTS, TextSize, ThemeMode, useAppearance } from "@/hooks/use-appearance";
 import { AuthUser, Chat } from "../types";
 import { disablePush, enablePush, getExistingSubscription, pushSupport } from "@/lib/push";
+import { isNativeApp, startNativePush, stopNativePush } from "@/lib/nativePush";
 
 const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
 const NOTIFY_KEY = "trindelka_notify_prefs";
@@ -111,11 +112,12 @@ function NotificationsPanel({
   onSetChatNotify: (chatId: number, enabled: boolean) => void;
 }) {
   const [prefs, setPrefs] = useState<NotifyPrefs>(readNotifyPrefs);
-  const support = pushSupport();
+  const native = isNativeApp();
+  const support = native ? "supported" : pushSupport();
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
-    typeof Notification === "undefined" ? "unsupported" : Notification.permission
+    native ? "default" : typeof Notification === "undefined" ? "unsupported" : Notification.permission
   );
-  const [pushOn, setPushOn] = useState(false);
+  const [pushOn, setPushOn] = useState(native ? !!localStorage.getItem("trindelka_fcm_token") : false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState("");
 
@@ -128,6 +130,7 @@ function NotificationsPanel({
   }, [prefs]);
 
   useEffect(() => {
+    if (native) return;
     let alive = true;
     getExistingSubscription().then((sub) => {
       if (alive) setPushOn(!!sub && Notification.permission === "granted");
@@ -141,6 +144,18 @@ function NotificationsPanel({
     if (!authUser) return;
     setPushBusy(true);
     setPushError("");
+    if (native) {
+      if (on) {
+        const r = await startNativePush(authUser.sessionId, () => undefined);
+        setPushOn(r.ok);
+        if (!r.ok) setPushError(r.error || "Не удалось включить");
+      } else {
+        await stopNativePush(authUser.sessionId);
+        setPushOn(false);
+      }
+      setPushBusy(false);
+      return;
+    }
     if (on) {
       const r = await enablePush(authUser.sessionId);
       setPushOn(r.ok);

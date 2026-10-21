@@ -6,12 +6,22 @@ import CircleMessage from "../media/CircleMessage";
 import ReplyQuote from "./ReplyQuote";
 import { ImageAttachment, FileCard } from "./FileAttachment";
 import { extractGifUrl } from "@/pages/index/config";
+import { Smiley, splitSmileys } from "../smileys/Smiley";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
+function renderPlain(text: string): ReactNode {
+  const parts = splitSmileys(text);
+  if (parts.length === 1 && typeof parts[0] === "string") return text;
+  const onlySmileys = parts.every((p) => typeof p !== "string" || p.trim() === "");
+  return parts.map((p, i) =>
+    typeof p === "string" ? <span key={i}>{p}</span> : <Smiley key={i} def={p} size={onlySmileys ? 34 : 20} />
+  );
+}
+
 function highlightText(text: string, query: string, isCurrent: boolean): ReactNode {
   const q = query.trim();
-  if (!q) return text;
+  if (!q) return renderPlain(text);
   const lower = text.toLowerCase();
   const needle = q.toLowerCase();
   const parts: ReactNode[] = [];
@@ -248,7 +258,29 @@ export default function MessageList({
                     {msg.edited && !msg.removed && <span className="text-[10px] text-fg/25">изменено</span>}
                     <span className="text-[10px] text-fg/25">{msg.time}</span>
                     {msg.out && !msg.removed && (
-                      <Icon name={msg.read ? "CheckCheck" : "Check"} size={12} className={msg.read ? "text-purple-400" : "text-fg/25"} />
+                      <span
+                        className="flex items-center gap-0.5"
+                        title={
+                          msg.recipientsCount != null
+                            ? `Прочитали ${msg.readCount ?? 0} из ${msg.recipientsCount}`
+                            : msg.read
+                            ? "Прочитано"
+                            : msg.delivered
+                            ? "Доставлено"
+                            : "Отправлено"
+                        }
+                      >
+                        <Icon
+                          name={msg.read || msg.delivered ? "CheckCheck" : "Check"}
+                          size={12}
+                          className={msg.read ? "text-purple-400" : "text-fg/30"}
+                        />
+                        {msg.recipientsCount != null && msg.recipientsCount > 0 && (
+                          <span className={`text-[10px] tabular-nums ${msg.read ? "text-purple-400" : "text-fg/35"}`}>
+                            {msg.readCount ?? 0}/{msg.recipientsCount}
+                          </span>
+                        )}
+                      </span>
                     )}
                   </div>
                 </div>

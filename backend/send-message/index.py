@@ -28,9 +28,11 @@ def resolve_user_id(cur, headers: dict) -> int:
     session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
     if not session_id:
         return DEFAULT_USER_ID
-    cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
+    cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
     row = cur.fetchone()
-    return row[0] if row else DEFAULT_USER_ID
+    if not row:
+        raise PermissionError("session_expired")
+    return row[0]
 
 
 def ext_for(content_type: str, kind: str, file_name: str = "") -> str:
@@ -178,7 +180,10 @@ def handler(event: dict, context) -> dict:
     conn = get_conn()
     cur = conn.cursor()
     try:
-        my_user_id = resolve_user_id(cur, event.get("headers") or {})
+        try:
+            my_user_id = resolve_user_id(cur, event.get("headers") or {})
+        except PermissionError:
+            return {"statusCode": 401, "headers": CORS, "body": json.dumps({"error": "Сессия истекла, войдите заново", "code": "session_expired"})}
 
         cur.execute(
             f"SELECT 1 FROM {SCHEMA}.chat_members WHERE chat_id = %s AND user_id = %s",

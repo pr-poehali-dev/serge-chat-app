@@ -33,6 +33,9 @@ export interface Message {
   text: string;
   out: boolean;
   read: boolean;
+  delivered?: boolean;
+  readCount?: number | null;
+  recipientsCount?: number | null;
   time: string;
   sender_id: number;
   reactions?: Record<string, number[]>;

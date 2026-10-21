@@ -29,7 +29,7 @@ def resolve_user(cur, headers: dict):
     session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
     if not session_id:
         return DEFAULT_USER_ID, False
-    cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
+    cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
     row = cur.fetchone()
     if row:
         return row[0], True
@@ -88,6 +88,8 @@ def handler(event: dict, context) -> dict:
 
     try:
         my_user_id, authed = resolve_user(cur, headers)
+        if not authed and (headers.get("X-Session-Id") or headers.get("x-session-id")):
+            return reply(401, {"error": "Сессия истекла, войдите заново", "code": "session_expired"})
 
         if authed:
             cur.execute(f"""
@@ -148,9 +150,28 @@ def handler(event: dict, context) -> dict:
             """, (chat_id, my_user_id))
             rr = cur.fetchone()
             other_receipts = True if not rr or rr[0] is None else bool(rr[0])
+            cur.execute(f"""
+                SELECT cm.last_read_at, u.last_seen, u.read_receipts
+                FROM {SCHEMA}.chat_members cm
+                JOIN {SCHEMA}.users u ON u.id = cm.user_id
+                WHERE cm.chat_id = %s AND cm.user_id != %s
+            """, (chat_id, my_user_id))
+            others = cur.fetchall()
+            counted = [o for o in others if o[2]]
+            chat_is_group = len(others) > 1
             messages = []
             for r in rows:
                 removed = r[17] is not None
+                created = r[5]
+                is_mine = r[2] == my_user_id
+                read_count = 0
+                delivered = False
+                if is_mine and not removed:
+                    read_count = sum(1 for o in counted if o[0] is not None and o[0] >= created)
+                    delivered = any(o[1] is not None and o[1] >= created for o in others) or bool(r[3]) or read_count > 0
+                is_read = bool(r[3]) and (not is_mine or other_receipts)
+                if chat_is_group and is_mine:
+                    is_read = len(counted) > 0 and read_count == len(counted)
                 reply_to = None
                 if r[18] is not None:
                     reply_removed = r[22] is not None
@@ -166,7 +187,10 @@ def handler(event: dict, context) -> dict:
                     "text": "" if removed else r[1],
                     "sender_id": r[2],
                     "out": r[2] == my_user_id,
-                    "read": bool(r[3]) and (not r[2] == my_user_id or other_receipts),
+                    "read": is_read,
+                    "delivered": delivered or is_read,
+                    "readCount": read_count if (is_mine and chat_is_group) else None,
+                    "recipientsCount": len(counted) if (is_mine and chat_is_group) else None,
                     "time": r[4],
                     "kind": "text" if removed else (r[6] or "text"),
                     "mediaUrl": None if removed else r[7],
@@ -683,7 +707,20 @@ def handler(event: dict, context) -> dict:
         """, (my_user_id,))
         incoming_call = cur.fetchone() is not None
 
-        return reply(200, {"chats": chats, "incomingCall": incoming_call})
+        cur.execute(f"""
+            SELECT g.id, g.chat_id, g.is_video,
+                   (SELECT COUNT(*) FROM {SCHEMA}.group_call_members m
+                    WHERE m.call_id = g.id AND m.left_at IS NULL AND m.last_ping > NOW() - INTERVAL '20 seconds')
+            FROM {SCHEMA}.group_calls g
+            JOIN {SCHEMA}.chat_members cm ON cm.chat_id = g.chat_id AND cm.user_id = %s
+            WHERE g.status = 'active'
+        """, (my_user_id,))
+        group_calls = [
+            {"callId": r[0], "chatId": r[1], "isVideo": bool(r[2]), "participants": int(r[3])}
+            for r in cur.fetchall() if r[3] and int(r[3]) > 0
+        ]
+
+        return reply(200, {"chats": chats, "incomingCall": incoming_call, "groupCalls": group_calls})
 
     finally:
         cur.close()

@@ -39,6 +39,30 @@
         }
       },
       "expectedStatus": 401
+    },
+    {
+      "name": "GIF search works without crashing",
+      "method": "GET",
+      "path": "/?action=gif-search&q=cat",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Group call start without session returns 401",
+      "method": "POST",
+      "path": "/?action=gcall-start",
+      "body": {
+        "chat_id": 1
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Register device token without session returns 401",
+      "method": "POST",
+      "path": "/?action=register-token",
+      "body": {
+        "token": "aaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedStatus": 401
     }
   ]
 }
