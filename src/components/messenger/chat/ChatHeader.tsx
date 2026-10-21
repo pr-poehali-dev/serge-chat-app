@@ -10,6 +10,7 @@ interface ChatHeaderProps {
   onStartGroupCall?: (isVideo: boolean) => void;
   activeGroupCall?: { callId: number; isVideo: boolean; participants: number } | null;
   onJoinGroupCall?: () => void;
+  onOpenBackground?: () => void;
   topics?: Topic[];
   activeTopicId?: number | null;
   onSelectTopic?: (id: number | null) => void;
@@ -29,6 +30,7 @@ export default function ChatHeader({
   onStartGroupCall,
   activeGroupCall,
   onJoinGroupCall,
+  onOpenBackground,
   topics,
   activeTopicId,
   onSelectTopic,
@@ -121,6 +123,16 @@ export default function ChatHeader({
                 }`}
               >
                 <Icon name="Search" size={16} />
+              </button>
+            )}
+            {onOpenBackground && (
+              <button
+                onClick={onOpenBackground}
+                title="Фон чата"
+                aria-label="Фон чата"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
+              >
+                <Icon name="Palette" size={16} />
               </button>
             )}
             {onStartGroupCall && !activeGroupCall && (

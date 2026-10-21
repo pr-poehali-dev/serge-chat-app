@@ -38,13 +38,13 @@ def finish(conn, cur, call_id: int, status: str, reason: str) -> None:
         UPDATE {SCHEMA}.calls SET status = %s, end_reason = %s, ended_at = NOW()
         WHERE id = %s AND status IN ('ringing', 'active')
         RETURNING chat_id, caller_id, is_video, answered_at IS NOT NULL,
-                  EXTRACT(EPOCH FROM (NOW() - answered_at))::int
+                  EXTRACT(EPOCH FROM (NOW() - answered_at))::int, callee_id
     """, (status, reason, call_id))
     row = cur.fetchone()
     if not row:
         conn.commit()
         return
-    chat_id, caller_id, is_video, was_answered, seconds = row
+    chat_id, caller_id, is_video, was_answered, seconds, callee_id = row
     icon = "📹" if is_video else "📞"
     kind_label = "Видеозвонок" if is_video else "Звонок"
     if was_answered:
@@ -58,6 +58,16 @@ def finish(conn, cur, call_id: int, status: str, reason: str) -> None:
         VALUES (%s, %s, %s, false, 'text')
     """, (chat_id, caller_id, text))
     conn.commit()
+    if not was_answered and status in ("canceled", "missed"):
+        try:
+            push_utils.send_to_users(conn, [callee_id], {
+                "type": "call-cancel",
+                "callId": call_id,
+                "chatId": chat_id,
+                "tag": f"call-{call_id}",
+            }, ttl=30, urgency="high")
+        except Exception as e:
+            print(f"call cancel push failed: {type(e).__name__}: {e}")
 
 
 def refresh(conn, cur, call_id: int):
@@ -204,6 +214,7 @@ def handler(event: dict, context) -> dict:
                     "type": "call",
                     "title": caller["name"],
                     "body": "Входящий видеозвонок" if body.get("isVideo") else "Входящий звонок",
+                    "isVideo": bool(body.get("isVideo")),
                     "chatId": chat_id,
                     "callId": call_id,
                     "tag": f"call-{call_id}",

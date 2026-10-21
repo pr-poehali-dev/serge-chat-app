@@ -176,6 +176,41 @@ export function useMessaging({
     return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
   }, [authUser]);
 
+  const setChatBackground = async (chatId: number, bg: string | null): Promise<string | null> => {
+    const previous = chats.find((c) => c.id === chatId)?.chatBg ?? null;
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, chatBg: bg } : c)));
+    try {
+      const res = await fetch(`${API_CHATS}?action=set-chat-bg`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ chat_id: chatId, bg }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Не удалось сохранить фон");
+      return null;
+    } catch (e) {
+      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, chatBg: previous } : c)));
+      return e instanceof Error && e.message ? e.message : "Не удалось связаться с сервером";
+    }
+  };
+
+  const uploadChatBackground = async (chatId: number, file: File): Promise<string | null> => {
+    try {
+      const imageBase64 = await blobToBase64(file);
+      const res = await fetch(`${API_CHATS}?action=set-chat-bg`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ chat_id: chatId, imageBase64, contentType: file.type }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return data.error || "Не удалось загрузить фото";
+      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, chatBg: data.bg } : c)));
+      return null;
+    } catch {
+      return "Не удалось связаться с сервером";
+    }
+  };
+
   const togglePinChat = (chatId: number) => {
     const chat = chats.find((c) => c.id === chatId);
     if (!chat) return;
@@ -763,6 +798,8 @@ export function useMessaging({
     messagesEndRef,
     startChatWithUser,
     togglePinChat,
+    setChatBackground,
+    uploadChatBackground,
     setChatNotify,
     sendMedia,
     transcribeMessage,

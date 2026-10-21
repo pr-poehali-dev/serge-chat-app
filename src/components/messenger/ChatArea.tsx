@@ -15,6 +15,8 @@ interface ChatAreaProps {
   onStartGroupCall?: (isVideo: boolean) => void;
   activeGroupCall?: { callId: number; isVideo: boolean; participants: number } | null;
   onJoinGroupCall?: () => void;
+  onOpenBackground?: () => void;
+  onOpenReadBy?: (messageId: number) => void;
   showEncryptBadge: boolean;
   setShowEncryptBadge: Dispatch<SetStateAction<boolean>>;
   loadingMsgs: boolean;
@@ -80,6 +82,8 @@ export default function ChatArea({
   onStartGroupCall,
   activeGroupCall,
   onJoinGroupCall,
+  onOpenBackground,
+  onOpenReadBy,
   showEncryptBadge,
   setShowEncryptBadge,
   loadingMsgs,
@@ -208,6 +212,7 @@ export default function ChatArea({
             onStartGroupCall={onStartGroupCall}
             activeGroupCall={activeGroupCall}
             onJoinGroupCall={onJoinGroupCall}
+            onOpenBackground={onOpenBackground}
             topics={topics}
             activeTopicId={activeTopicId}
             onSelectTopic={onSelectTopic}
@@ -264,6 +269,7 @@ export default function ChatArea({
             }
             onForward={onForward}
             jumpRequest={jumpRequest}
+            onOpenReadBy={onOpenReadBy}
           />
 
           <MessageInput

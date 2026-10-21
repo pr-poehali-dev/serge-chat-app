@@ -17,6 +17,9 @@ export interface Chat {
   memberCount?: number | null;
   pinnedMessage?: PinnedMessage | null;
   notifyEnabled?: boolean;
+  description?: string;
+  myRole?: "owner" | "admin" | "member" | null;
+  chatBg?: string | null;
 }
 
 export interface PinnedMessage {

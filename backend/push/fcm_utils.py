@@ -71,7 +71,17 @@ def access_token(conn, acc: dict) -> str:
 
 
 def build_message(token: str, payload: dict, ttl: int, urgent: bool) -> dict:
-    is_call = payload.get("type") in ("call", "group-call")
+    kind = payload.get("type")
+    is_call = kind in ("call", "group-call")
+    if kind in ("call", "call-cancel"):
+        data = {k: str(v) for k, v in payload.items() if v is not None}
+        return {
+            "message": {
+                "token": token,
+                "data": data,
+                "android": {"priority": "HIGH", "ttl": f"{ttl}s"},
+            }
+        }
     data = {k: str(v) for k, v in payload.items() if v is not None and k not in ("title", "body")}
     return {
         "message": {

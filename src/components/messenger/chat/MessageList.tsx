@@ -7,6 +7,7 @@ import ReplyQuote from "./ReplyQuote";
 import { ImageAttachment, FileCard } from "./FileAttachment";
 import { extractGifUrl } from "@/pages/index/config";
 import { Smiley, splitSmileys } from "../smileys/Smiley";
+import { resolveBg } from "../background/chatBackgrounds";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -65,6 +66,7 @@ interface MessageListProps {
   onTogglePin?: (msg: Message) => void;
   onForward?: (msg: Message) => void;
   jumpRequest?: { id: number; nonce: number } | null;
+  onOpenReadBy?: (messageId: number) => void;
 }
 
 export default function MessageList({
@@ -87,12 +89,14 @@ export default function MessageList({
   onTogglePin,
   onForward,
   jumpRequest = null,
+  onOpenReadBy,
 }: MessageListProps) {
   const [reactionPickerFor, setReactionPickerFor] = useState<number | null>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
 
+  const chatBg = resolveBg(activeChat.chatBg);
   const matchIdSet = new Set(matchIds);
 
   const jumpTo = (messageId: number) => {
@@ -128,7 +132,11 @@ export default function MessageList({
   return (
     <>
       {/* Messages */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-6 py-4 sm:py-5 space-y-3">
+      <div
+        className="relative flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-6 py-4 sm:py-5 space-y-3"
+        style={chatBg ? ({ ...chatBg.style, ...chatBg.vars } as React.CSSProperties) : undefined}
+        data-chat-bg={activeChat.chatBg ? "custom" : undefined}
+      >
         {loadingMsgs ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex gap-1.5">
@@ -185,7 +193,7 @@ export default function MessageList({
                   ) : msg.kind === "circle" && msg.mediaUrl ? (
                     <CircleMessage msg={msg} />
                   ) : (
-                  <div className={`${msg.kind === "voice" || msg.kind === "image" || !!extractGifUrl(msg.text) ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.kind === "file" ? "px-3 py-2.5" : ""} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-fg/85"}`}>
+                  <div className={`${msg.kind === "voice" || msg.kind === "image" || extractGifUrl(msg.text) !== null ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.kind === "file" ? "px-3 py-2.5" : ""} ${msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-fg/85"}`}>
                     {msg.forwardedFrom && (
                       <p className={`mb-1 flex items-center gap-1 text-[11px] font-medium opacity-80 ${msg.kind === "image" ? "px-3 pt-1" : ""}`}>
                         <Icon name="Forward" size={11} className="shrink-0" />
@@ -217,7 +225,7 @@ export default function MessageList({
                           </p>
                         )}
                       </>
-                    ) : !!extractGifUrl(msg.text) ? (
+                    ) : extractGifUrl(msg.text) !== null ? (
                       <img
                         src={extractGifUrl(msg.text) || ""}
                         alt="GIF"
@@ -257,31 +265,45 @@ export default function MessageList({
                   <div className={`flex items-center gap-1 mt-1 px-1 ${msg.out ? "justify-end" : "justify-start"}`}>
                     {msg.edited && !msg.removed && <span className="text-[10px] text-fg/25">изменено</span>}
                     <span className="text-[10px] text-fg/25">{msg.time}</span>
-                    {msg.out && !msg.removed && (
-                      <span
-                        className="flex items-center gap-0.5"
-                        title={
-                          msg.recipientsCount != null
-                            ? `Прочитали ${msg.readCount ?? 0} из ${msg.recipientsCount}`
-                            : msg.read
-                            ? "Прочитано"
-                            : msg.delivered
-                            ? "Доставлено"
-                            : "Отправлено"
-                        }
-                      >
-                        <Icon
-                          name={msg.read || msg.delivered ? "CheckCheck" : "Check"}
-                          size={12}
-                          className={msg.read ? "text-purple-400" : "text-fg/30"}
-                        />
-                        {msg.recipientsCount != null && msg.recipientsCount > 0 && (
-                          <span className={`text-[10px] tabular-nums ${msg.read ? "text-purple-400" : "text-fg/35"}`}>
-                            {msg.readCount ?? 0}/{msg.recipientsCount}
-                          </span>
-                        )}
-                      </span>
-                    )}
+                    {msg.out && !msg.removed && (() => {
+                      const isGroupMsg = msg.recipientsCount != null && msg.recipientsCount > 0;
+                      const tip =
+                        msg.recipientsCount != null
+                          ? `Прочитали ${msg.readCount ?? 0} из ${msg.recipientsCount}`
+                          : msg.read
+                          ? "Прочитано"
+                          : msg.delivered
+                          ? "Доставлено"
+                          : "Отправлено";
+                      const inner = (
+                        <>
+                          <Icon
+                            name={msg.read || msg.delivered ? "CheckCheck" : "Check"}
+                            size={12}
+                            className={msg.read ? "text-purple-400" : "text-fg/30"}
+                          />
+                          {isGroupMsg && (
+                            <span className={`text-[10px] tabular-nums ${msg.read ? "text-purple-400" : "text-fg/35"}`}>
+                              {msg.readCount ?? 0}/{msg.recipientsCount}
+                            </span>
+                          )}
+                        </>
+                      );
+                      return isGroupMsg && onOpenReadBy && msg.id < 1e12 ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenReadBy(msg.id)}
+                          title={`${tip}. Нажмите, чтобы увидеть, кто прочитал`}
+                          className="flex items-center gap-0.5 rounded-md px-1 py-0.5 hover:bg-fg/[0.08] transition-colors"
+                        >
+                          {inner}
+                        </button>
+                      ) : (
+                        <span className="flex items-center gap-0.5" title={tip}>
+                          {inner}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -296,7 +318,7 @@ export default function MessageList({
                         <Icon name="Reply" size={13} />
                       </button>
                     )}
-                    {msg.out && onEdit && (msg.kind === "text" || msg.kind === "image" || msg.kind === "file" || !msg.kind) && !!!extractGifUrl(msg.text) && msg.id < 1e12 && (
+                    {msg.out && onEdit && (msg.kind === "text" || msg.kind === "image" || msg.kind === "file" || !msg.kind) && extractGifUrl(msg.text) === null && msg.id < 1e12 && (
                       <button
                         onClick={() => onEdit(msg)}
                         className="flex h-6 w-6 items-center justify-center rounded-full text-fg/30 hover:text-purple-400 hover:bg-fg/[0.08] transition-all"

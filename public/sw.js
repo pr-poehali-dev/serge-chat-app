@@ -8,6 +8,12 @@ self.addEventListener("push", (event) => {
   } catch (e) {
     data = { title: "Трынделка", body: event.data ? event.data.text() : "" };
   }
+  if (data.type === "call-cancel") {
+    event.waitUntil(
+      self.registration.getNotifications({ tag: data.tag || undefined }).then((list) => list.forEach((n) => n.close()))
+    );
+    return;
+  }
   const isCall = data.type === "call";
 
   event.waitUntil(

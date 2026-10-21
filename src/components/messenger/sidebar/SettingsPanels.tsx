@@ -5,6 +5,7 @@ import { ACCENTS, TextSize, ThemeMode, useAppearance } from "@/hooks/use-appeara
 import { AuthUser, Chat } from "../types";
 import { disablePush, enablePush, getExistingSubscription, pushSupport } from "@/lib/push";
 import { isNativeApp, startNativePush, stopNativePush } from "@/lib/nativePush";
+import { fullScreenAllowed, openFullScreenSettings } from "@/lib/callPrefs";
 
 const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
 const NOTIFY_KEY = "trindelka_notify_prefs";
@@ -120,6 +121,12 @@ function NotificationsPanel({
   const [pushOn, setPushOn] = useState(native ? !!localStorage.getItem("trindelka_fcm_token") : false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState("");
+  const [fullScreenOk, setFullScreenOk] = useState(true);
+
+  useEffect(() => {
+    if (!native) return;
+    fullScreenAllowed().then(setFullScreenOk);
+  }, [native, pushOn]);
 
   useEffect(() => {
     try {
@@ -191,6 +198,16 @@ function NotificationsPanel({
           />
         </Row>
         {pushError && <p className="px-1 text-xs text-red-400">{pushError}</p>}
+        {native && pushOn && !fullScreenOk && (
+          <Row icon="Smartphone" title="Звонки на весь экран" desc="Android 14 требует разрешить это отдельно. Без него звонок придёт обычным уведомлением">
+            <button
+              onClick={() => openFullScreenSettings()}
+              className="rounded-xl gradient-btn px-3 py-1.5 text-xs font-medium text-white"
+            >
+              Разрешить
+            </button>
+          </Row>
+        )}
         <Row icon="Bell" title="В колокольчике" desc="Новые сообщения появляются в разделе уведомлений">
           <Switch checked={prefs.inApp} onCheckedChange={(v) => setPrefs((p) => ({ ...p, inApp: v }))} />
         </Row>

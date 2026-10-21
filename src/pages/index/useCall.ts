@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_PUSH } from "./config";
+import { onNativeCallAction, syncNativeSession, takePendingCall } from "@/lib/callPrefs";
 
 export interface CallPeer {
   name: string;
@@ -153,6 +154,7 @@ export function useCall({ sessionId }: UseCallParams) {
   const remoteSetRef = useRef(false);
   const checkingRef = useRef(false);
   const ringerRef = useRef<ReturnType<typeof createRinger> | null>(null);
+  const acceptRef = useRef<(() => void) | null>(null);
   const sessionRef = useRef<string | null>(sessionId);
   sessionRef.current = sessionId;
   callRef.current = call;
@@ -409,6 +411,10 @@ export function useCall({ sessionId }: UseCallParams) {
     }
   };
 
+  acceptRef.current = () => {
+    accept();
+  };
+
   const decline = async () => {
     const c = callRef.current;
     if (!c) return;
@@ -468,6 +474,32 @@ export function useCall({ sessionId }: UseCallParams) {
   useEffect(() => {
     if (!sessionId && callRef.current) dropImmediately();
   }, [sessionId, dropImmediately]);
+
+  const pendingAcceptRef = useRef<number | null>(null);
+
+  const handleNativeAction = useCallback(
+    async (action: { callId: number; accept: boolean }) => {
+      await checkIncoming();
+      const c = callRef.current;
+      if (!action.accept || !c || c.id !== action.callId) return;
+      pendingAcceptRef.current = null;
+      acceptRef.current?.();
+    },
+    [checkIncoming]
+  );
+
+  useEffect(() => {
+    syncNativeSession(sessionId);
+    if (!sessionId) return;
+    takePendingCall().then((p) => {
+      if (p) handleNativeAction(p);
+    });
+    let off: () => void = () => undefined;
+    onNativeCallAction((a) => handleNativeAction(a)).then((fn) => {
+      off = fn;
+    });
+    return () => off();
+  }, [sessionId, handleNativeAction]);
 
   useEffect(() => {
     if (!sessionId) return;

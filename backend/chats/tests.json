@@ -103,6 +103,33 @@
       },
       "expectedStatus": 401,
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Set chat background without session returns 401",
+      "method": "POST",
+      "path": "/?action=set-chat-bg",
+      "body": {
+        "chat_id": 1,
+        "bg": "preset:aurora"
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Set role without session returns 401",
+      "method": "POST",
+      "path": "/?action=set-role",
+      "body": {
+        "chat_id": 1,
+        "user_id": 2,
+        "role": "admin"
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Read-by without message id returns 400",
+      "method": "GET",
+      "path": "/?action=read-by",
+      "expectedStatus": 400
     }
   ]
 }

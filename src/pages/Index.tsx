@@ -10,6 +10,8 @@ import CreateTopicModal from "@/components/messenger/CreateTopicModal";
 import AuthScreen from "@/components/messenger/AuthScreen";
 import GroupMembersModal from "@/components/messenger/GroupMembersModal";
 import ForwardModal from "@/components/messenger/chat/ForwardModal";
+import ReadByModal from "@/components/messenger/chat/ReadByModal";
+import ChatBackgroundPicker from "@/components/messenger/background/ChatBackgroundPicker";
 import { Chat, Message, Tab } from "@/components/messenger/types";
 import { EMOJI_CATEGORIES, GIF_CATEGORIES, API_CHATS } from "./index/config";
 import { useAuth } from "./index/useAuth";
@@ -37,6 +39,8 @@ export default function Index() {
   const [messages, setMessages] = useState<Message[]>([]);
 
   const [forwardSource, setForwardSource] = useState<Message | null>(null);
+  const [readByMessageId, setReadByMessageId] = useState<number | null>(null);
+  const [bgPickerOpen, setBgPickerOpen] = useState(false);
 
   const {
     authUser,
@@ -175,6 +179,8 @@ export default function Index() {
       {(!isMobile || mobileShowChat) && (
       <ChatArea
         activeChat={activeChat}
+        onOpenBackground={!isBotChat && activeChat && activeChat.id > 0 ? () => setBgPickerOpen(true) : undefined}
+        onOpenReadBy={!isBotChat ? (id) => setReadByMessageId(id) : undefined}
         onStartGroupCall={
           !isBotChat && activeChat?.isGroup && activeChat.id > 0 && !callCtl.call
             ? (isVideo) => groupCtl.startCall(activeChat.id, activeChat.name, isVideo)
@@ -311,6 +317,16 @@ export default function Index() {
           installedBotUsernames={bg.bots.map((b) => bg.botInfoRef.current[b.id]?.username).filter(Boolean) as string[]}
           onInstallBot={bg.installBot}
           onClose={() => bg.setGroupMembersOpen(false)}
+          onGroupChanged={reloadChats}
+          onLeft={() => {
+            bg.setGroupMembersOpen(false);
+            if (activeChat) {
+              const leftId = activeChat.id;
+              setChats((prev) => prev.filter((c) => c.id !== leftId));
+              setActiveChatId(null);
+              reloadChats();
+            }
+          }}
         />
       )}
 
@@ -330,6 +346,20 @@ export default function Index() {
           onToggleCam={callCtl.toggleCam}
           onToggleSpeaker={callCtl.toggleSpeaker}
           onEnd={callCtl.hangUp}
+        />
+      )}
+
+      {readByMessageId !== null && authUser && (
+        <ReadByModal messageId={readByMessageId} sessionId={authUser.sessionId} onClose={() => setReadByMessageId(null)} />
+      )}
+
+      {bgPickerOpen && activeChat && activeChat.id > 0 && (
+        <ChatBackgroundPicker
+          current={activeChat.chatBg ?? null}
+          isGroup={activeChat.isGroup}
+          onSelect={(bg) => msg.setChatBackground(activeChat.id, bg)}
+          onUpload={(file) => msg.uploadChatBackground(activeChat.id, file)}
+          onClose={() => setBgPickerOpen(false)}
         />
       )}
 

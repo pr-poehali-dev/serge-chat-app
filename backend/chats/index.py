@@ -1,6 +1,9 @@
 """Чаты, группы, темы, сообщения, присутствие и индикатор набора для мессенджера Трынделка"""
+import base64
 import json
 import os
+import re
+import uuid
 
 import psycopg2
 
@@ -15,6 +18,75 @@ CORS = {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Session-Id",
 }
+
+
+MAX_AVATAR_BYTES = 3 * 1024 * 1024
+MAX_BG_BYTES = 5 * 1024 * 1024
+BG_RE = re.compile(r"^(preset:[a-z0-9-]{1,32}|color:#[0-9a-fA-F]{6}|img:(https?://|/files/)[^\s]{1,500})$")
+IMAGE_TYPES = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+
+def save_file(key: str, data: bytes, content_type: str) -> str:
+    local_dir = os.environ.get("LOCAL_STORAGE_DIR")
+    if local_dir:
+        path = os.path.join(local_dir, key)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+        return f"{os.environ.get('PUBLIC_FILES_URL', '/files').rstrip('/')}/{key}"
+    import boto3
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=os.environ.get("S3_ENDPOINT", "https://bucket.poehali.dev"),
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+    )
+    s3.put_object(Bucket=os.environ.get("S3_BUCKET", "files"), Key=key, Body=data, ContentType=content_type)
+    public_base = os.environ.get("PUBLIC_FILES_URL") or f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket"
+    return f"{public_base.rstrip('/')}/{key}"
+
+
+def decode_image(body: dict, limit: int):
+    raw = body.get("imageBase64") or ""
+    ctype = (body.get("contentType") or "image/jpeg").lower()
+    if ctype not in IMAGE_TYPES:
+        raise ValueError("Поддерживаются JPG, PNG и WebP")
+    if "," in raw:
+        raw = raw.split(",", 1)[1]
+    try:
+        data = base64.b64decode(raw, validate=False)
+    except Exception:
+        raise ValueError("Не удалось прочитать изображение")
+    if not data:
+        raise ValueError("Пустое изображение")
+    if len(data) > limit:
+        raise ValueError("Изображение слишком большое")
+    return data, ctype, IMAGE_TYPES[ctype]
+
+
+def get_role(cur, chat_id: int, user_id: int):
+    cur.execute(f"SELECT role FROM {SCHEMA}.chat_members WHERE chat_id = %s AND user_id = %s", (chat_id, user_id))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def is_group_chat(cur, chat_id) -> bool:
+    cur.execute(f"SELECT is_group FROM {SCHEMA}.chats WHERE id = %s", (chat_id,))
+    row = cur.fetchone()
+    return bool(row and row[0])
+
+
+def promote_successor(cur, chat_id: int, leaving_user: int) -> None:
+    """Если уходит владелец, права переходят старшему администратору, а затем старейшему участнику"""
+    cur.execute(f"""
+        SELECT user_id FROM {SCHEMA}.chat_members
+        WHERE chat_id = %s AND user_id != %s
+        ORDER BY CASE role WHEN 'admin' THEN 0 ELSE 1 END, joined_at ASC NULLS LAST, id ASC
+        LIMIT 1
+    """, (chat_id, leaving_user))
+    row = cur.fetchone()
+    if row:
+        cur.execute(f"UPDATE {SCHEMA}.chat_members SET role = 'owner' WHERE chat_id = %s AND user_id = %s", (chat_id, row[0]))
 
 
 def reply(status: int, payload: dict) -> dict:
@@ -262,15 +334,15 @@ def handler(event: dict, context) -> dict:
                 return reply(400, {"error": "Участники не найдены"})
             color = GROUP_COLORS[sum(ord(ch) for ch in name) % len(GROUP_COLORS)]
             cur.execute(f"""
-                INSERT INTO {SCHEMA}.chats (is_group, name, avatar_color)
-                VALUES (true, %s, %s) RETURNING id
-            """, (name, color))
+                INSERT INTO {SCHEMA}.chats (is_group, name, avatar_color, created_by)
+                VALUES (true, %s, %s, %s) RETURNING id
+            """, (name, color, my_user_id))
             chat_id = cur.fetchone()[0]
             for uid in [my_user_id] + valid_ids:
                 cur.execute(f"""
-                    INSERT INTO {SCHEMA}.chat_members (chat_id, user_id)
-                    VALUES (%s, %s) ON CONFLICT (chat_id, user_id) DO NOTHING
-                """, (chat_id, uid))
+                    INSERT INTO {SCHEMA}.chat_members (chat_id, user_id, role)
+                    VALUES (%s, %s, %s) ON CONFLICT (chat_id, user_id) DO NOTHING
+                """, (chat_id, uid, "owner" if uid == my_user_id else "member"))
             conn.commit()
             return reply(200, {"chat_id": chat_id})
 
@@ -283,6 +355,8 @@ def handler(event: dict, context) -> dict:
             chat_row = cur.fetchone()
             if not chat_row or not chat_row[0]:
                 return reply(400, {"error": "Чат не найден или не является группой"})
+            if get_role(cur, chat_id, my_user_id) == "owner":
+                promote_successor(cur, chat_id, my_user_id)
             cur.execute(f"""
                 DELETE FROM {SCHEMA}.chat_members WHERE chat_id = %s AND user_id = %s
             """, (chat_id, my_user_id))
@@ -511,18 +585,24 @@ def handler(event: dict, context) -> dict:
             if not is_member(cur, chat_id, my_user_id):
                 return reply(403, {"error": "Нет доступа к чату"})
             cur.execute(f"""
-                SELECT u.id, u.display_name, u.avatar_initials, u.avatar_color, u.avatar_url
+                SELECT u.id, u.display_name, u.avatar_initials, u.avatar_color, u.avatar_url, cm.role
                 FROM {SCHEMA}.users u
                 JOIN {SCHEMA}.chat_members cm ON cm.user_id = u.id
                 WHERE cm.chat_id = %s
-                ORDER BY u.display_name
+                ORDER BY CASE cm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, u.display_name
             """, (chat_id,))
             rows = cur.fetchall()
             members = [{
                 "id": r[0], "displayName": r[1], "avatarInitials": r[2],
-                "avatarColor": r[3], "avatarUrl": r[4],
+                "avatarColor": r[3], "avatarUrl": r[4], "role": r[5],
             } for r in rows]
-            return reply(200, {"members": members})
+            cur.execute(f"SELECT name, description, avatar_url, avatar_color FROM {SCHEMA}.chats WHERE id = %s", (chat_id,))
+            info = cur.fetchone()
+            return reply(200, {
+                "members": members,
+                "myRole": get_role(cur, chat_id, my_user_id),
+                "group": {"name": info[0], "description": info[1] or "", "avatarUrl": info[2], "color": info[3]} if info else None,
+            })
 
         # POST /chats?action=add-member — добавить участника в группу
         if method == "POST" and action == "add-member":
@@ -534,6 +614,11 @@ def handler(event: dict, context) -> dict:
                 return reply(400, {"error": "Чат не найден или не является группой"})
             if not is_member(cur, int(chat_id), my_user_id):
                 return reply(403, {"error": "Нет доступа к чату"})
+            if get_role(cur, int(chat_id), my_user_id) not in ("owner", "admin"):
+                return reply(403, {"error": "Добавлять участников могут владелец и администраторы"})
+            cur.execute(f"SELECT 1 FROM {SCHEMA}.users WHERE id = %s", (user_id,))
+            if not cur.fetchone():
+                return reply(404, {"error": "Пользователь не найден"})
             cur.execute(f"""
                 INSERT INTO {SCHEMA}.chat_members (chat_id, user_id)
                 VALUES (%s, %s)
@@ -593,13 +678,151 @@ def handler(event: dict, context) -> dict:
         if method == "POST" and action == "remove-member":
             chat_id = body.get("chat_id")
             user_id = body.get("user_id")
-            if not chat_id or not is_member(cur, int(chat_id), my_user_id):
+            if not isinstance(chat_id, int) or not isinstance(user_id, int):
+                return reply(400, {"error": "Нужны chat_id и user_id"})
+            my_role = get_role(cur, chat_id, my_user_id)
+            if my_role is None:
                 return reply(403, {"error": "Нет доступа к чату"})
+            if my_role not in ("owner", "admin"):
+                return reply(403, {"error": "Удалять участников могут владелец и администраторы"})
+            if user_id == my_user_id:
+                return reply(400, {"error": "Чтобы выйти из группы, используйте «Покинуть группу»"})
+            target_role = get_role(cur, chat_id, user_id)
+            if target_role is None:
+                return reply(404, {"error": "Участник не найден"})
+            if target_role == "owner":
+                return reply(403, {"error": "Владельца группы удалить нельзя"})
+            if target_role == "admin" and my_role != "owner":
+                return reply(403, {"error": "Администратора может удалить только владелец"})
             cur.execute(f"""
                 DELETE FROM {SCHEMA}.chat_members WHERE chat_id = %s AND user_id = %s
             """, (chat_id, user_id))
             conn.commit()
             return reply(200, {"ok": True})
+
+        # POST /chats?action=update-group — название, описание и аватар группы
+        if method == "POST" and action == "update-group":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = body.get("chat_id")
+            if not isinstance(chat_id, int) or not is_group_chat(cur, chat_id):
+                return reply(400, {"error": "Группа не найдена"})
+            if get_role(cur, chat_id, my_user_id) not in ("owner", "admin"):
+                return reply(403, {"error": "Менять группу могут владелец и администраторы"})
+            if "name" in body:
+                name = (body.get("name") or "").strip()[:100]
+                if not name:
+                    return reply(400, {"error": "Название не может быть пустым"})
+                cur.execute(f"UPDATE {SCHEMA}.chats SET name = %s WHERE id = %s", (name, chat_id))
+            if "description" in body:
+                cur.execute(f"UPDATE {SCHEMA}.chats SET description = %s WHERE id = %s", ((body.get("description") or "").strip()[:300] or None, chat_id))
+            if body.get("removeAvatar"):
+                cur.execute(f"UPDATE {SCHEMA}.chats SET avatar_url = NULL WHERE id = %s", (chat_id,))
+            elif body.get("imageBase64"):
+                try:
+                    data, ctype, ext = decode_image(body, MAX_AVATAR_BYTES)
+                except ValueError as e:
+                    return reply(400, {"error": str(e)})
+                url = save_file(f"group-avatars/{chat_id}-{uuid.uuid4().hex}.{ext}", data, ctype)
+                cur.execute(f"UPDATE {SCHEMA}.chats SET avatar_url = %s WHERE id = %s", (url, chat_id))
+            conn.commit()
+            cur.execute(f"SELECT name, description, avatar_url FROM {SCHEMA}.chats WHERE id = %s", (chat_id,))
+            g = cur.fetchone()
+            return reply(200, {"group": {"name": g[0], "description": g[1] or "", "avatarUrl": g[2]}})
+
+        # POST /chats?action=set-role — назначить или снять администратора (только владелец)
+        if method == "POST" and action == "set-role":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = body.get("chat_id")
+            user_id = body.get("user_id")
+            role = body.get("role")
+            if not isinstance(chat_id, int) or not isinstance(user_id, int) or role not in ("admin", "member"):
+                return reply(400, {"error": "Нужны chat_id, user_id и role (admin или member)"})
+            if not is_group_chat(cur, chat_id):
+                return reply(400, {"error": "Группа не найдена"})
+            if get_role(cur, chat_id, my_user_id) != "owner":
+                return reply(403, {"error": "Назначать администраторов может только владелец"})
+            target_role = get_role(cur, chat_id, user_id)
+            if target_role is None:
+                return reply(404, {"error": "Участник не найден"})
+            if target_role == "owner":
+                return reply(400, {"error": "Роль владельца менять нельзя. Передайте группу другому человеку"})
+            cur.execute(f"UPDATE {SCHEMA}.chat_members SET role = %s WHERE chat_id = %s AND user_id = %s", (role, chat_id, user_id))
+            conn.commit()
+            return reply(200, {"ok": True, "role": role})
+
+        # POST /chats?action=transfer-owner — передать группу другому участнику (только владелец)
+        if method == "POST" and action == "transfer-owner":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = body.get("chat_id")
+            user_id = body.get("user_id")
+            if not isinstance(chat_id, int) or not isinstance(user_id, int):
+                return reply(400, {"error": "Нужны chat_id и user_id"})
+            if not is_group_chat(cur, chat_id):
+                return reply(400, {"error": "Группа не найдена"})
+            if get_role(cur, chat_id, my_user_id) != "owner":
+                return reply(403, {"error": "Передать группу может только владелец"})
+            if user_id == my_user_id:
+                return reply(400, {"error": "Вы уже владелец"})
+            if get_role(cur, chat_id, user_id) is None:
+                return reply(404, {"error": "Участник не найден"})
+            cur.execute(f"UPDATE {SCHEMA}.chat_members SET role = 'owner' WHERE chat_id = %s AND user_id = %s", (chat_id, user_id))
+            cur.execute(f"UPDATE {SCHEMA}.chat_members SET role = 'admin' WHERE chat_id = %s AND user_id = %s", (chat_id, my_user_id))
+            conn.commit()
+            return reply(200, {"ok": True})
+
+        # POST /chats?action=set-chat-bg — личный фон чата (виден только мне)
+        if method == "POST" and action == "set-chat-bg":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = body.get("chat_id")
+            if not isinstance(chat_id, int) or not is_member(cur, chat_id, my_user_id):
+                return reply(403, {"error": "Нет доступа к чату"})
+            bg = body.get("bg")
+            if bg is not None and not (isinstance(bg, str) and BG_RE.match(bg)):
+                return reply(400, {"error": "Некорректный фон"})
+            if body.get("imageBase64"):
+                try:
+                    data, ctype, ext = decode_image(body, MAX_BG_BYTES)
+                except ValueError as e:
+                    return reply(400, {"error": str(e)})
+                bg = "img:" + save_file(f"chat-bg/{chat_id}-{my_user_id}-{uuid.uuid4().hex}.{ext}", data, ctype)
+            cur.execute(f"UPDATE {SCHEMA}.chat_members SET chat_bg = %s WHERE chat_id = %s AND user_id = %s", (bg, chat_id, my_user_id))
+            conn.commit()
+            return reply(200, {"ok": True, "bg": bg})
+
+        # GET /chats?action=read-by&message_id=X — кто прочитал моё сообщение
+        if method == "GET" and action == "read-by":
+            try:
+                message_id = int(params.get("message_id"))
+            except (TypeError, ValueError):
+                return reply(400, {"error": "Нужен message_id"})
+            cur.execute(f"SELECT chat_id, sender_id, created_at FROM {SCHEMA}.messages WHERE id = %s", (message_id,))
+            msg = cur.fetchone()
+            if not msg or not is_member(cur, msg[0], my_user_id):
+                return reply(403, {"error": "Нет доступа к сообщению"})
+            if msg[1] != my_user_id:
+                return reply(403, {"error": "Список прочитавших видит только автор сообщения"})
+            cur.execute(f"""
+                SELECT u.id, u.display_name, u.avatar_initials, u.avatar_color, u.avatar_url,
+                       u.read_receipts, cm.last_read_at
+                FROM {SCHEMA}.chat_members cm
+                JOIN {SCHEMA}.users u ON u.id = cm.user_id
+                WHERE cm.chat_id = %s AND cm.user_id != %s
+                ORDER BY u.display_name
+            """, (msg[0], my_user_id))
+            readers, unread, hidden = [], [], []
+            for r in cur.fetchall():
+                person = {"id": r[0], "displayName": r[1], "avatarInitials": r[2], "avatarColor": r[3], "avatarUrl": r[4]}
+                if not r[5]:
+                    hidden.append(person)
+                elif r[6] is not None and r[6] >= msg[2]:
+                    readers.append(person)
+                else:
+                    unread.append(person)
+            return reply(200, {"readers": readers, "unread": unread, "hidden": hidden})
 
         # GET /chats — список чатов
         cur.execute(f"""
@@ -642,7 +865,8 @@ def handler(event: dict, context) -> dict:
                 cm_me.pinned as pinned,
                 (SELECT COUNT(*) FROM {SCHEMA}.chat_members x WHERE x.chat_id = c.id) as members_count,
                 pm.id, pm.text, pm.kind, pm.file_name, pm.topic_id, pu.display_name,
-                cm_me.notify_enabled
+                cm_me.notify_enabled,
+                c.avatar_url, c.description, cm_me.role, cm_me.chat_bg
             FROM {SCHEMA}.chats c
             JOIN {SCHEMA}.chat_members cm_me ON cm_me.chat_id = c.id AND cm_me.user_id = %(me)s
             LEFT JOIN {SCHEMA}.messages pm ON pm.id = c.pinned_message_id AND pm.removed_at IS NULL
@@ -686,7 +910,10 @@ def handler(event: dict, context) -> dict:
                 "typing": False if is_group else bool(r[13]),
                 "avatar": avatar,
                 "pinned": bool(r[14]) if r[14] is not None else False,
-                "avatarUrl": None if is_group else r[11],
+                "avatarUrl": r[23] if is_group else r[11],
+                "description": (r[24] or "") if is_group else "",
+                "myRole": r[25] if is_group else None,
+                "chatBg": r[26],
                 "contactUserId": None if is_group else r[7],
                 "memberCount": int(r[15]) if is_group and r[15] is not None else None,
                 "notifyEnabled": True if r[22] is None else bool(r[22]),
