@@ -1,52 +1,10 @@
-import { RefObject, useState, useEffect, useRef, ReactNode } from "react";
-import Icon from "@/components/ui/icon";
+import { RefObject, useState, useEffect, useRef } from "react";
 import { Chat, Message } from "../types";
-import VoiceMessage from "../media/VoiceMessage";
-import CircleMessage from "../media/CircleMessage";
-import ReplyQuote from "./ReplyQuote";
-import { ImageAttachment, FileCard } from "./FileAttachment";
-import { extractGifUrl } from "@/pages/index/config";
-import { Smiley, splitSmileys } from "../smileys/Smiley";
 import { resolveBg } from "../background/chatBackgrounds";
-import PollCard from "../polls/PollCard";
-import { extractStickerPath, stickerTitle } from "../stickers/stickerCatalog";
-
-const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
-
-function renderPlain(text: string): ReactNode {
-  const parts = splitSmileys(text);
-  if (parts.length === 1 && typeof parts[0] === "string") return text;
-  const onlySmileys = parts.every((p) => typeof p !== "string" || p.trim() === "");
-  return parts.map((p, i) =>
-    typeof p === "string" ? <span key={i}>{p}</span> : <Smiley key={i} def={p} size={onlySmileys ? 34 : 20} />
-  );
-}
-
-function highlightText(text: string, query: string, isCurrent: boolean): ReactNode {
-  const q = query.trim();
-  if (!q) return renderPlain(text);
-  const lower = text.toLowerCase();
-  const needle = q.toLowerCase();
-  const parts: ReactNode[] = [];
-  let from = 0;
-  let idx = lower.indexOf(needle, from);
-  let key = 0;
-  while (idx !== -1) {
-    if (idx > from) parts.push(text.slice(from, idx));
-    parts.push(
-      <mark
-        key={key++}
-        className={`rounded px-0.5 text-white ${isCurrent ? "bg-amber-500/80" : "bg-amber-400/35"}`}
-      >
-        {text.slice(idx, idx + needle.length)}
-      </mark>
-    );
-    from = idx + needle.length;
-    idx = lower.indexOf(needle, from);
-  }
-  if (from < text.length) parts.push(text.slice(from));
-  return parts;
-}
+import MessageBody from "./messageList/MessageBody";
+import MessageMeta from "./messageList/MessageMeta";
+import MessageActions from "./messageList/MessageActions";
+import RemoveConfirmModal from "./messageList/RemoveConfirmModal";
 
 interface MessageListProps {
   activeChat: Chat;
@@ -163,7 +121,6 @@ export default function MessageList({
           </div>
         ) : (
           messages.map((msg, i) => {
-            const reactionEntries = Object.entries(msg.reactions || {}).filter(([, users]) => users.length > 0);
             return (
             <div
               key={msg.id}
@@ -211,227 +168,40 @@ export default function MessageList({
                       {msg.senderName}
                     </p>
                   )}
-                  {msg.removed ? (
-                    <div className="msg-bubble-in flex items-center gap-2 px-4 py-2.5 text-fg/40">
-                      <Icon name="Ban" size={13} />
-                      <span className="text-sm italic">Сообщение удалено</span>
-                    </div>
-                  ) : msg.kind === "circle" && msg.mediaUrl ? (
-                    <CircleMessage msg={msg} />
-                  ) : (
-                  <div className={`${msg.kind === "voice" || msg.kind === "image" || extractGifUrl(msg.text) !== null ? "p-1" : "px-4 py-2.5"} ${msg.kind === "voice" ? "px-3 py-2" : ""} ${msg.kind === "file" ? "px-3 py-2.5" : ""} ${extractStickerPath(msg.text) && !msg.removed ? "!p-0 !bg-transparent !border-0 !shadow-none" : msg.out ? "msg-bubble-out text-white" : "msg-bubble-in text-fg/85"}`}>
-                    {msg.forwardedFrom && (
-                      <p className={`mb-1 flex items-center gap-1 text-[11px] font-medium opacity-80 ${msg.kind === "image" ? "px-3 pt-1" : ""}`}>
-                        <Icon name="Forward" size={11} className="shrink-0" />
-                        <span className="truncate">Переслано от {msg.forwardedFrom}</span>
-                      </p>
-                    )}
-                    {msg.replyTo && (
-                      <div className={msg.kind === "image" ? "px-2 pt-1" : ""}>
-                        <ReplyQuote reply={msg.replyTo} out={msg.out} onJump={jumpTo} />
-                      </div>
-                    )}
-                    {msg.kind === "voice" && msg.mediaUrl ? (
-                      <VoiceMessage msg={msg} onTranscribe={onTranscribe} />
-                    ) : msg.kind === "image" && msg.mediaUrl ? (
-                      <>
-                        <ImageAttachment msg={msg} />
-                        {msg.text && (
-                          <p className="px-3 py-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words">
-                            {highlightText(msg.text, searchQuery, currentMatchId === msg.id)}
-                          </p>
-                        )}
-                      </>
-                    ) : msg.kind === "file" && msg.mediaUrl ? (
-                      <>
-                        <FileCard msg={msg} out={msg.out} />
-                        {msg.text && (
-                          <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap break-words">
-                            {highlightText(msg.text, searchQuery, currentMatchId === msg.id)}
-                          </p>
-                        )}
-                      </>
-                    ) : msg.poll && !msg.removed ? (
-                      <PollCard
-                        poll={msg.poll}
-                        out={msg.out}
-                        canClose={msg.out || canModerate}
-                        sessionId={sessionId}
-                        onVote={onVotePoll}
-                        onClose={onClosePoll}
-                      />
-                    ) : extractStickerPath(msg.text) && !msg.removed ? (
-                      <img
-                        src={extractStickerPath(msg.text) || ""}
-                        alt={stickerTitle(extractStickerPath(msg.text) || "")}
-                        className="h-32 w-32 object-contain sm:h-40 sm:w-40 drop-shadow-lg"
-                        loading="lazy"
-                        draggable={false}
-                      />
-                    ) : extractGifUrl(msg.text) !== null ? (
-                      <img
-                        src={extractGifUrl(msg.text) || ""}
-                        alt="GIF"
-                        className="rounded-xl max-w-[220px] max-h-[160px] object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                        {highlightText(msg.text, searchQuery, currentMatchId === msg.id)}
-                      </p>
-                    )}
-                  </div>
-                  )}
+                  <MessageBody
+                    msg={msg}
+                    searchQuery={searchQuery}
+                    currentMatchId={currentMatchId}
+                    jumpTo={jumpTo}
+                    onTranscribe={onTranscribe}
+                    canModerate={canModerate}
+                    sessionId={sessionId}
+                    onVotePoll={onVotePoll}
+                    onClosePoll={onClosePoll}
+                  />
 
-                  {reactionEntries.length > 0 && (
-                    <div className={`flex flex-wrap gap-1 mt-1 ${msg.out ? "justify-end" : "justify-start"}`}>
-                      {reactionEntries.map(([emoji, users]) => {
-                        const mine = currentUserId != null && users.includes(currentUserId);
-                        return (
-                          <button
-                            key={emoji}
-                            onClick={() => onToggleReaction?.(msg.id, emoji)}
-                            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-all ${
-                              mine
-                                ? "bg-purple-500/25 border border-purple-400/40"
-                                : "bg-fg/[0.06] border border-fg/[0.08] hover:bg-fg/[0.1]"
-                            }`}
-                          >
-                            <span>{emoji}</span>
-                            <span className="text-[10px] text-fg/50">{users.length}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className={`flex items-center gap-1 mt-1 px-1 ${msg.out ? "justify-end" : "justify-start"}`}>
-                    {msg.edited && !msg.removed && <span className="text-[10px] text-fg/25">изменено</span>}
-                    <span className="text-[10px] text-fg/25">{msg.time}</span>
-                    {msg.out && !msg.removed && (() => {
-                      const isGroupMsg = msg.recipientsCount != null && msg.recipientsCount > 0;
-                      const tip =
-                        msg.recipientsCount != null
-                          ? `Прочитали ${msg.readCount ?? 0} из ${msg.recipientsCount}`
-                          : msg.read
-                          ? "Прочитано"
-                          : msg.delivered
-                          ? "Доставлено"
-                          : "Отправлено";
-                      const inner = (
-                        <>
-                          <Icon
-                            name={msg.read || msg.delivered ? "CheckCheck" : "Check"}
-                            size={12}
-                            className={msg.read ? "text-purple-400" : "text-fg/30"}
-                          />
-                          {isGroupMsg && (
-                            <span className={`text-[10px] tabular-nums ${msg.read ? "text-purple-400" : "text-fg/35"}`}>
-                              {msg.readCount ?? 0}/{msg.recipientsCount}
-                            </span>
-                          )}
-                        </>
-                      );
-                      return isGroupMsg && onOpenReadBy && msg.id < 1e12 ? (
-                        <button
-                          type="button"
-                          onClick={() => onOpenReadBy(msg.id)}
-                          title={`${tip}. Нажмите, чтобы увидеть, кто прочитал`}
-                          className="flex items-center gap-0.5 rounded-md px-1 py-0.5 hover:bg-fg/[0.08] transition-colors"
-                        >
-                          {inner}
-                        </button>
-                      ) : (
-                        <span className="flex items-center gap-0.5" title={tip}>
-                          {inner}
-                        </span>
-                      );
-                    })()}
-                  </div>
+                  <MessageMeta
+                    msg={msg}
+                    currentUserId={currentUserId}
+                    onToggleReaction={onToggleReaction}
+                    onOpenReadBy={onOpenReadBy}
+                  />
                 </div>
 
-                {!msg.removed && (onToggleReaction || onReply || onTogglePin || onForward || (msg.out && (onEdit || onRemove))) && (
-                  <div className="relative shrink-0 self-start flex items-center opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 max-[639px]:opacity-60 transition-opacity">
-                    {onReply && (
-                      <button
-                        onClick={() => onReply(msg)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-fg/30 hover:text-purple-400 hover:bg-fg/[0.08] transition-all"
-                        title="Ответить"
-                      >
-                        <Icon name="Reply" size={13} />
-                      </button>
-                    )}
-                    {msg.out && onEdit && (msg.kind === "text" || msg.kind === "image" || msg.kind === "file" || !msg.kind) && extractGifUrl(msg.text) === null && msg.id < 1e12 && (
-                      <button
-                        onClick={() => onEdit(msg)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-fg/30 hover:text-purple-400 hover:bg-fg/[0.08] transition-all"
-                        title="Изменить"
-                      >
-                        <Icon name="Pencil" size={12} />
-                      </button>
-                    )}
-                    {msg.out && onRemove && msg.id < 1e12 && (
-                      <button
-                        onClick={() => setConfirmRemoveId(msg.id)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-fg/30 hover:text-red-400 hover:bg-fg/[0.08] transition-all"
-                        title="Удалить"
-                      >
-                        <Icon name="Trash2" size={12} />
-                      </button>
-                    )}
-                    {onForward && msg.id < 1e12 && (
-                      <button
-                        onClick={() => onForward(msg)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-fg/30 hover:text-purple-400 hover:bg-fg/[0.08] transition-all"
-                        title="Переслать"
-                      >
-                        <Icon name="Forward" size={13} />
-                      </button>
-                    )}
-                    {onTogglePin && msg.id < 1e12 && (
-                      <button
-                        onClick={() => onTogglePin(msg)}
-                        className={`flex h-6 w-6 items-center justify-center rounded-full hover:bg-fg/[0.08] transition-all ${
-                          pinnedMessageId === msg.id ? "text-amber-400" : "text-fg/30 hover:text-amber-400"
-                        }`}
-                        title={pinnedMessageId === msg.id ? "Открепить сообщение" : "Закрепить сообщение"}
-                      >
-                        <Icon name="Pin" size={12} className={pinnedMessageId === msg.id ? "fill-amber-400" : ""} />
-                      </button>
-                    )}
-                    {onToggleReaction && (
-                      <button
-                        onClick={() => setReactionPickerFor((v) => (v === msg.id ? null : msg.id))}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-fg/30 hover:text-purple-400 hover:bg-fg/[0.08] transition-all"
-                        title="Добавить реакцию"
-                      >
-                        <Icon name="SmilePlus" size={13} />
-                      </button>
-                    )}
-                    {onToggleReaction && reactionPickerFor === msg.id && (
-                      <div
-                        ref={reactionPickerRef}
-                        className={`absolute z-20 top-7 flex items-center gap-0.5 rounded-2xl px-1.5 py-1 animate-fade-in ${
-                          msg.out ? "right-0" : "left-0"
-                        }`}
-                        style={{ background: "hsl(var(--popover) / 0.98)", border: "1px solid rgb(var(--fg) / calc(0.1 * var(--fg-gain)))", backdropFilter: "blur(20px)" }}
-                      >
-                        {QUICK_REACTIONS.map((em) => (
-                          <button
-                            key={em}
-                            onClick={() => {
-                              onToggleReaction(msg.id, em);
-                              setReactionPickerFor(null);
-                            }}
-                            className="flex h-8 w-8 items-center justify-center rounded-xl text-lg hover:bg-fg/[0.08] hover:scale-110 transition-all"
-                          >
-                            {em}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                <MessageActions
+                  msg={msg}
+                  pinnedMessageId={pinnedMessageId}
+                  onToggleReaction={onToggleReaction}
+                  onReply={onReply}
+                  onEdit={onEdit}
+                  onRemove={onRemove}
+                  onTogglePin={onTogglePin}
+                  onForward={onForward}
+                  setConfirmRemoveId={setConfirmRemoveId}
+                  reactionPickerFor={reactionPickerFor}
+                  setReactionPickerFor={setReactionPickerFor}
+                  reactionPickerRef={reactionPickerRef}
+                />
               </div>
             </div>
           );})
@@ -459,44 +229,11 @@ export default function MessageList({
       </div>
 
       {confirmRemoveId !== null && (
-        <div
-          className="fixed inset-0 z-[95] flex items-center justify-center overlay-safe"
-          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
-          onClick={() => setConfirmRemoveId(null)}
-        >
-          <div
-            className="w-full max-w-xs rounded-3xl overflow-hidden animate-fade-in p-5"
-            style={{ background: "hsl(var(--popover) / 0.98)", border: "1px solid rgb(var(--fg) / calc(0.1 * var(--fg-gain)))" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col items-center text-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/15">
-                <Icon name="Trash2" size={20} className="text-red-400" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-fg/90">Удалить сообщение?</p>
-                <p className="text-xs text-fg/40 mt-1">Оно исчезнет у всех участников чата</p>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button
-                onClick={() => setConfirmRemoveId(null)}
-                className="flex-1 rounded-xl bg-fg/[0.06] py-2.5 text-sm text-fg/60 hover:bg-fg/[0.1] transition-all"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={() => {
-                  onRemove?.(confirmRemoveId);
-                  setConfirmRemoveId(null);
-                }}
-                className="flex-1 rounded-xl bg-red-500/20 border border-red-500/30 py-2.5 text-sm text-red-400 hover:bg-red-500/30 transition-all"
-              >
-                Удалить
-              </button>
-            </div>
-          </div>
-        </div>
+        <RemoveConfirmModal
+          confirmRemoveId={confirmRemoveId}
+          setConfirmRemoveId={setConfirmRemoveId}
+          onRemove={onRemove}
+        />
       )}
     </>
   );
