@@ -10,6 +10,7 @@ interface PollCardProps {
   sessionId: string | null;
   onVote?: (pollId: number, optionIds: number[]) => void;
   onClose?: (pollId: number) => void;
+  onForward?: () => void;
 }
 
 interface Person {
@@ -20,7 +21,9 @@ interface Person {
   avatarUrl?: string | null;
 }
 
-export default function PollCard({ poll, out, canClose, sessionId, onVote, onClose }: PollCardProps) {
+export default function PollCard({ poll, out, canClose, sessionId, onVote, onClose, onForward }: PollCardProps) {
+  const [linkNote, setLinkNote] = useState("");
+
   const [draft, setDraft] = useState<number[]>(() => poll.options.filter((o) => o.mine).map((o) => o.id));
   const [editing, setEditing] = useState(!poll.myVoted);
   const [voters, setVoters] = useState<Record<string, Person[]> | null>(null);
@@ -55,6 +58,34 @@ export default function PollCard({ poll, out, canClose, sessionId, onVote, onClo
     } catch {
       setVoters({});
     }
+  };
+
+  const copyLink = async () => {
+    if (!sessionId) return;
+    setLinkNote("");
+    try {
+      const res = await fetch(`${API_CHATS}?action=poll-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": sessionId },
+        body: JSON.stringify({ poll_id: poll.id }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.code) {
+        setLinkNote(d.error || "Не удалось создать ссылку");
+        return;
+      }
+      const url = `${window.location.origin}/app?poll=${d.code}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        setLinkNote("Ссылка скопирована");
+      } catch {
+        window.prompt("Скопируйте ссылку на опрос", url);
+        setLinkNote("");
+      }
+    } catch {
+      setLinkNote("Не удалось связаться с сервером");
+    }
+    window.setTimeout(() => setLinkNote(""), 2500);
   };
 
   const text = out ? "text-white" : "text-fg/90";
@@ -139,6 +170,22 @@ export default function PollCard({ poll, out, canClose, sessionId, onVote, onClo
           )}
         </span>
       </div>
+
+      {(onForward || sessionId) && (
+        <div className={`mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] ${sub}`}>
+          {onForward && (
+            <button type="button" onClick={onForward} className="flex items-center gap-1 underline-offset-2 hover:underline">
+              <Icon name="Forward" size={11} /> В другую группу
+            </button>
+          )}
+          {sessionId && (
+            <button type="button" onClick={copyLink} className="flex items-center gap-1 underline-offset-2 hover:underline">
+              <Icon name="Link" size={11} /> Ссылка
+            </button>
+          )}
+          {linkNote && <span>{linkNote}</span>}
+        </div>
+      )}
 
       {showVoters && voters && (
         <div className={`mt-2 space-y-2 rounded-xl p-2 ${barBg}`}>

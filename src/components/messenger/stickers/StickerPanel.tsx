@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Icon from "@/components/ui/icon";
 import { API_CHATS } from "@/pages/index/config";
 import { STICKER_SETS, stickerTitle } from "./stickerCatalog";
+import { useCustomStickers } from "./useCustomStickers";
 
 interface StickerPanelProps {
   sessionId: string | null;
@@ -9,12 +10,18 @@ interface StickerPanelProps {
 }
 
 const FAV = "fav";
+const NEW_PACK = "new-pack";
+const packKey = (id: number) => `pack-${id}`;
 
 export default function StickerPanel({ sessionId, onPick }: StickerPanelProps) {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [activeSet, setActiveSet] = useState<string>(STICKER_SETS[0].id);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const custom = useCustomStickers(sessionId);
+  const [newTitle, setNewTitle] = useState("");
+  const [manage, setManage] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     if (!sessionId) return;
@@ -54,8 +61,25 @@ export default function StickerPanel({ sessionId, onPick }: StickerPanelProps) {
     }
   };
 
-  const current = activeSet === FAV ? null : STICKER_SETS.find((s) => s.id === activeSet) || STICKER_SETS[0];
-  const list = activeSet === FAV ? favorites.map((p) => ({ path: p, title: stickerTitle(p) })) : current?.stickers || [];
+  const activePack = custom.packs.find((p) => packKey(p.id) === activeSet) || null;
+  const isBuiltin = !activePack && activeSet !== FAV && activeSet !== NEW_PACK;
+  const current = isBuiltin ? STICKER_SETS.find((s) => s.id === activeSet) || STICKER_SETS[0] : null;
+  const list = activeSet === FAV
+    ? favorites.map((p) => ({ path: p, title: stickerTitle(p) }))
+    : activePack
+    ? activePack.stickers.map((st) => ({ path: st.url, title: "Свой стикер" }))
+    : current?.stickers || [];
+
+  const createPack = async () => {
+    const title = newTitle.trim();
+    if (!title) return;
+    const pack = await custom.createPack(title);
+    if (pack) {
+      setNewTitle("");
+      setActiveSet(packKey(pack.id));
+      setManage(true);
+    }
+  };
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -83,15 +107,108 @@ export default function StickerPanel({ sessionId, onPick }: StickerPanelProps) {
             {s.icon}
           </button>
         ))}
+        {custom.packs.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => {
+              setActiveSet(packKey(p.id));
+              setManage(false);
+            }}
+            title={p.title}
+            aria-label={`Набор: ${p.title}`}
+            className={`flex h-9 min-w-9 max-w-[96px] items-center justify-center gap-1 rounded-xl px-2 text-xs transition-all ${
+              activeSet === packKey(p.id) ? "bg-purple-500/20 ring-1 ring-purple-400/40" : "hover:bg-fg/[0.08]"
+            }`}
+          >
+            {p.stickers[0] ? (
+              <img src={p.stickers[0].url} alt="" className="h-6 w-6 object-contain" draggable={false} />
+            ) : (
+              <Icon name="Smile" size={16} />
+            )}
+          </button>
+        ))}
+        <button
+          onClick={() => setActiveSet(NEW_PACK)}
+          title="Создать свой набор"
+          aria-label="Создать свой набор стикеров"
+          className={`flex h-9 min-w-9 items-center justify-center rounded-xl px-2 transition-all ${
+            activeSet === NEW_PACK ? "bg-purple-500/20 ring-1 ring-purple-400/40" : "text-fg/50 hover:bg-fg/[0.08]"
+          }`}
+        >
+          <Icon name="Plus" size={16} />
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
-        <p className="mb-2 px-1 text-[10px] font-medium uppercase tracking-wider text-fg/25">
-          {activeSet === FAV ? "Избранные" : current?.title}
-        </p>
+        {activeSet === NEW_PACK ? (
+          <div className="space-y-3 p-2">
+            <p className="text-xs leading-relaxed text-fg/50">
+              Создайте свой набор: назовите его и загрузите картинки. Потом их можно отправлять в чат как обычные стикеры.
+            </p>
+            <input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") createPack();
+              }}
+              maxLength={40}
+              placeholder="Название набора"
+              className="w-full rounded-xl border border-fg/[0.08] bg-fg/[0.06] px-3 py-2 text-sm text-fg/85 outline-none placeholder:text-fg/30 focus:border-purple-500/40"
+            />
+            <button
+              onClick={createPack}
+              disabled={!newTitle.trim() || custom.busy || !sessionId}
+              className="w-full rounded-xl gradient-btn py-2 text-sm font-medium text-white disabled:opacity-40"
+            >
+              Создать набор
+            </button>
+            {custom.error && <p className="text-xs text-red-400">{custom.error}</p>}
+          </div>
+        ) : (
+        <>
+        <div className="mb-2 flex items-center justify-between gap-2 px-1">
+          <p className="truncate text-[10px] font-medium uppercase tracking-wider text-fg/25">
+            {activeSet === FAV ? "Избранные" : activePack ? activePack.title : current?.title}
+          </p>
+          {activePack && (
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={custom.busy}
+                className="flex items-center gap-1 rounded-lg bg-purple-500/15 px-2 py-1 text-[11px] font-medium text-purple-300 hover:bg-purple-500/25 disabled:opacity-50"
+              >
+                <Icon name={custom.busy ? "Loader" : "ImagePlus"} size={12} className={custom.busy ? "animate-spin" : ""} />
+                Добавить
+              </button>
+              <button
+                onClick={() => setManage((v) => !v)}
+                title="Удалять стикеры"
+                className={`flex h-6 w-6 items-center justify-center rounded-lg ${manage ? "bg-red-500/20 text-red-400" : "text-fg/40 hover:bg-fg/[0.08]"}`}
+              >
+                <Icon name="Trash2" size={12} />
+              </button>
+            </div>
+          )}
+        </div>
+        {activePack && (
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              e.target.value = "";
+              if (files.length > 0) custom.addImages(activePack.id, files);
+            }}
+          />
+        )}
         {list.length === 0 ? (
           <p className="px-3 py-8 text-center text-xs leading-relaxed text-fg/35">
-            Здесь будут ваши любимые стикеры. Нажмите на звёздочку в углу любого стикера, чтобы сохранить его.
+            {activePack
+              ? "В наборе пока пусто. Нажмите «Добавить» и выберите картинки."
+              : "Здесь будут ваши любимые стикеры. Нажмите на звёздочку в углу любого стикера, чтобы сохранить его."}
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-2">
@@ -107,6 +224,21 @@ export default function StickerPanel({ sessionId, onPick }: StickerPanelProps) {
                   >
                     <img src={st.path} alt={st.title} className="h-full w-full object-contain" loading="lazy" draggable={false} />
                   </button>
+                  {activePack ? (
+                    manage && (
+                      <button
+                        onClick={() => {
+                          const target = activePack.stickers.find((x) => x.url === st.path);
+                          if (target) custom.deleteSticker(activePack.id, target.id);
+                        }}
+                        title="Удалить стикер"
+                        aria-label="Удалить стикер из набора"
+                        className="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-500/80"
+                      >
+                        <Icon name="X" size={13} className="text-white" />
+                      </button>
+                    )
+                  ) : (
                   <button
                     onClick={() => toggle(st.path)}
                     disabled={!sessionId}
@@ -118,12 +250,22 @@ export default function StickerPanel({ sessionId, onPick }: StickerPanelProps) {
                   >
                     <Icon name="Star" size={13} className={fav ? "fill-amber-400 text-amber-400" : "text-white"} />
                   </button>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
-        {error && <p className="px-1 pt-2 text-xs text-red-400">{error}</p>}
+        {activePack && !manage && list.length > 0 && (
+          <div className="px-1 pt-3">
+            <button onClick={() => custom.deletePack(activePack.id)} className="text-[11px] text-fg/30 underline-offset-2 hover:text-red-400 hover:underline">
+              Удалить набор
+            </button>
+          </div>
+        )}
+        {(error || (activePack && custom.error)) && <p className="px-1 pt-2 text-xs text-red-400">{error || custom.error}</p>}
+        </>
+        )}
       </div>
     </div>
   );

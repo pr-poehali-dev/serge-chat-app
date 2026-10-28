@@ -3,7 +3,9 @@ import base64
 import json
 import os
 import re
+import urllib.request
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import psycopg2
 
@@ -132,6 +134,95 @@ def load_poll(cur, poll_id: int, me: int) -> dict:
     }
 
 
+def poll_for_message(cur, message_id: int):
+    cur.execute(f"""
+        SELECT id FROM {SCHEMA}.polls WHERE message_id = %s
+        UNION ALL
+        SELECT poll_id FROM {SCHEMA}.poll_shares WHERE message_id = %s
+    """, (message_id, message_id))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def can_access_poll(cur, poll_id: int, user_id: int, code=None) -> bool:
+    """Опрос доступен участникам исходного чата, чатов куда его переслали, и всем у кого есть ссылка"""
+    cur.execute(f"SELECT chat_id, share_code FROM {SCHEMA}.polls WHERE id = %s", (poll_id,))
+    p = cur.fetchone()
+    if not p:
+        return False
+    if code and p[1] and str(code) == p[1]:
+        return True
+    cur.execute(f"""
+        SELECT 1 FROM {SCHEMA}.chat_members cm
+        WHERE cm.user_id = %s
+          AND (cm.chat_id = %s OR cm.chat_id IN (SELECT chat_id FROM {SCHEMA}.poll_shares WHERE poll_id = %s))
+        LIMIT 1
+    """, (user_id, p[0], poll_id))
+    return cur.fetchone() is not None
+
+
+def pinned_poll(cur, message_id: int, user_id: int):
+    poll_id = poll_for_message(cur, message_id)
+    if not poll_id:
+        return None
+    poll = load_poll(cur, poll_id, user_id)
+    if poll:
+        poll["messageId"] = message_id
+    return poll or None
+
+
+def utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def parse_send_at(value: str):
+    """Строка ISO со смещением -> наивное время UTC, либо None"""
+    if not SEND_AT_RE.match(value):
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        return None
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def trigger_due(cur) -> None:
+    """Если есть сообщения, время которых пришло, просим функцию отправки разослать их (с уведомлениями)"""
+    cur.execute(f"""
+        SELECT 1 FROM {SCHEMA}.scheduled_messages
+        WHERE status = 'pending' AND send_at <= %s LIMIT 1
+    """, (utc_now_naive(),))
+    if not cur.fetchone():
+        return
+    try:
+        req = urllib.request.Request(
+            SEND_MESSAGE_URL,
+            data=json.dumps({"action": "dispatch-due"}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=4).read()
+    except Exception as e:
+        print(f"dispatch trigger failed: {type(e).__name__}")
+
+
+def int_list(value, limit: int = 100) -> list:
+    if not isinstance(value, list):
+        return []
+    return [x for x in value if isinstance(x, int) and not isinstance(x, bool)][:limit]
+
+
+STICKER_ANY_RE = re.compile(r"^(/stickers/|https?://\S+/stickers/user/)\S+$")
+CUSTOM_STICKER_MAX_BYTES = 1024 * 1024
+MAX_PACKS = 10
+MAX_STICKERS_PER_PACK = 60
+MAX_SCHEDULED = 50
+SEND_MESSAGE_URL = "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6"
+SEND_AT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})$")
+
+
 def reply(status: int, payload: dict) -> dict:
     return {"statusCode": status, "headers": CORS, "body": json.dumps(payload)}
 
@@ -178,13 +269,17 @@ def is_online(seen_ago) -> bool:
 
 def read_settings(cur, user_id: int) -> dict:
     cur.execute(
-        f"SELECT show_online, show_typing, read_receipts, who_can_message FROM {SCHEMA}.users WHERE id = %s",
+        f"""SELECT show_online, show_typing, read_receipts, who_can_message,
+                   quiet_enabled, quiet_from, quiet_to, quiet_tz
+            FROM {SCHEMA}.users WHERE id = %s""",
         (user_id,),
     )
     row = cur.fetchone()
     if not row:
-        return {"showOnline": True, "showTyping": True, "readReceipts": True, "whoCanMessage": "all"}
-    return {"showOnline": row[0], "showTyping": row[1], "readReceipts": row[2], "whoCanMessage": row[3]}
+        return {"showOnline": True, "showTyping": True, "readReceipts": True, "whoCanMessage": "all",
+                "quietEnabled": False, "quietFrom": 1380, "quietTo": 480}
+    return {"showOnline": row[0], "showTyping": row[1], "readReceipts": row[2], "whoCanMessage": row[3],
+            "quietEnabled": bool(row[4]), "quietFrom": row[5], "quietTo": row[6], "quietTz": row[7]}
 
 
 def handler(event: dict, context) -> dict:
@@ -212,6 +307,9 @@ def handler(event: dict, context) -> dict:
                 WHERE id = %s AND (last_seen IS NULL OR last_seen < NOW() - INTERVAL '10 seconds')
             """, (my_user_id,))
             conn.commit()
+
+        if authed and (method == "GET" and action in (None, "messages")):
+            trigger_due(cur)
 
         # GET /chats?action=messages&chat_id=X[&topic_id=Y] — сообщения чата или темы
         if method == "GET" and action == "messages":
@@ -245,8 +343,9 @@ def handler(event: dict, context) -> dict:
                 LEFT JOIN {SCHEMA}.messages rm ON rm.id = m.reply_to_id
                 LEFT JOIN {SCHEMA}.users ru ON ru.id = rm.sender_id
                 WHERE m.chat_id = %s AND m.topic_id IS NOT DISTINCT FROM %s
+                  AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.hidden_messages h WHERE h.message_id = m.id AND h.user_id = %s)
                 ORDER BY m.created_at ASC
-            """, (chat_id, topic_id))
+            """, (chat_id, topic_id, my_user_id))
             rows = cur.fetchall()
             message_ids = [r[0] for r in rows]
             reactions_by_msg: dict = {}
@@ -276,9 +375,16 @@ def handler(event: dict, context) -> dict:
             chat_is_group = len(others) > 1
             polls_by_msg: dict = {}
             if message_ids:
-                cur.execute(f"SELECT id, message_id FROM {SCHEMA}.polls WHERE message_id = ANY(%s)", (message_ids,))
+                cur.execute(f"""
+                    SELECT id, message_id FROM {SCHEMA}.polls WHERE message_id = ANY(%s)
+                    UNION ALL
+                    SELECT poll_id, message_id FROM {SCHEMA}.poll_shares WHERE message_id = ANY(%s)
+                """, (message_ids, message_ids))
                 for pid, mid in cur.fetchall():
-                    polls_by_msg[mid] = load_poll(cur, pid, my_user_id)
+                    poll_data = load_poll(cur, pid, my_user_id)
+                    if poll_data:
+                        poll_data["messageId"] = mid
+                        polls_by_msg[mid] = poll_data
             messages = []
             for r in rows:
                 removed = r[17] is not None
@@ -499,6 +605,12 @@ def handler(event: dict, context) -> dict:
                     f"UPDATE {SCHEMA}.users SET who_can_message = %s WHERE id = %s",
                     (body["whoCanMessage"], my_user_id),
                 )
+            if "quietEnabled" in body:
+                cur.execute(f"UPDATE {SCHEMA}.users SET quiet_enabled = %s WHERE id = %s", (bool(body["quietEnabled"]), my_user_id))
+            for key, column, low, high in (("quietFrom", "quiet_from", 0, 1439), ("quietTo", "quiet_to", 0, 1439), ("quietTz", "quiet_tz", -840, 840)):
+                val = body.get(key)
+                if isinstance(val, int) and not isinstance(val, bool) and low <= val <= high:
+                    cur.execute(f"UPDATE {SCHEMA}.users SET {column} = %s WHERE id = %s", (val, my_user_id))
             conn.commit()
             return reply(200, {"settings": read_settings(cur, my_user_id)})
 
@@ -932,7 +1044,7 @@ def handler(event: dict, context) -> dict:
             p = cur.fetchone()
             if not p:
                 return reply(404, {"error": "Опрос не найден"})
-            if not is_member(cur, p[0], my_user_id):
+            if not can_access_poll(cur, poll_id, my_user_id, body.get("code")):
                 return reply(403, {"error": "Нет доступа к опросу"})
             if p[2]:
                 return reply(409, {"error": "Опрос уже закрыт", "code": "closed"})
@@ -977,9 +1089,7 @@ def handler(event: dict, context) -> dict:
                 poll_id = int(params.get("poll_id"))
             except (TypeError, ValueError):
                 return reply(400, {"error": "Нужен poll_id"})
-            cur.execute(f"SELECT chat_id FROM {SCHEMA}.polls WHERE id = %s", (poll_id,))
-            p = cur.fetchone()
-            if not p or not is_member(cur, p[0], my_user_id):
+            if not can_access_poll(cur, poll_id, my_user_id, params.get("code")):
                 return reply(403, {"error": "Нет доступа к опросу"})
             cur.execute(f"""
                 SELECT v.option_id, u.id, u.display_name, u.avatar_initials, u.avatar_color, u.avatar_url
@@ -1079,6 +1189,323 @@ def handler(event: dict, context) -> dict:
             conn.commit()
             return reply(200, {"moodEmoji": emoji, "moodText": text, "bio": bio})
 
+        # GET /chats?action=search-messages&q=слово — поиск по всем моим чатам и группам
+        if method == "GET" and action == "search-messages":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            q = clean_text(params.get("q"), 100)
+            if len(q) < 2:
+                return reply(200, {"results": [], "query": q})
+            needle = q.lower()
+            cur.execute(f"""
+                SELECT m.id, m.chat_id, m.topic_id, m.text, m.sender_id, u.display_name,
+                       TO_CHAR(m.created_at, 'DD.MM.YYYY HH24:MI'), c.is_group, c.name, ct.name
+                FROM {SCHEMA}.messages m
+                JOIN {SCHEMA}.chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = %s
+                JOIN {SCHEMA}.chats c ON c.id = m.chat_id
+                LEFT JOIN {SCHEMA}.users u ON u.id = m.sender_id
+                LEFT JOIN {SCHEMA}.chat_topics ct ON ct.id = m.topic_id
+                WHERE m.removed_at IS NULL AND m.text <> '' AND m.kind IN ('text', 'image', 'file')
+                  AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.hidden_messages h WHERE h.message_id = m.id AND h.user_id = %s)
+                ORDER BY m.created_at DESC
+                LIMIT 4000
+            """, (my_user_id, my_user_id))
+            found = []
+            for r in cur.fetchall():
+                text = r[3] or ""
+                if text.startswith("/stickers/") or "/stickers/user/" in text:
+                    continue
+                idx = text.lower().find(needle)
+                if idx < 0:
+                    continue
+                start = max(0, idx - 50)
+                end = min(len(text), idx + len(needle) + 90)
+                snippet = ("…" if start > 0 else "") + text[start:end] + ("…" if end < len(text) else "")
+                found.append((r, snippet))
+                if len(found) >= 40:
+                    break
+            chat_ids = sorted({r[1] for r, _ in found})
+            partner_names: dict = {}
+            if chat_ids:
+                cur.execute(f"""
+                    SELECT cm.chat_id, u.display_name FROM {SCHEMA}.chat_members cm
+                    JOIN {SCHEMA}.users u ON u.id = cm.user_id
+                    WHERE cm.chat_id = ANY(%s) AND cm.user_id != %s
+                """, (chat_ids, my_user_id))
+                for cid, name in cur.fetchall():
+                    partner_names.setdefault(cid, name)
+            results = []
+            for r, snippet in found:
+                is_group = bool(r[7])
+                results.append({
+                    "messageId": r[0],
+                    "chatId": r[1],
+                    "topicId": r[2],
+                    "topicName": r[9],
+                    "chatName": (r[8] if is_group else partner_names.get(r[1], r[8])) or "Чат",
+                    "isGroup": is_group,
+                    "senderName": "Вы" if r[4] == my_user_id else (r[5] or ""),
+                    "snippet": snippet,
+                    "time": r[6],
+                })
+            return reply(200, {"results": results, "query": q})
+
+        # POST /chats?action=bulk-delete — удалить сообщения: свои у всех, чужие только у меня
+        if method == "POST" and action == "bulk-delete":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            ids = int_list(body.get("message_ids"))
+            if not ids:
+                return reply(400, {"error": "Выберите сообщения"})
+            cur.execute(f"""
+                SELECT m.id, m.sender_id FROM {SCHEMA}.messages m
+                JOIN {SCHEMA}.chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = %s
+                WHERE m.id = ANY(%s) AND m.removed_at IS NULL
+            """, (my_user_id, ids))
+            rows = cur.fetchall()
+            own = [r[0] for r in rows if r[1] == my_user_id]
+            others = [r[0] for r in rows if r[1] != my_user_id]
+            if own:
+                cur.execute(f"UPDATE {SCHEMA}.messages SET removed_at = NOW() WHERE id = ANY(%s) AND sender_id = %s", (own, my_user_id))
+            for mid in others:
+                cur.execute(f"""
+                    INSERT INTO {SCHEMA}.hidden_messages (user_id, message_id) VALUES (%s, %s)
+                    ON CONFLICT (user_id, message_id) DO NOTHING
+                """, (my_user_id, mid))
+            conn.commit()
+            return reply(200, {"ok": True, "removed": own, "hidden": others})
+
+        # POST /chats?action=schedule-message — запланировать текстовое сообщение
+        if method == "POST" and action == "schedule-message":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = body.get("chat_id")
+            text = clean_text(body.get("text"), 4000)
+            send_at = str(body.get("send_at") or "")
+            if not isinstance(chat_id, int) or not text:
+                return reply(400, {"error": "Напишите текст сообщения"})
+            if not is_member(cur, chat_id, my_user_id):
+                return reply(403, {"error": "Нет доступа к чату"})
+            topic_id = body.get("topic_id")
+            if topic_id:
+                cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_topics WHERE id = %s AND chat_id = %s", (topic_id, chat_id))
+                if not cur.fetchone():
+                    return reply(400, {"error": "Тема не найдена"})
+            else:
+                topic_id = None
+            when = parse_send_at(send_at)
+            if when is None:
+                return reply(400, {"error": "Не удалось разобрать дату и время"})
+            now_utc = utc_now_naive()
+            if when <= now_utc + timedelta(seconds=20):
+                return reply(400, {"error": "Выберите время в будущем"})
+            if when > now_utc + timedelta(days=366):
+                return reply(400, {"error": "Можно запланировать не дальше чем на год"})
+            cur.execute(f"""
+                SELECT COUNT(*) FROM {SCHEMA}.scheduled_messages
+                WHERE sender_id = %s AND status = 'pending'
+            """, (my_user_id,))
+            if cur.fetchone()[0] >= MAX_SCHEDULED:
+                return reply(400, {"error": f"Не больше {MAX_SCHEDULED} запланированных сообщений"})
+            cur.execute(f"""
+                INSERT INTO {SCHEMA}.scheduled_messages (chat_id, topic_id, sender_id, text, send_at)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, EXTRACT(EPOCH FROM send_at)
+            """, (chat_id, topic_id, my_user_id, text, when))
+            sid, epoch = cur.fetchone()
+            conn.commit()
+            return reply(200, {"item": {"id": sid, "chatId": chat_id, "topicId": topic_id, "text": text, "sendAtMs": int(float(epoch) * 1000)}})
+
+        # GET /chats?action=list-scheduled&chat_id=X — мои запланированные сообщения в чате
+        if method == "GET" and action == "list-scheduled":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            try:
+                chat_id = int(params.get("chat_id"))
+            except (TypeError, ValueError):
+                return reply(400, {"error": "Нужен chat_id"})
+            cur.execute(f"""
+                SELECT id, topic_id, text, EXTRACT(EPOCH FROM send_at)
+                FROM {SCHEMA}.scheduled_messages
+                WHERE sender_id = %s AND chat_id = %s AND status = 'pending'
+                ORDER BY send_at ASC LIMIT 50
+            """, (my_user_id, chat_id))
+            items = [
+                {"id": r[0], "chatId": chat_id, "topicId": r[1], "text": r[2], "sendAtMs": int(float(r[3]) * 1000)}
+                for r in cur.fetchall()
+            ]
+            return reply(200, {"items": items})
+
+        # POST /chats?action=cancel-scheduled — отменить запланированное сообщение
+        if method == "POST" and action == "cancel-scheduled":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            sid = body.get("id")
+            if not isinstance(sid, int):
+                return reply(400, {"error": "Нужен id"})
+            cur.execute(f"""
+                UPDATE {SCHEMA}.scheduled_messages SET status = 'cancelled'
+                WHERE id = %s AND sender_id = %s AND status = 'pending' RETURNING id
+            """, (sid, my_user_id))
+            done = cur.fetchone()
+            conn.commit()
+            if not done:
+                return reply(404, {"error": "Сообщение уже отправлено или отменено"})
+            return reply(200, {"ok": True})
+
+        # GET /chats?action=sticker-packs — мои наборы стикеров
+        if method == "GET" and action == "sticker-packs":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            cur.execute(f"SELECT id, title FROM {SCHEMA}.sticker_packs WHERE user_id = %s ORDER BY id", (my_user_id,))
+            packs = [{"id": r[0], "title": r[1], "stickers": []} for r in cur.fetchall()]
+            by_id = {p["id"]: p for p in packs}
+            if by_id:
+                cur.execute(f"""
+                    SELECT id, pack_id, url FROM {SCHEMA}.custom_stickers
+                    WHERE pack_id = ANY(%s) ORDER BY id
+                """, (list(by_id.keys()),))
+                for sid, pid, url in cur.fetchall():
+                    by_id[pid]["stickers"].append({"id": sid, "url": url})
+            return reply(200, {"packs": packs})
+
+        # POST /chats?action=create-sticker-pack — новый набор
+        if method == "POST" and action == "create-sticker-pack":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            title = clean_text(body.get("title"), 40)
+            if not title:
+                return reply(400, {"error": "Назовите набор"})
+            cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.sticker_packs WHERE user_id = %s", (my_user_id,))
+            if cur.fetchone()[0] >= MAX_PACKS:
+                return reply(400, {"error": f"Не больше {MAX_PACKS} наборов"})
+            cur.execute(f"INSERT INTO {SCHEMA}.sticker_packs (user_id, title) VALUES (%s, %s) RETURNING id", (my_user_id, title))
+            pid = cur.fetchone()[0]
+            conn.commit()
+            return reply(200, {"pack": {"id": pid, "title": title, "stickers": []}})
+
+        # POST /chats?action=delete-sticker-pack — удалить набор целиком
+        if method == "POST" and action == "delete-sticker-pack":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            pid = body.get("pack_id")
+            if not isinstance(pid, int):
+                return reply(400, {"error": "Нужен pack_id"})
+            cur.execute(f"SELECT 1 FROM {SCHEMA}.sticker_packs WHERE id = %s AND user_id = %s", (pid, my_user_id))
+            if not cur.fetchone():
+                return reply(404, {"error": "Набор не найден"})
+            cur.execute(f"DELETE FROM {SCHEMA}.custom_stickers WHERE pack_id = %s", (pid,))
+            cur.execute(f"DELETE FROM {SCHEMA}.sticker_packs WHERE id = %s", (pid,))
+            conn.commit()
+            return reply(200, {"ok": True})
+
+        # POST /chats?action=add-sticker — загрузить картинку в набор
+        if method == "POST" and action == "add-sticker":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            pid = body.get("pack_id")
+            if not isinstance(pid, int):
+                return reply(400, {"error": "Нужен pack_id"})
+            cur.execute(f"SELECT 1 FROM {SCHEMA}.sticker_packs WHERE id = %s AND user_id = %s", (pid, my_user_id))
+            if not cur.fetchone():
+                return reply(404, {"error": "Набор не найден"})
+            cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.custom_stickers WHERE pack_id = %s", (pid,))
+            if cur.fetchone()[0] >= MAX_STICKERS_PER_PACK:
+                return reply(400, {"error": f"В наборе уже {MAX_STICKERS_PER_PACK} стикеров"})
+            try:
+                data, ctype, ext = decode_image(body, CUSTOM_STICKER_MAX_BYTES)
+            except ValueError as e:
+                return reply(400, {"error": str(e)})
+            url = save_file(f"stickers/user/{uuid.uuid4().hex}.{ext}", data, ctype)
+            cur.execute(f"INSERT INTO {SCHEMA}.custom_stickers (pack_id, url) VALUES (%s, %s) RETURNING id", (pid, url))
+            sid = cur.fetchone()[0]
+            conn.commit()
+            return reply(200, {"sticker": {"id": sid, "url": url}})
+
+        # POST /chats?action=delete-sticker — убрать стикер из набора
+        if method == "POST" and action == "delete-sticker":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            sid = body.get("sticker_id")
+            if not isinstance(sid, int):
+                return reply(400, {"error": "Нужен sticker_id"})
+            cur.execute(f"""
+                DELETE FROM {SCHEMA}.custom_stickers s USING {SCHEMA}.sticker_packs p
+                WHERE s.id = %s AND s.pack_id = p.id AND p.user_id = %s RETURNING s.id
+            """, (sid, my_user_id))
+            done = cur.fetchone()
+            conn.commit()
+            if not done:
+                return reply(404, {"error": "Стикер не найден"})
+            return reply(200, {"ok": True})
+
+        # POST /chats?action=share-poll — переслать опрос в другую группу (голоса общие)
+        if method == "POST" and action == "share-poll":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            poll_id = body.get("poll_id")
+            target = body.get("target_chat_id")
+            if not isinstance(poll_id, int) or not isinstance(target, int):
+                return reply(400, {"error": "Нужны poll_id и target_chat_id"})
+            if not can_access_poll(cur, poll_id, my_user_id):
+                return reply(403, {"error": "Нет доступа к опросу"})
+            if not is_group_chat(cur, target):
+                return reply(400, {"error": "Опрос можно переслать только в группу"})
+            if not is_member(cur, target, my_user_id):
+                return reply(403, {"error": "Вы не участник этой группы"})
+            cur.execute(f"SELECT question, chat_id FROM {SCHEMA}.polls WHERE id = %s", (poll_id,))
+            question, origin_chat = cur.fetchone()
+            cur.execute(f"""
+                SELECT 1 FROM {SCHEMA}.polls WHERE id = %s AND chat_id = %s
+                UNION ALL SELECT 1 FROM {SCHEMA}.poll_shares WHERE poll_id = %s AND chat_id = %s
+            """, (poll_id, target, poll_id, target))
+            if cur.fetchone():
+                return reply(409, {"error": "Этот опрос уже есть в выбранной группе"})
+            cur.execute(f"""
+                INSERT INTO {SCHEMA}.messages (chat_id, sender_id, text, is_read, kind)
+                VALUES (%s, %s, %s, false, 'text') RETURNING id, TO_CHAR(created_at, 'HH24:MI')
+            """, (target, my_user_id, "📊 " + question))
+            mid, mtime = cur.fetchone()
+            cur.execute(f"""
+                INSERT INTO {SCHEMA}.poll_shares (message_id, poll_id, chat_id, created_by)
+                VALUES (%s, %s, %s, %s)
+            """, (mid, poll_id, target, my_user_id))
+            conn.commit()
+            poll = load_poll(cur, poll_id, my_user_id)
+            poll["messageId"] = mid
+            return reply(200, {"messageId": mid, "time": mtime, "text": "📊 " + question, "poll": poll})
+
+        # POST /chats?action=poll-link — ссылка на опрос для голосования новыми участниками
+        if method == "POST" and action == "poll-link":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            poll_id = body.get("poll_id")
+            if not isinstance(poll_id, int) or not can_access_poll(cur, poll_id, my_user_id):
+                return reply(403, {"error": "Нет доступа к опросу"})
+            cur.execute(f"SELECT share_code FROM {SCHEMA}.polls WHERE id = %s", (poll_id,))
+            code = cur.fetchone()[0]
+            if not code:
+                code = uuid.uuid4().hex[:16]
+                cur.execute(f"UPDATE {SCHEMA}.polls SET share_code = %s WHERE id = %s AND share_code IS NULL", (code, poll_id))
+                conn.commit()
+                cur.execute(f"SELECT share_code FROM {SCHEMA}.polls WHERE id = %s", (poll_id,))
+                code = cur.fetchone()[0]
+            return reply(200, {"code": code})
+
+        # GET /chats?action=poll-by-code&code=X — опрос по ссылке
+        if method == "GET" and action == "poll-by-code":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            code = clean_text(params.get("code"), 24)
+            cur.execute(f"SELECT id, chat_id FROM {SCHEMA}.polls WHERE share_code = %s", (code,))
+            row = cur.fetchone()
+            if not row or not code:
+                return reply(404, {"error": "Опрос по этой ссылке не найден"})
+            poll = load_poll(cur, row[0], my_user_id)
+            cur.execute(f"SELECT name FROM {SCHEMA}.chats WHERE id = %s", (row[1],))
+            chat_row = cur.fetchone()
+            return reply(200, {"poll": poll, "chatName": chat_row[0] if chat_row else None})
+
         # GET /chats — список чатов
         cur.execute(f"""
             SELECT
@@ -1093,11 +1520,12 @@ def handler(event: dict, context) -> dict:
                                 WHEN m.kind = 'image' THEN '🖼 Фото'
                                 WHEN m.kind = 'file' THEN '📎 ' || COALESCE(m.file_name, 'Файл')
                                 WHEN m.kind = 'text' AND m.text ~* '^(https?://[^ ]+|/gifs/[^ ]+)[.]gif$' THEN '🎞 GIF'
-                                WHEN m.kind = 'text' AND m.text ~ '^/stickers/[a-z]+/[a-z0-9-]+[.]png$' THEN '🖼 Стикер'
+                                WHEN m.kind = 'text' AND (m.text ~ '^/stickers/[a-z]+/[a-z0-9-]+[.]png$' OR m.text ~ '/stickers/user/[a-f0-9]{32}[.](png|webp|jpg)$') THEN '🖼 Стикер'
                                 WHEN EXISTS (SELECT 1 FROM {SCHEMA}.polls pp WHERE pp.message_id = m.id) THEN m.text
                                 ELSE m.text END
                     FROM {SCHEMA}.messages m
                     WHERE m.chat_id = c.id
+                      AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.hidden_messages h WHERE h.message_id = m.id AND h.user_id = %(me)s)
                     ORDER BY m.created_at DESC LIMIT 1
                 ) as last_msg,
                 (
@@ -1108,6 +1536,7 @@ def handler(event: dict, context) -> dict:
                 (
                     SELECT COUNT(*) FROM {SCHEMA}.messages m
                     WHERE m.chat_id = c.id AND m.sender_id != %(me)s AND m.removed_at IS NULL
+                      AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.hidden_messages h WHERE h.message_id = m.id AND h.user_id = %(me)s)
                       AND CASE WHEN cm_me.last_read_at IS NOT NULL
                                THEN m.created_at > cm_me.last_read_at
                                ELSE m.is_read = false END
@@ -1185,6 +1614,7 @@ def handler(event: dict, context) -> dict:
                     "fileName": r[19],
                     "topicId": r[20],
                     "senderName": r[21],
+                    "poll": pinned_poll(cur, r[16], my_user_id),
                 },
             })
 
@@ -1213,4 +1643,3 @@ def handler(event: dict, context) -> dict:
     finally:
         cur.close()
         conn.close()
-

@@ -1,12 +1,14 @@
-import { RefObject, Dispatch, SetStateAction, useState, useEffect, useMemo } from "react";
+import { RefObject, Dispatch, SetStateAction, useState, useEffect, useMemo, useRef } from "react";
 import Icon from "@/components/ui/icon";
-import { Chat, Message, Attachment, Topic, PinnedMessage } from "./types";
+import { Chat, Message, Attachment, Topic, PinnedMessage, PollData, ScheduledItem } from "./types";
 import { RecordedMedia } from "./media/useRecorder";
 import ChatHeader from "./chat/ChatHeader";
 import MessageList from "./chat/MessageList";
 import MessageInput from "./chat/MessageInput";
 import SearchBar from "./chat/SearchBar";
 import PinnedBar from "./chat/PinnedBar";
+import PinnedPoll from "./chat/PinnedPoll";
+import SelectionBar from "./chat/SelectionBar";
 import { EmojiCategory, GifCategory, GifItem } from "./chat/EmojiGifPicker";
 
 interface ChatAreaProps {
@@ -81,6 +83,14 @@ interface ChatAreaProps {
   onOpenChatInfo?: () => void;
   onAddFiles?: (files: File[]) => void;
   fileNotice?: string;
+  onForwardPoll?: (poll: PollData) => void;
+  onForwardSelected?: (ids: number[]) => void;
+  onDeleteSelected?: (ids: number[]) => Promise<string | null>;
+  onDeleteForMe?: (messageId: number) => void;
+  scheduledItems?: ScheduledItem[];
+  onScheduleMessage?: (whenMs: number) => Promise<string | null>;
+  onCancelScheduled?: (id: number) => void;
+  foundFocus?: { messageId: number; query: string; nonce: number } | null;
 }
 
 export default function ChatArea({
@@ -151,7 +161,18 @@ export default function ChatArea({
   onOpenChatInfo,
   onAddFiles,
   fileNotice,
+  onForwardPoll,
+  onForwardSelected,
+  onDeleteSelected,
+  onDeleteForMe,
+  scheduledItems,
+  onScheduleMessage,
+  onCancelScheduled,
+  foundFocus,
 }: ChatAreaProps) {
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const pendingFocusRef = useRef<number | null>(null);
   const [dragDepth, setDragDepth] = useState(0);
   const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types || []).includes("Files");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -191,6 +212,44 @@ export default function ChatArea({
     setSearchOpen(false);
     setSearchQuery("");
   };
+
+  useEffect(() => {
+    setSelectMode(false);
+    setSelectedIds([]);
+  }, [activeChat?.id]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => messages.some((m) => m.id === id && !m.removed)));
+  }, [messages]);
+
+  const toggleSelect = (id: number) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const startSelect = (id: number) => {
+    setSelectMode(true);
+    setSelectedIds([id]);
+  };
+  const exitSelect = () => {
+    setSelectMode(false);
+    setSelectedIds([]);
+  };
+
+  useEffect(() => {
+    if (!foundFocus) return;
+    pendingFocusRef.current = foundFocus.messageId;
+    setSelectMode(false);
+    setSearchOpen(true);
+    setSearchQuery(foundFocus.query);
+  }, [foundFocus?.nonce]);
+
+  useEffect(() => {
+    const target = pendingFocusRef.current;
+    if (target == null) return;
+    const idx = matchIds.indexOf(target);
+    if (idx >= 0) {
+      setMatchIndex(idx);
+      pendingFocusRef.current = null;
+    }
+  }, [matchIds]);
 
   const currentMatchId = matchIds.length > 0 ? matchIds[Math.min(matchIndex, matchIds.length - 1)] : null;
   const pinned = activeChat?.pinnedMessage || null;
@@ -252,11 +311,21 @@ export default function ChatArea({
           )}
 
           {pinned && !searchOpen && onOpenPinned && (
-            <PinnedBar
-              pinned={pinned}
-              onOpen={onOpenPinned}
-              onUnpin={onPinMessage ? () => onPinMessage(null) : undefined}
-            />
+            pinned.poll ? (
+              <PinnedPoll
+                poll={pinned.poll}
+                senderName={pinned.senderName}
+                onOpen={() => onOpenPinned(pinned)}
+                onVote={onVotePoll}
+                onUnpin={onPinMessage ? () => onPinMessage(null) : undefined}
+              />
+            ) : (
+              <PinnedBar
+                pinned={pinned}
+                onOpen={onOpenPinned}
+                onUnpin={onPinMessage ? () => onPinMessage(null) : undefined}
+              />
+            )
           )}
 
           <MessageList
@@ -290,8 +359,31 @@ export default function ChatArea({
             canModerate={activeChat.myRole === "owner" || activeChat.myRole === "admin"}
             sessionId={sessionId}
             onOpenProfile={onOpenProfile}
+            onForwardPoll={onForwardPoll}
+            selectMode={selectMode}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onStartSelect={onForwardSelected || onDeleteSelected ? startSelect : undefined}
+            onDeleteForMe={onDeleteForMe}
           />
 
+          {selectMode ? (
+          <SelectionBar
+            count={selectedIds.length}
+            ownCount={messages.filter((m) => selectedIds.includes(m.id) && m.out).length}
+            onCancel={exitSelect}
+            onForward={() => {
+              if (selectedIds.length === 0) return;
+              onForwardSelected?.(selectedIds);
+              exitSelect();
+            }}
+            onDelete={async () => {
+              const err = await (onDeleteSelected ? onDeleteSelected(selectedIds) : Promise.resolve(null));
+              if (!err) exitSelect();
+              return err;
+            }}
+          />
+          ) : (
           <MessageInput
             attachments={attachments}
             setAttachments={setAttachments}
@@ -327,7 +419,11 @@ export default function ChatArea({
             onCreatePoll={onCreatePoll}
             onAddFiles={onAddFiles}
             fileNotice={fileNotice}
+            scheduledItems={scheduledItems}
+            onScheduleMessage={onScheduleMessage}
+            onCancelScheduled={onCancelScheduled}
           />
+          )}
         </>
       ) : (
         <div className="flex flex-1 items-center justify-center">

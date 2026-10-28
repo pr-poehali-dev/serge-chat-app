@@ -4,9 +4,10 @@ interface RemoveConfirmModalProps {
   confirmRemoveId: number;
   setConfirmRemoveId: (id: number | null) => void;
   onRemove?: (messageId: number) => void;
+  forMe?: boolean;
 }
 
-export default function RemoveConfirmModal({ confirmRemoveId, setConfirmRemoveId, onRemove }: RemoveConfirmModalProps) {
+export default function RemoveConfirmModal({ confirmRemoveId, setConfirmRemoveId, onRemove, forMe = false }: RemoveConfirmModalProps) {
   return (
     <div
       className="fixed inset-0 z-[95] flex items-center justify-center overlay-safe"
@@ -23,8 +24,10 @@ export default function RemoveConfirmModal({ confirmRemoveId, setConfirmRemoveId
             <Icon name="Trash2" size={20} className="text-red-400" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-fg/90">Удалить сообщение?</p>
-            <p className="text-xs text-fg/40 mt-1">Оно исчезнет у всех участников чата</p>
+            <p className="text-sm font-semibold text-fg/90">{forMe ? "Удалить у себя?" : "Удалить сообщение?"}</p>
+            <p className="text-xs text-fg/40 mt-1">
+              {forMe ? "Сообщение пропадёт только в вашем чате, у отправителя останется" : "Оно исчезнет у всех участников чата"}
+            </p>
           </div>
         </div>
         <div className="flex gap-2 mt-5">

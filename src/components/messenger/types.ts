@@ -32,6 +32,7 @@ export interface PinnedMessage {
   fileName?: string | null;
   topicId?: number | null;
   senderName?: string | null;
+  poll?: PollData | null;
 }
 
 export interface Message {
@@ -152,4 +153,34 @@ export interface BotInfo {
   category: string;
   users: string;
   verified: boolean;
+}
+export interface FoundMessage {
+  messageId: number;
+  chatId: number;
+  topicId: number | null;
+  topicName?: string | null;
+  chatName: string;
+  isGroup: boolean;
+  senderName: string;
+  snippet: string;
+  time: string;
+}
+
+export interface ScheduledItem {
+  id: number;
+  chatId: number;
+  topicId: number | null;
+  text: string;
+  sendAtMs: number;
+}
+
+export interface CustomSticker {
+  id: number;
+  url: string;
+}
+
+export interface StickerPack {
+  id: number;
+  title: string;
+  stickers: CustomSticker[];
 }

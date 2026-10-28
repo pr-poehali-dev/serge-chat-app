@@ -4,6 +4,7 @@ import json
 import os
 import re
 import uuid
+from datetime import datetime, timezone
 
 import boto3
 import psycopg2
@@ -100,9 +101,19 @@ def preview_for(kind: str, text: str, file_name: str) -> str:
         return "📎 " + (file_name or "Файл")
     if text and (text.lower().endswith(".gif") and " " not in text.strip()):
         return "🎞 GIF"
-    if text and re.match(r"^/stickers/[a-z]+/[a-z0-9-]+\.png$", text):
+    if text and (re.match(r"^/stickers/[a-z]+/[a-z0-9-]+\.png$", text) or re.search(r"/stickers/user/[a-f0-9]{32}\.(png|webp|jpg)$", text)):
         return "🖼 Стикер"
     return (text or "Новое сообщение")[:140]
+
+
+def in_quiet_hours(now_utc, start: int, end: int, tz_minutes: int) -> bool:
+    """Попадает ли сейчас (по местному времени пользователя) время в тихие часы, в том числе через полночь"""
+    local = (now_utc.hour * 60 + now_utc.minute + (tz_minutes or 0)) % 1440
+    if start == end:
+        return False
+    if start < end:
+        return start <= local < end
+    return local >= start or local < end
 
 
 def notify_members(conn, cur, chat_id: int, sender_id: int, topic_id, kind: str, text: str, file_name: str, message_id: int) -> None:
@@ -116,11 +127,20 @@ def notify_members(conn, cur, chat_id: int, sender_id: int, topic_id, kind: str,
         return
     is_group, chat_name, sender_name = info
     cur.execute(f"""
-        SELECT user_id FROM {SCHEMA}.chat_members
-        WHERE chat_id = %s AND user_id != %s AND notify_enabled = true
+        SELECT cm.user_id, u.quiet_enabled, u.quiet_from, u.quiet_to, u.quiet_tz
+        FROM {SCHEMA}.chat_members cm
+        JOIN {SCHEMA}.users u ON u.id = cm.user_id
+        WHERE cm.chat_id = %s AND cm.user_id != %s AND cm.notify_enabled = true
     """, (chat_id, sender_id))
-    targets = [r[0] for r in cur.fetchall()]
-    if not targets:
+    now_utc = datetime.now(timezone.utc)
+    targets = []
+    quiet_targets = []
+    for uid, q_on, q_from, q_to, q_tz in cur.fetchall():
+        if q_on and in_quiet_hours(now_utc, q_from, q_to, q_tz):
+            quiet_targets.append(uid)
+        else:
+            targets.append(uid)
+    if not targets and not quiet_targets:
         return
     body = preview_for(kind, text, file_name)
     if is_group:
@@ -129,7 +149,7 @@ def notify_members(conn, cur, chat_id: int, sender_id: int, topic_id, kind: str,
     else:
         title = sender_name
     import push_utils
-    push_utils.send_to_users(conn, targets, {
+    payload = {
         "type": "message",
         "title": title,
         "body": body,
@@ -137,7 +157,51 @@ def notify_members(conn, cur, chat_id: int, sender_id: int, topic_id, kind: str,
         "topicId": topic_id,
         "messageId": message_id,
         "tag": f"chat-{chat_id}",
-    })
+    }
+    if targets:
+        push_utils.send_to_users(conn, targets, payload)
+    if quiet_targets:
+        push_utils.send_to_users(conn, quiet_targets, {**payload, "silent": True})
+
+
+def dispatch_due() -> dict:
+    """Отправляет запланированные сообщения, время которых наступило, и рассылает уведомления"""
+    conn = get_conn()
+    cur = conn.cursor()
+    sent = []
+    try:
+        cur.execute(f"""
+            SELECT id, chat_id, topic_id, sender_id, text FROM {SCHEMA}.scheduled_messages
+            WHERE status = 'pending' AND send_at <= %s
+            ORDER BY send_at LIMIT 30 FOR UPDATE SKIP LOCKED
+        """, (datetime.now(timezone.utc).replace(tzinfo=None),))
+        rows = cur.fetchall()
+        for sid, chat_id, topic_id, sender_id, text in rows:
+            cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_members WHERE chat_id = %s AND user_id = %s", (chat_id, sender_id))
+            if not cur.fetchone():
+                cur.execute(f"UPDATE {SCHEMA}.scheduled_messages SET status = 'failed' WHERE id = %s", (sid,))
+                continue
+            if topic_id:
+                cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_topics WHERE id = %s AND chat_id = %s", (topic_id, chat_id))
+                if not cur.fetchone():
+                    topic_id = None
+            cur.execute(f"""
+                INSERT INTO {SCHEMA}.messages (chat_id, sender_id, text, is_read, kind, topic_id)
+                VALUES (%s, %s, %s, false, 'text', %s) RETURNING id
+            """, (chat_id, sender_id, text, topic_id))
+            mid = cur.fetchone()[0]
+            cur.execute(f"UPDATE {SCHEMA}.scheduled_messages SET status = 'sent', message_id = %s WHERE id = %s", (mid, sid))
+            sent.append((chat_id, sender_id, topic_id, text, mid))
+        conn.commit()
+        for chat_id, sender_id, topic_id, text, mid in sent:
+            try:
+                notify_members(conn, cur, chat_id, sender_id, topic_id, "text", text, "", mid)
+            except Exception as e:
+                print(f"notify scheduled failed: {type(e).__name__}: {e}")
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps({"sent": len(sent)})}
+    finally:
+        cur.close()
+        conn.close()
 
 
 def handler(event: dict, context) -> dict:
@@ -146,6 +210,8 @@ def handler(event: dict, context) -> dict:
         return {"statusCode": 200, "headers": CORS, "body": ""}
 
     body = json.loads(event.get("body") or "{}")
+    if body.get("action") == "dispatch-due":
+        return dispatch_due()
     chat_id = body.get("chat_id")
     kind = body.get("kind") or "text"
     text = (body.get("text") or "").strip()

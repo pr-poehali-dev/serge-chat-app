@@ -42,6 +42,14 @@ export async function startNativePush(
       vibration: true,
     });
     await PushNotifications.createChannel({
+      id: "messages_quiet",
+      name: "Сообщения в тихие часы",
+      description: "Сообщения без звука и вибрации",
+      importance: 2,
+      visibility: 0,
+      vibration: false,
+    });
+    await PushNotifications.createChannel({
       id: "calls",
       name: "Звонки",
       description: "Входящие голосовые и видеозвонки",

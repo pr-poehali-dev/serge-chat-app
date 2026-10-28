@@ -156,6 +156,9 @@ export function useMessaging({
     pinMessage: actions.pinMessage,
     openPinned: actions.openPinned,
     forwardMessage: actions.forwardMessage,
+    forwardMessages: actions.forwardMessages,
+    deleteMessages: actions.deleteMessages,
+    sharePoll: actions.sharePoll,
     jumpRequest: actions.jumpRequest,
   };
 }

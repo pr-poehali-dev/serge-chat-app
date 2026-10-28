@@ -1,10 +1,12 @@
 import { RefObject, useState, useEffect, useRef } from "react";
-import { Chat, Message } from "../types";
+import { Chat, Message, PollData } from "../types";
 import { resolveBg } from "../background/chatBackgrounds";
 import MessageBody from "./messageList/MessageBody";
 import MessageMeta from "./messageList/MessageMeta";
 import MessageActions from "./messageList/MessageActions";
 import RemoveConfirmModal from "./messageList/RemoveConfirmModal";
+import MessageContextMenu from "./MessageContextMenu";
+import Icon from "@/components/ui/icon";
 
 interface MessageListProps {
   activeChat: Chat;
@@ -32,6 +34,12 @@ interface MessageListProps {
   canModerate?: boolean;
   sessionId?: string | null;
   onOpenProfile?: (userId: number) => void;
+  onForwardPoll?: (poll: PollData) => void;
+  selectMode?: boolean;
+  selectedIds?: number[];
+  onToggleSelect?: (messageId: number) => void;
+  onStartSelect?: (messageId: number) => void;
+  onDeleteForMe?: (messageId: number) => void;
 }
 
 export default function MessageList({
@@ -60,7 +68,16 @@ export default function MessageList({
   canModerate = false,
   sessionId = null,
   onOpenProfile,
+  onForwardPoll,
+  selectMode = false,
+  selectedIds = [],
+  onToggleSelect,
+  onStartSelect,
+  onDeleteForMe,
 }: MessageListProps) {
+  const [menu, setMenu] = useState<{ msg: Message; x: number; y: number } | null>(null);
+  const [confirmHideId, setConfirmHideId] = useState<number | null>(null);
+  const selectedSet = new Set(selectedIds);
   const [reactionPickerFor, setReactionPickerFor] = useState<number | null>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
@@ -127,10 +144,48 @@ export default function MessageList({
               id={`msg-${msg.id}`}
               className={`group/msg flex rounded-2xl transition-colors duration-500 ${msg.out ? "justify-end" : "justify-start"} animate-fade-in ${
                 highlightId === msg.id ? "bg-purple-500/15" : ""
-              } ${currentMatchId === msg.id ? "bg-amber-400/10 ring-1 ring-amber-400/40" : matchIdSet.has(msg.id) ? "bg-amber-400/[0.04]" : ""}`}
-              onClick={matchIdSet.has(msg.id) && onSelectMatch ? () => onSelectMatch(msg.id) : undefined}
+              } ${currentMatchId === msg.id ? "bg-amber-400/10 ring-1 ring-amber-400/40" : matchIdSet.has(msg.id) ? "bg-amber-400/[0.04]" : ""} ${
+                selectMode && !msg.removed && msg.id < 1e12 ? "cursor-pointer" : ""
+              } ${selectMode && selectedSet.has(msg.id) ? "bg-purple-500/15" : ""}`}
+              onClick={
+                selectMode
+                  ? !msg.removed && msg.id < 1e12
+                    ? () => onToggleSelect?.(msg.id)
+                    : undefined
+                  : matchIdSet.has(msg.id) && onSelectMatch
+                  ? () => onSelectMatch(msg.id)
+                  : undefined
+              }
+              onContextMenu={(e) => {
+                if (msg.removed || msg.id >= 1e12 || selectMode) {
+                  if (selectMode) e.preventDefault();
+                  return;
+                }
+                const target = e.target as HTMLElement;
+                if (target.closest("a, input, textarea, video, audio")) return;
+                const sel = window.getSelection()?.toString();
+                if (sel && sel.length > 0) return;
+                e.preventDefault();
+                setReactionPickerFor(null);
+                setMenu({ msg, x: e.clientX, y: e.clientY });
+              }}
               style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
             >
+              {selectMode && (
+                <div className="mr-2 flex shrink-0 items-center self-center">
+                  {!msg.removed && msg.id < 1e12 ? (
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all ${
+                        selectedSet.has(msg.id) ? "border-purple-400 bg-purple-500" : "border-fg/30"
+                      }`}
+                    >
+                      {selectedSet.has(msg.id) && <Icon name="Check" size={12} className="text-white" />}
+                    </span>
+                  ) : (
+                    <span className="h-5 w-5" />
+                  )}
+                </div>
+              )}
               {!msg.out && (() => {
                 const avatar =
                   msg.senderAvatarUrl && activeChat.isGroup ? (
@@ -176,8 +231,9 @@ export default function MessageList({
                     onTranscribe={onTranscribe}
                     canModerate={canModerate}
                     sessionId={sessionId}
-                    onVotePoll={onVotePoll}
+                    onVotePoll={selectMode ? undefined : onVotePoll}
                     onClosePoll={onClosePoll}
+                    onForwardPoll={msg.poll && onForwardPoll && !selectMode ? () => onForwardPoll(msg.poll as PollData) : undefined}
                   />
 
                   <MessageMeta
@@ -188,6 +244,7 @@ export default function MessageList({
                   />
                 </div>
 
+                {!selectMode && (
                 <MessageActions
                   msg={msg}
                   pinnedMessageId={pinnedMessageId}
@@ -197,11 +254,13 @@ export default function MessageList({
                   onRemove={onRemove}
                   onTogglePin={onTogglePin}
                   onForward={onForward}
+                  onDeleteForMe={onDeleteForMe ? (id) => setConfirmHideId(id) : undefined}
                   setConfirmRemoveId={setConfirmRemoveId}
                   reactionPickerFor={reactionPickerFor}
                   setReactionPickerFor={setReactionPickerFor}
                   reactionPickerRef={reactionPickerRef}
                 />
+                )}
               </div>
             </div>
           );})
@@ -233,6 +292,33 @@ export default function MessageList({
           confirmRemoveId={confirmRemoveId}
           setConfirmRemoveId={setConfirmRemoveId}
           onRemove={onRemove}
+        />
+      )}
+
+      {confirmHideId !== null && (
+        <RemoveConfirmModal
+          forMe
+          confirmRemoveId={confirmHideId}
+          setConfirmRemoveId={setConfirmHideId}
+          onRemove={onDeleteForMe}
+        />
+      )}
+
+      {menu && (
+        <MessageContextMenu
+          msg={menu.msg}
+          x={menu.x}
+          y={menu.y}
+          pinned={pinnedMessageId === menu.msg.id}
+          onClose={() => setMenu(null)}
+          onReply={onReply}
+          onEdit={onEdit}
+          onForward={onForward}
+          onTogglePin={onTogglePin}
+          onToggleReaction={onToggleReaction}
+          onStartSelect={onStartSelect}
+          onAskRemove={onRemove ? (id) => setConfirmRemoveId(id) : undefined}
+          onAskDeleteForMe={onDeleteForMe ? (id) => setConfirmHideId(id) : undefined}
         />
       )}
     </>

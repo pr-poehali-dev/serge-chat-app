@@ -26,7 +26,8 @@ self.addEventListener("push", (event) => {
         renotify: !!data.tag,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
-        vibrate: isCall ? [400, 200, 400, 200, 400] : [150],
+        silent: !!data.silent,
+        vibrate: data.silent ? undefined : isCall ? [400, 200, 400, 200, 400] : [150],
         requireInteraction: isCall,
         data: { type: data.type || "message", chatId: data.chatId || null, callId: data.callId || null },
       });

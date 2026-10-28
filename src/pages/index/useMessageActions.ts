@@ -84,8 +84,16 @@ export function useMessageActions({
     }
   };
 
-  const replacePoll = (poll: PollData) =>
-    setMessages((prev) => prev.map((m) => (m.poll && m.poll.id === poll.id ? { ...m, poll } : m)));
+  const replacePoll = (poll: PollData) => {
+    setMessages((prev) => prev.map((m) => (m.poll && m.poll.id === poll.id ? { ...m, poll: { ...poll, messageId: m.poll.messageId } } : m)));
+    setChats((prev) =>
+      prev.map((c) =>
+        c.pinnedMessage?.poll && c.pinnedMessage.poll.id === poll.id
+          ? { ...c, pinnedMessage: { ...c.pinnedMessage, poll: { ...poll, messageId: c.pinnedMessage.poll.messageId } } }
+          : c
+      )
+    );
+  };
 
   const votePoll = async (pollId: number, optionIds: number[]) => {
     const previous = messages.find((m) => m.poll?.id === pollId)?.poll;
@@ -159,6 +167,7 @@ export function useMessageActions({
                       fileName: target.fileName,
                       topicId: activeTopicId,
                       senderName: target.out ? "Вы" : target.senderName || c.name,
+                      poll: target.poll ?? null,
                     }
                   : null,
             }
@@ -224,6 +233,61 @@ export function useMessageActions({
       }
       return null;
     } catch {
+      return "Не удалось связаться с сервером";
+    }
+  };
+
+  const sharePoll = async (pollId: number, targetChatId: number): Promise<string | null> => {
+    try {
+      const res = await fetch(`${API_CHATS}?action=share-poll`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ poll_id: pollId, target_chat_id: targetChatId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return data.error || "Не удалось переслать опрос";
+      setChats((prev) => prev.map((c) => (c.id === targetChatId ? { ...c, lastMsg: data.text, time: data.time } : c)));
+      return null;
+    } catch {
+      return "Не удалось связаться с сервером";
+    }
+  };
+
+  const forwardMessages = async (ids: number[], targetChatId: number): Promise<string | null> => {
+    const ordered = messages.filter((m) => ids.includes(m.id) && !m.removed && m.id < 1e12);
+    for (const m of ordered) {
+      const err = await forwardMessage(m, targetChatId);
+      if (err) return err;
+    }
+    return null;
+  };
+
+  const deleteMessages = async (ids: number[]): Promise<string | null> => {
+    const real = ids.filter((id) => id < 1e12);
+    if (real.length === 0) return null;
+    const snapshot = messages;
+    const mine = new Set(messages.filter((m) => real.includes(m.id) && m.out).map((m) => m.id));
+    setMessages((prev) =>
+      prev
+        .filter((m) => !(real.includes(m.id) && !m.out))
+        .map((m) =>
+          mine.has(m.id) ? { ...m, removed: true, text: "", kind: "text", mediaUrl: null, fileName: null, reactions: {} } : m
+        )
+    );
+    if (replyTo && real.includes(replyTo.id)) setReplyTo(null);
+    try {
+      const res = await fetch(`${API_CHATS}?action=bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ message_ids: real }),
+      });
+      if (!res.ok) {
+        setMessages(snapshot);
+        return "Не удалось удалить сообщения";
+      }
+      return null;
+    } catch {
+      setMessages(snapshot);
       return "Не удалось связаться с сервером";
     }
   };
@@ -314,6 +378,9 @@ export function useMessageActions({
     pinMessage,
     openPinned,
     forwardMessage,
+    forwardMessages,
+    deleteMessages,
+    sharePoll,
     removeMessage,
     toggleReaction,
     jumpRequest,

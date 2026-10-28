@@ -23,9 +23,25 @@ interface NotifyPrefs {
   inApp: boolean;
   sound: boolean;
   browser: boolean;
+  quietEnabled: boolean;
+  quietFrom: number;
+  quietTo: number;
 }
 
-const DEFAULT_NOTIFY: NotifyPrefs = { inApp: true, sound: true, browser: false };
+const DEFAULT_NOTIFY: NotifyPrefs = { inApp: true, sound: true, browser: false, quietEnabled: false, quietFrom: 1380, quietTo: 480 };
+
+export function isQuietNow(prefs: NotifyPrefs, now: Date = new Date()): boolean {
+  if (!prefs.quietEnabled || prefs.quietFrom === prefs.quietTo) return false;
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  if (prefs.quietFrom < prefs.quietTo) return minutes >= prefs.quietFrom && minutes < prefs.quietTo;
+  return minutes >= prefs.quietFrom || minutes < prefs.quietTo;
+}
+
+const minutesToTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const timeToMinutes = (v: string) => {
+  const [h, m] = v.split(":").map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+};
 
 export function readNotifyPrefs(): NotifyPrefs {
   try {
@@ -122,6 +138,41 @@ function NotificationsPanel({
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState("");
   const [fullScreenOk, setFullScreenOk] = useState(true);
+  const [quietError, setQuietError] = useState("");
+
+  useEffect(() => {
+    if (!authUser) return;
+    let alive = true;
+    fetch(`${API_CHATS}?action=settings`, { headers: { "X-Session-Id": authUser.sessionId } })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        const st = d.settings;
+        if (!alive || !st || typeof st.quietEnabled !== "boolean") return;
+        setPrefs((p) => ({ ...p, quietEnabled: st.quietEnabled, quietFrom: st.quietFrom, quietTo: st.quietTo }));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [authUser?.sessionId]);
+
+  const saveQuiet = async (patch: Partial<Pick<NotifyPrefs, "quietEnabled" | "quietFrom" | "quietTo">>) => {
+    const previous = prefs;
+    setPrefs((p) => ({ ...p, ...patch }));
+    setQuietError("");
+    if (!authUser) return;
+    try {
+      const res = await fetch(`${API_CHATS}?action=update-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": authUser.sessionId },
+        body: JSON.stringify({ ...patch, quietTz: -new Date().getTimezoneOffset() }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setPrefs(previous);
+      setQuietError("Не удалось сохранить тихие часы, попробуйте ещё раз");
+    }
+  };
 
   useEffect(() => {
     if (!native) return;
@@ -214,6 +265,51 @@ function NotificationsPanel({
         <Row icon="Volume2" title="Звук" desc="Короткий сигнал при новом сообщении">
           <Switch checked={prefs.sound} onCheckedChange={(v) => setPrefs((p) => ({ ...p, sound: v }))} />
         </Row>
+        <Row
+          icon="MoonStar"
+          title="Тихие часы"
+          desc="В это время сообщения приходят без звука и вибрации"
+        >
+          <Switch checked={prefs.quietEnabled} disabled={!authUser} onCheckedChange={(v) => saveQuiet({ quietEnabled: v })} />
+        </Row>
+        {prefs.quietEnabled && (
+          <div className="rounded-2xl border border-fg/[0.06] bg-fg/[0.04] px-3 py-3 animate-fade-in">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-fg/45">С</span>
+                <input
+                  type="time"
+                  value={minutesToTime(prefs.quietFrom)}
+                  onChange={(e) => {
+                    const m = timeToMinutes(e.target.value);
+                    if (m !== null) saveQuiet({ quietFrom: m });
+                  }}
+                  className="w-full rounded-xl border border-fg/[0.08] bg-fg/[0.06] px-3 py-2 text-sm text-fg/85 outline-none focus:border-purple-500/40"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-fg/45">До</span>
+                <input
+                  type="time"
+                  value={minutesToTime(prefs.quietTo)}
+                  onChange={(e) => {
+                    const m = timeToMinutes(e.target.value);
+                    if (m !== null) saveQuiet({ quietTo: m });
+                  }}
+                  className="w-full rounded-xl border border-fg/[0.08] bg-fg/[0.06] px-3 py-2 text-sm text-fg/85 outline-none focus:border-purple-500/40"
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-[11px] leading-snug text-fg/35">
+              {prefs.quietFrom === prefs.quietTo
+                ? "Начало и конец совпадают, тихие часы не действуют"
+                : `Тишина с ${minutesToTime(prefs.quietFrom)} до ${minutesToTime(prefs.quietTo)}${
+                    prefs.quietFrom > prefs.quietTo ? " (через полночь)" : ""
+                  }. Уведомления всё равно приходят, но молча.`}
+            </p>
+            {quietError && <p className="mt-1 text-xs text-red-400">{quietError}</p>}
+          </div>
+        )}
       </div>
 
       <h4 className="mb-2 mt-6 px-1 text-xs font-semibold uppercase tracking-wider text-fg/35">Уведомления по чатам</h4>

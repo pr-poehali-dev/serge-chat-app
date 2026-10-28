@@ -14,6 +14,7 @@ interface MessageActionsProps {
   onRemove?: (messageId: number) => void;
   onTogglePin?: (msg: Message) => void;
   onForward?: (msg: Message) => void;
+  onDeleteForMe?: (messageId: number) => void;
   setConfirmRemoveId: Dispatch<SetStateAction<number | null>>;
   reactionPickerFor: number | null;
   setReactionPickerFor: Dispatch<SetStateAction<number | null>>;
@@ -29,6 +30,7 @@ export default function MessageActions({
   onRemove,
   onTogglePin,
   onForward,
+  onDeleteForMe,
   setConfirmRemoveId,
   reactionPickerFor,
   setReactionPickerFor,
@@ -36,7 +38,7 @@ export default function MessageActions({
 }: MessageActionsProps) {
   return (
     <>
-      {!msg.removed && (onToggleReaction || onReply || onTogglePin || onForward || (msg.out && (onEdit || onRemove))) && (
+      {!msg.removed && (onToggleReaction || onReply || onTogglePin || onForward || (!msg.out && onDeleteForMe) || (msg.out && (onEdit || onRemove))) && (
         <div className="relative shrink-0 self-start flex items-center opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 max-[639px]:opacity-60 transition-opacity">
           {onReply && (
             <button
@@ -63,6 +65,15 @@ export default function MessageActions({
               title="Удалить"
             >
               <Icon name="Trash2" size={12} />
+            </button>
+          )}
+          {!msg.out && onDeleteForMe && msg.id < 1e12 && (
+            <button
+              onClick={() => onDeleteForMe(msg.id)}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-fg/30 hover:text-red-400 hover:bg-fg/[0.08] transition-all"
+              title="Удалить у меня"
+            >
+              <Icon name="EyeOff" size={12} />
             </button>
           )}
           {onForward && msg.id < 1e12 && (

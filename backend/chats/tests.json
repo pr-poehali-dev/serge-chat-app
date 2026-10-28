@@ -180,6 +180,71 @@
       "method": "GET",
       "path": "/?action=profile",
       "expectedStatus": 400
+    },
+    {
+      "name": "Schedule without session returns 401",
+      "method": "POST",
+      "path": "/?action=schedule-message",
+      "expectedStatus": 401,
+      "body": {
+        "chat_id": 1,
+        "text": "x",
+        "send_at": "2030-01-01T10:00:00Z"
+      }
+    },
+    {
+      "name": "Bulk delete without session returns 401",
+      "method": "POST",
+      "path": "/?action=bulk-delete",
+      "expectedStatus": 401,
+      "body": {
+        "message_ids": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "Cancel scheduled without session returns 401",
+      "method": "POST",
+      "path": "/?action=cancel-scheduled",
+      "expectedStatus": 401,
+      "body": {
+        "id": 1
+      }
+    },
+    {
+      "name": "Sticker packs without session returns 401",
+      "method": "GET",
+      "path": "/?action=sticker-packs",
+      "expectedStatus": 401
+    },
+    {
+      "name": "Create sticker pack without session returns 401",
+      "method": "POST",
+      "path": "/?action=create-sticker-pack",
+      "expectedStatus": 401,
+      "body": {
+        "title": "x"
+      }
+    },
+    {
+      "name": "Share poll without session returns 401",
+      "method": "POST",
+      "path": "/?action=share-poll",
+      "expectedStatus": 401,
+      "body": {
+        "poll_id": 1,
+        "target_chat_id": 1
+      }
+    },
+    {
+      "name": "Poll link without session returns 401",
+      "method": "POST",
+      "path": "/?action=poll-link",
+      "expectedStatus": 401,
+      "body": {
+        "poll_id": 1
+      }
     }
   ]
 }

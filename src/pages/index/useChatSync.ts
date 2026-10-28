@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Dispatch, SetStateAction } from "react";
 import { Chat, Message, Tab, AuthUser, NotificationItem } from "@/components/messenger/types";
 import { API_CHATS } from "./config";
-import { readNotifyPrefs } from "@/components/messenger/sidebar/SettingsPanels";
+import { readNotifyPrefs, isQuietNow } from "@/components/messenger/sidebar/SettingsPanels";
 import { registerServiceWorker } from "@/lib/push";
 import { isNativeApp, startNativePush } from "@/lib/nativePush";
 
@@ -190,7 +190,7 @@ export function useChatSync({
         if (newNotes.length > 0) {
           const prefs = readNotifyPrefs();
           if (prefs.inApp) setNotifications((prev) => [...newNotes, ...prev].slice(0, 50));
-          if (prefs.sound) playBeep();
+          if (prefs.sound && !isQuietNow(prefs)) playBeep();
         }
 
         if (openId && openId > 0 && !isBotChatRef.current) {

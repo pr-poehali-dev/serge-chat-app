@@ -1,10 +1,12 @@
 import { RefObject, Dispatch, SetStateAction, useState } from "react";
 import Icon from "@/components/ui/icon";
-import { Attachment, Message } from "../types";
+import { Attachment, Message, ScheduledItem } from "../types";
 import MediaRecorderControls from "../media/MediaRecorderControls";
 import { RecordedMedia } from "../media/useRecorder";
 import EmojiGifPicker, { EmojiCategory, GifCategory, GifItem } from "./EmojiGifPicker";
 import { replyLabel } from "./ReplyQuote";
+import ScheduledList from "./ScheduledList";
+import SchedulePopover from "./SchedulePopover";
 
 interface MessageInputProps {
   attachments: Attachment[];
@@ -43,6 +45,9 @@ interface MessageInputProps {
   onCreatePoll?: () => void;
   onAddFiles?: (files: File[]) => void;
   fileNotice?: string;
+  scheduledItems?: ScheduledItem[];
+  onScheduleMessage?: (whenMs: number) => Promise<string | null>;
+  onCancelScheduled?: (id: number) => void;
 }
 
 export default function MessageInput({
@@ -80,6 +85,9 @@ export default function MessageInput({
   onCreatePoll,
   onAddFiles,
   fileNotice,
+  scheduledItems = [],
+  onScheduleMessage,
+  onCancelScheduled,
 }: MessageInputProps) {
   const [recordingActive, setRecordingActive] = useState(false);
   const hasDraft = inputText.trim().length > 0 || attachments.length > 0 || !!editingMessage;
@@ -100,6 +108,8 @@ export default function MessageInput({
             <p className="text-xs text-red-300">{sendError}</p>
           </div>
         )}
+
+        {onCancelScheduled && <ScheduledList items={scheduledItems} onCancel={onCancelScheduled} />}
 
         {(replyTo || editingMessage) && (
           <div className="mb-2 flex items-center gap-3 rounded-xl bg-fg/[0.05] border-l-2 border-purple-400 px-3 py-2 animate-fade-in">
@@ -248,6 +258,10 @@ export default function MessageInput({
               onRecorded={onSendMedia}
               onRecordingChange={setRecordingActive}
             />
+          )}
+
+          {onScheduleMessage && inputText.trim().length > 0 && attachments.length === 0 && !editingMessage && !recordingActive && (
+            <SchedulePopover onSchedule={onScheduleMessage} />
           )}
 
           {(hasDraft || !onSendMedia) && (

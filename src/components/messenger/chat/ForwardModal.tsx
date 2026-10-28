@@ -1,30 +1,26 @@
 import { useState } from "react";
 import Icon from "@/components/ui/icon";
-import { Chat, Message } from "../types";
-import { replyLabel } from "./ReplyQuote";
+import { Chat } from "../types";
 
 interface ForwardModalProps {
-  message: Message;
+  title?: string;
+  preview: string;
+  groupsOnly?: boolean;
   chats: Chat[];
   currentChatId: number | null;
   onForward: (chatId: number) => Promise<string | null>;
   onClose: () => void;
 }
 
-export default function ForwardModal({ message, chats, currentChatId, onForward, onClose }: ForwardModalProps) {
+export default function ForwardModal({ title = "Переслать сообщение", preview, groupsOnly = false, chats, currentChatId, onForward, onClose }: ForwardModalProps) {
   const [search, setSearch] = useState("");
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [doneId, setDoneId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const available = chats
-    .filter((c) => c.id > 0 && !c.isBot)
+    .filter((c) => c.id > 0 && !c.isBot && (!groupsOnly || c.isGroup))
     .filter((c) => c.name.toLowerCase().includes(search.trim().toLowerCase()));
-
-  const preview = replyLabel({
-    text: message.text || message.fileName || "",
-    kind: (message.kind || "text") as "text",
-  });
 
   const handlePick = async (chatId: number) => {
     if (sendingId !== null) return;
@@ -57,7 +53,7 @@ export default function ForwardModal({ message, chats, currentChatId, onForward,
               <Icon name="Forward" size={16} className="text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm font-bold text-fg/95">Переслать сообщение</h2>
+              <h2 className="text-sm font-bold text-fg/95">{title}</h2>
               <p className="text-[11px] text-fg/40 truncate">{preview}</p>
             </div>
           </div>
@@ -86,7 +82,7 @@ export default function ForwardModal({ message, chats, currentChatId, onForward,
 
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {available.length === 0 ? (
-            <p className="text-center text-xs text-fg/30 py-8">Чаты не найдены</p>
+            <p className="text-center text-xs text-fg/30 py-8">{groupsOnly ? "Групп не найдено" : "Чаты не найдены"}</p>
           ) : (
             available.map((c) => {
               const isSending = sendingId === c.id;

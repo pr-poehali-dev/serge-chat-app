@@ -83,6 +83,15 @@ def build_message(token: str, payload: dict, ttl: int, urgent: bool) -> dict:
             }
         }
     data = {k: str(v) for k, v in payload.items() if v is not None and k not in ("title", "body")}
+    silent = bool(payload.get("silent"))
+    notification_opts = {
+        "channel_id": "calls" if is_call else ("messages_quiet" if silent else "messages"),
+        "tag": payload.get("tag") or None,
+        "notification_priority": "PRIORITY_MAX" if is_call else ("PRIORITY_LOW" if silent else "PRIORITY_HIGH"),
+    }
+    if not silent:
+        notification_opts["sound"] = "default"
+        notification_opts["default_vibrate_timings"] = True
     return {
         "message": {
             "token": token,
@@ -92,13 +101,7 @@ def build_message(token: str, payload: dict, ttl: int, urgent: bool) -> dict:
                 "priority": "HIGH" if urgent else "NORMAL",
                 "ttl": f"{ttl}s",
                 "collapse_key": payload.get("tag") or None,
-                "notification": {
-                    "channel_id": "calls" if is_call else "messages",
-                    "tag": payload.get("tag") or None,
-                    "sound": "default",
-                    "default_vibrate_timings": True,
-                    "notification_priority": "PRIORITY_MAX" if is_call else "PRIORITY_HIGH",
-                },
+                "notification": notification_opts,
             },
         }
     }

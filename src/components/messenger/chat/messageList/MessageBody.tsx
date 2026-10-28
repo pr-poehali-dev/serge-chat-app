@@ -19,6 +19,7 @@ interface MessageBodyProps {
   sessionId: string | null;
   onVotePoll?: (pollId: number, optionIds: number[]) => void;
   onClosePoll?: (pollId: number) => void;
+  onForwardPoll?: () => void;
 }
 
 export default function MessageBody({
@@ -31,6 +32,7 @@ export default function MessageBody({
   sessionId,
   onVotePoll,
   onClosePoll,
+  onForwardPoll,
 }: MessageBodyProps) {
   return (
     <>
@@ -82,6 +84,7 @@ export default function MessageBody({
             sessionId={sessionId}
             onVote={onVotePoll}
             onClose={onClosePoll}
+            onForward={onForwardPoll}
           />
         ) : extractStickerPath(msg.text) && !msg.removed ? (
           <img

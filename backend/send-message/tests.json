@@ -52,6 +52,15 @@
       },
       "expectedStatus": 404,
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Dispatch due scheduled messages",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "dispatch-due"
+      },
+      "expectedStatus": 200
     }
   ]
 }

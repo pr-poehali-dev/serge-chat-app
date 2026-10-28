@@ -46,7 +46,8 @@ export const STICKER_SETS: StickerSet[] = [
   },
 ];
 
-const STICKER_RE = /^\/stickers\/(animals|food|hearts|party)\/[a-z0-9-]{1,30}\.png$/;
+const STICKER_RE =
+  /^(\/stickers\/(animals|food|hearts|party)\/[a-z0-9-]{1,30}\.png|(https?:\/\/[^\s]+|\/files)\/stickers\/user\/[a-f0-9]{32}\.(png|webp|jpg))$/;
 
 export const extractStickerPath = (text: string): string | null => {
   const t = (text || "").trim();

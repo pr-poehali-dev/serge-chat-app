@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
-import { Chat, Tab, AuthUser, NotificationItem, DirectoryUser } from "../types";
+import { Chat, Tab, AuthUser, NotificationItem, DirectoryUser, FoundMessage } from "../types";
+import GlobalSearch from "./GlobalSearch";
 import SettingsPanels, { SettingsSection } from "./SettingsPanels";
 import { API_CHATS } from "@/pages/index/config";
 import { useAppearance } from "@/hooks/use-appearance";
@@ -32,6 +33,7 @@ interface MiscTabsProps {
   onStartChatWithUser: (userId: number) => Promise<string | null>;
   onSetChatNotify: (chatId: number, enabled: boolean) => void;
   onMoodSaved?: (mood: { moodEmoji: string; moodText: string; bio: string }) => void;
+  onOpenFoundMessage?: (found: FoundMessage, query: string) => void;
 }
 
 export default function MiscTabs({
@@ -47,7 +49,9 @@ export default function MiscTabs({
   onStartChatWithUser,
   onSetChatNotify,
   onMoodSaved,
+  onOpenFoundMessage,
 }: MiscTabsProps) {
+  const [searchMode, setSearchMode] = useState<"people" | "messages">("people");
   const [login, setLogin] = useState(authUser?.login || "");
   const [firstName, setFirstName] = useState(authUser?.firstName || "");
   const [lastName, setLastName] = useState(authUser?.lastName || "");
@@ -261,6 +265,23 @@ export default function MiscTabs({
       {/* SEARCH */}
       {activeTab === "search" && (
         <div className="animate-fade-in">
+          <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-fg/[0.05] p-1">
+            {([["people", "Люди"], ["messages", "Сообщения"]] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setSearchMode(id)}
+                className={`rounded-xl px-2 py-2 text-xs font-medium transition-all ${
+                  searchMode === id ? "bg-fg/[0.12] text-foreground shadow-sm" : "text-fg/45 hover:text-fg/70"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {searchMode === "messages" && authUser && onOpenFoundMessage && (
+            <GlobalSearch sessionId={authUser.sessionId} onOpenResult={onOpenFoundMessage} />
+          )}
+          {searchMode === "people" && (<>
           <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-3 mb-4">
             <Icon name="Search" size={16} className="text-purple-400" />
             <input
@@ -328,6 +349,7 @@ export default function MiscTabs({
               ))}
             </>
           )}
+          </>)}
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Chat, Tab, AuthUser, NotificationItem } from "./types";
+import { Chat, Tab, AuthUser, NotificationItem, FoundMessage } from "./types";
 import SidebarHeader from "./sidebar/SidebarHeader";
 import ChatsList from "./sidebar/ChatsList";
 import ContactsAndBots from "./sidebar/ContactsAndBots";
@@ -30,6 +30,7 @@ interface SidebarProps {
   onStartChatWithUser: (userId: number) => Promise<string | null>;
   onSetChatNotify: (chatId: number, enabled: boolean) => void;
   onMoodSaved?: (mood: { moodEmoji: string; moodText: string; bio: string }) => void;
+  onOpenFoundMessage?: (found: FoundMessage, query: string) => void;
 }
 
 export default function Sidebar({
@@ -57,6 +58,7 @@ export default function Sidebar({
   onStartChatWithUser,
   onSetChatNotify,
   onMoodSaved,
+  onOpenFoundMessage,
 }: SidebarProps) {
   const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
   const [groupToLeave, setGroupToLeave] = useState<Chat | null>(null);
@@ -116,6 +118,7 @@ export default function Sidebar({
             onStartChatWithUser={onStartChatWithUser}
             onSetChatNotify={onSetChatNotify}
             onMoodSaved={onMoodSaved}
+            onOpenFoundMessage={onOpenFoundMessage}
           />
         </div>
       </div>

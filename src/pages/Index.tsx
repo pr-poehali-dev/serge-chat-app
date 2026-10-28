@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAppHeight } from "@/hooks/use-app-height";
 import { IncomingCall, CallScreen, GroupCallScreen } from "@/components/messenger/CallOverlays";
@@ -14,7 +14,9 @@ import ReadByModal from "@/components/messenger/chat/ReadByModal";
 import CreatePollModal from "@/components/messenger/polls/CreatePollModal";
 import ProfileSheet from "@/components/messenger/profile/ProfileSheet";
 import ChatBackgroundPicker from "@/components/messenger/background/ChatBackgroundPicker";
-import { Chat, Message, Tab } from "@/components/messenger/types";
+import PollLinkModal from "@/components/messenger/polls/PollLinkModal";
+import { replyLabel } from "@/components/messenger/chat/ReplyQuote";
+import { Chat, Message, Tab, PollData, FoundMessage } from "@/components/messenger/types";
 import { EMOJI_CATEGORIES, GIF_CATEGORIES, API_CHATS } from "./index/config";
 import { useAuth } from "./index/useAuth";
 import { useComposer } from "./index/useComposer";
@@ -22,6 +24,8 @@ import { useBotsAndGroups } from "./index/useBotsAndGroups";
 import { useMessaging } from "./index/useMessaging";
 import { useCall } from "./index/useCall";
 import { useGroupCall } from "./index/useGroupCall";
+import { useScheduled } from "./index/useScheduled";
+import { useDraft } from "./index/useDraft";
 
 export default function Index() {
   const isMobile = useIsMobile();
@@ -41,6 +45,11 @@ export default function Index() {
   const [messages, setMessages] = useState<Message[]>([]);
 
   const [forwardSource, setForwardSource] = useState<Message | null>(null);
+  const [forwardMany, setForwardMany] = useState<number[] | null>(null);
+  const [forwardPoll, setForwardPoll] = useState<PollData | null>(null);
+  const [pollCode, setPollCode] = useState<string | null>(null);
+  const [foundFocus, setFoundFocus] = useState<{ messageId: number; query: string; nonce: number } | null>(null);
+  const [pendingFound, setPendingFound] = useState<{ chatId: number; topicId: number | null; messageId: number; query: string } | null>(null);
   const [readByMessageId, setReadByMessageId] = useState<number | null>(null);
   const [bgPickerOpen, setBgPickerOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
@@ -124,6 +133,47 @@ export default function Index() {
     onIncomingCallHint: callCtl.checkIncoming,
   });
 
+  const realChatId = !isBotChat && activeChatId && activeChatId > 0 ? activeChatId : null;
+
+  const scheduled = useScheduled({ authUser, authHeaders, chatId: realChatId, topicId: bg.activeTopicId });
+  const scheduleFromInput = async (whenMs: number): Promise<string | null> => {
+    const err = await scheduled.schedule(composer.inputText, whenMs);
+    if (!err) composer.setInputText("");
+    return err;
+  };
+
+  useDraft({
+    userId: authUser?.id ?? null,
+    chatId: realChatId,
+    topicId: bg.activeTopicId,
+    text: composer.inputText,
+    setText: composer.setInputText,
+    suspended: !!msg.editingMessage,
+  });
+
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("poll");
+    if (!code) return;
+    setPollCode(code);
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
+
+  const openFoundMessage = (found: FoundMessage, query: string) => {
+    setPendingFound({ chatId: found.chatId, topicId: found.topicId ?? null, messageId: found.messageId, query });
+    setActiveTab("chats");
+    setActiveChatId(found.chatId);
+  };
+
+  useEffect(() => {
+    if (!pendingFound || activeChatId !== pendingFound.chatId) return;
+    if (bg.activeTopicId !== pendingFound.topicId) {
+      bg.setActiveTopicId(pendingFound.topicId);
+      return;
+    }
+    setFoundFocus({ messageId: pendingFound.messageId, query: pendingFound.query, nonce: Date.now() });
+    setPendingFound(null);
+  }, [pendingFound, activeChatId, bg.activeTopicId]);
+
   const filteredChats = chats.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -180,6 +230,7 @@ export default function Index() {
           onStartChatWithUser={msg.startChatWithUser}
           onSetChatNotify={msg.setChatNotify}
           onMoodSaved={handleMoodSaved}
+          onOpenFoundMessage={openFoundMessage}
         />
       )}
 
@@ -281,17 +332,52 @@ export default function Index() {
         onAddFiles={!isBotChat && activeChatId && activeChatId > 0 ? composer.addFiles : undefined}
         fileNotice={composer.fileNotice}
         onSendGif={!isBotChat && activeChatId && activeChatId > 0 ? msg.sendGif : undefined}
+        onForwardPoll={!isBotChat ? setForwardPoll : undefined}
+        onForwardSelected={isBotChat ? undefined : setForwardMany}
+        onDeleteSelected={isBotChat ? undefined : msg.deleteMessages}
+        onDeleteForMe={isBotChat ? undefined : (id) => { msg.deleteMessages([id]); }}
+        scheduledItems={realChatId ? scheduled.items : undefined}
+        onScheduleMessage={realChatId ? scheduleFromInput : undefined}
+        onCancelScheduled={realChatId ? scheduled.cancel : undefined}
+        foundFocus={foundFocus}
       />
       )}
 
       {forwardSource && (
         <ForwardModal
-          message={forwardSource}
+          preview={replyLabel({ text: forwardSource.text || forwardSource.fileName || "", kind: (forwardSource.kind || "text") as "text" })}
           chats={chats}
           currentChatId={activeChatId}
           onForward={(targetId) => msg.forwardMessage(forwardSource, targetId)}
           onClose={() => setForwardSource(null)}
         />
+      )}
+
+      {forwardMany && (
+        <ForwardModal
+          title="Переслать сообщения"
+          preview={`Выбрано сообщений: ${forwardMany.length}`}
+          chats={chats}
+          currentChatId={activeChatId}
+          onForward={(targetId) => msg.forwardMessages(forwardMany, targetId)}
+          onClose={() => setForwardMany(null)}
+        />
+      )}
+
+      {forwardPoll && (
+        <ForwardModal
+          title="Переслать опрос в группу"
+          preview={forwardPoll.question}
+          groupsOnly
+          chats={chats}
+          currentChatId={activeChatId}
+          onForward={(targetId) => msg.sharePoll(forwardPoll.id, targetId)}
+          onClose={() => setForwardPoll(null)}
+        />
+      )}
+
+      {pollCode && authUser && (
+        <PollLinkModal code={pollCode} sessionId={authUser.sessionId} onClose={() => setPollCode(null)} />
       )}
 
       {/* Bot store modal */}
