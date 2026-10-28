@@ -17,7 +17,7 @@ interface MessageActionsProps {
   setConfirmRemoveId: Dispatch<SetStateAction<number | null>>;
   reactionPickerFor: number | null;
   setReactionPickerFor: Dispatch<SetStateAction<number | null>>;
-  reactionPickerRef: RefObject<HTMLDivElement>;
+  reactionPickerRef: RefObject<HTMLDivElement | null>;
 }
 
 export default function MessageActions({

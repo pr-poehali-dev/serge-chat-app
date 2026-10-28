@@ -11,7 +11,7 @@ interface MessageListProps {
   loadingMsgs: boolean;
   messages: Message[];
   botTyping?: boolean;
-  messagesEndRef: RefObject<HTMLDivElement>;
+  messagesEndRef: RefObject<HTMLDivElement | null>;
   currentUserId?: number;
   onToggleReaction?: (messageId: number, emoji: string) => void;
   onTranscribe?: (messageId: number) => Promise<string | null>;

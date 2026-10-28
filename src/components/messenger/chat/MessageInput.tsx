@@ -11,14 +11,14 @@ interface MessageInputProps {
   setAttachments: Dispatch<SetStateAction<Attachment[]>>;
   attachMenuOpen: boolean;
   setAttachMenuOpen: Dispatch<SetStateAction<boolean>>;
-  attachMenuRef: RefObject<HTMLDivElement>;
-  fileInputRef: RefObject<HTMLInputElement>;
-  imageInputRef: RefObject<HTMLInputElement>;
+  attachMenuRef: RefObject<HTMLDivElement | null>;
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  imageInputRef: RefObject<HTMLInputElement | null>;
   handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
 
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
-  emojiPickerRef: RefObject<HTMLDivElement>;
+  emojiPickerRef: RefObject<HTMLDivElement | null>;
   emojiTab: "emoji" | "icq" | "stickers" | "gif";
   setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "stickers" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];

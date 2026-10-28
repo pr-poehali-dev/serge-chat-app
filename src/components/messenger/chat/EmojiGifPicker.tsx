@@ -23,7 +23,7 @@ export interface GifCategory {
 interface EmojiGifPickerProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
-  emojiPickerRef: RefObject<HTMLDivElement>;
+  emojiPickerRef: RefObject<HTMLDivElement | null>;
   emojiTab: "emoji" | "icq" | "stickers" | "gif";
   setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "stickers" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];

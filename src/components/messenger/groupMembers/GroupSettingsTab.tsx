@@ -13,7 +13,7 @@ interface GroupSettingsTabProps {
   canManage: boolean;
   isLocalChat: boolean;
   busy: boolean;
-  avatarInputRef: RefObject<HTMLInputElement>;
+  avatarInputRef: RefObject<HTMLInputElement | null>;
   changeAvatar: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   removeAvatar: () => Promise<void>;
   saveInfo: () => Promise<void>;
