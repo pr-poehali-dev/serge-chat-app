@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 import { Chat, Tab, AuthUser } from "../types";
 import SettingsPanels, { SettingsSection } from "./SettingsPanels";
+import AboutPanel, { APP_VERSION } from "./AboutPanel";
 import { API_CHATS, API_AUTH } from "@/pages/index/config";
 import { useAppearance } from "@/hooks/use-appearance";
 
@@ -44,10 +45,14 @@ export default function ProfileTab({
 
   const [section, setSection] = useState<SettingsSection | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const { appearance } = useAppearance();
 
   useEffect(() => {
-    if (activeTab !== "profile") setSection(null);
+    if (activeTab !== "profile") {
+      setSection(null);
+      setAboutOpen(false);
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -141,6 +146,10 @@ export default function ProfileTab({
   };
 
   if (activeTab !== "profile") return null;
+
+  if (aboutOpen) {
+    return <AboutPanel onBack={() => setAboutOpen(false)} />;
+  }
 
   if (section) {
     return (
@@ -313,6 +322,20 @@ export default function ProfileTab({
           <p>Тему и размер текста можно поменять в разделе «Оформление».</p>
         </div>
       )}
+
+      <button
+        onClick={() => setAboutOpen(true)}
+        className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 min-h-[56px] text-left hover:bg-fg/[0.05] active:bg-fg/[0.08] transition-all group"
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-fg/[0.05] border border-fg/[0.06] text-fg/55 group-hover:text-purple-400 transition-colors">
+          <Icon name="Info" size={16} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-fg/85">О приложении</p>
+          <p className="text-xs text-fg/40 truncate">Версия {APP_VERSION}, авторы стикеров и GIF</p>
+        </div>
+        <Icon name="ChevronRight" size={14} className="shrink-0 text-fg/25 group-hover:text-fg/50 transition-colors" />
+      </button>
 
       {authUser && (
         <button

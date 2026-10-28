@@ -217,7 +217,7 @@ nginx -t &amp;&amp; systemctl reload nginx</code></pre></div>
 <p>Обязательные таблицы (без них загрузка не начнётся):</p>
 <div class="table-wrap"><table><tr><th>Файл</th><th>Что внутри</th></tr><tr><td><code>users.csv</code></td><td>люди, почты и пароли</td></tr><tr><td><code>chats.csv</code></td><td>чаты и группы</td></tr><tr><td><code>chat_members.csv</code></td><td>кто в каких чатах, роли, фон чата</td></tr><tr><td><code>messages.csv</code></td><td>все сообщения</td></tr></table></div>
 <p>Остальные таблицы. Если таблица пустая или её нет, файл можно не скачивать:</p>
-<div class="table-wrap"><table><tr><th>Файл</th><th>Что внутри</th></tr><tr><td><code>chat_topics.csv</code></td><td>темы в группах</td></tr><tr><td><code>message_reactions.csv</code></td><td>реакции</td></tr><tr><td><code>hidden_messages.csv</code></td><td>«удалить у меня»</td></tr><tr><td><code>polls.csv</code></td><td>опросы</td></tr><tr><td><code>poll_options.csv</code></td><td>варианты опросов</td></tr><tr><td><code>poll_votes.csv</code></td><td>голоса</td></tr><tr><td><code>poll_shares.csv</code></td><td>пересланные опросы</td></tr><tr><td><code>sticker_packs.csv</code></td><td>наборы стикеров</td></tr><tr><td><code>custom_stickers.csv</code></td><td>свои стикеры</td></tr><tr><td><code>favorite_stickers.csv</code></td><td>избранные стикеры</td></tr><tr><td><code>scheduled_messages.csv</code></td><td>запланированные сообщения</td></tr><tr><td><code>push_tokens.csv</code></td><td>устройства Android для уведомлений</td></tr></table></div>
+<div class="table-wrap"><table><tr><th>Файл</th><th>Что внутри</th></tr><tr><td><code>chat_folders.csv</code></td><td>папки чатов (личные у каждого человека)</td></tr><tr><td><code>chat_topics.csv</code></td><td>темы в группах</td></tr><tr><td><code>message_reactions.csv</code></td><td>реакции</td></tr><tr><td><code>hidden_messages.csv</code></td><td>«удалить у меня»</td></tr><tr><td><code>polls.csv</code></td><td>опросы</td></tr><tr><td><code>poll_options.csv</code></td><td>варианты опросов</td></tr><tr><td><code>poll_votes.csv</code></td><td>голоса</td></tr><tr><td><code>poll_shares.csv</code></td><td>пересланные опросы</td></tr><tr><td><code>sticker_packs.csv</code></td><td>наборы стикеров</td></tr><tr><td><code>custom_stickers.csv</code></td><td>свои стикеры</td></tr><tr><td><code>favorite_stickers.csv</code></td><td>избранные стикеры</td></tr><tr><td><code>scheduled_messages.csv</code></td><td>запланированные сообщения</td></tr><tr><td><code>push_tokens.csv</code></td><td>устройства Android для уведомлений</td></tr></table></div>
 <p>Не нужно скачивать: <code>calls</code>, <code>group_calls</code>, <code>group_call_members</code>, <code>group_call_signals</code> (временные данные звонков), <code>app_settings</code> (ключи уведомлений сервер создаст сам) и <code>push_subscriptions</code> (подписки браузеров привязаны к старому адресу). Если такие файлы окажутся в папке, скрипт их пропустит.</p>
 <p><b>Запишите, сколько строк в каждой таблице</b> (платформа обычно показывает это рядом с таблицей). Цифры понадобятся для сверки в шаге 3. Если платформа скачивает только часть строк или ограничивает размер, выгружайте таблицу частями и соберите их в один файл: заголовок с названиями колонок должен быть только в первой строке файла. Если в файлах нет колонки <code>id</code> или названий колонок, загрузка не получится: скачайте таблицы заново с полным набором колонок.</p></li>
 <li><b>Передайте папку на сервер</b>
@@ -280,15 +280,69 @@ rmdir /root/trindelka-csv</code></pre></div>
 
 <section id="update">
 <h2>7. Обновление и резервные копии</h2>
+<h3>Что изменилось в версии 1.4.0</h3>
+<div class="table-wrap"><table><tr><th>Что</th><th>Что это значит для сервера</th></tr>
+<tr><td>Файлы сайта</td><td>Добавились стикеры (<code>public/stickers/v2</code>, 128 штук), GIF (<code>public/gifs/v2</code>, 72 штуки) и текст лицензии (<code>public/licenses</code>). Они приходят вместе с кодом и попадают на сайт при сборке. Ничего скачивать вручную не нужно. Занимают около 14 МБ.</td></tr>
+<tr><td>Серверные функции</td><td>Обновились <code>chats</code>, <code>send-message</code> и <code>auth</code>: папки чатов, упоминания, галерея, вход без срока действия. Подхватываются перезапуском службы.</td></tr>
+<tr><td>Настройки nginx</td><td>Одна строка: раздача папки <code>/licenses/</code>. Файл настроек целиком заменять нельзя (в нём ваш домен и сертификат), меняется одной командой ниже.</td></tr>
+<tr><td>База данных</td><td>Два новых файла: <code>V0022</code> (снимает срок действия входа у всех) и <code>V0023</code> (таблица папок <code>chat_folders</code> и колонка <code>folder_id</code> в <code>chat_members</code>). Теперь таблиц 23. Оба файла безопасно запускать повторно.</td></tr>
+</table></div>
+
 <h3>Как обновить после новых правок</h3>
+<p>Выполняйте шаги по порядку. Сначала обновляется код, затем база, и только потом перезапуск: так сайт не будет работать со старой структурой базы.</p>
+<ol class="steps">
+<li><b>Обновите код и пересоберите сайт</b>
 <div class="codebox"><pre><code>cd /var/www/trindelka/app
 git checkout -- src/platform
 git pull
 sh deploy/prepare-selfhost.sh
 npm install
-VITE_API_BASE=/api npm run build
-systemctl restart trindelka trindelka-web</code></pre></div>
-<p>Если появились новые файлы в <code>db_migrations</code> (номер больше последнего применённого), примените только их тем же способом: <code>export PGOPTIONS="-c search_path=$SCHEMA"</code>, затем <code>psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db_migrations/ИМЯ_ФАЙЛА.sql</code>. Имя схемы возьмите командой из раздела 3, шаг 5.</p>
+VITE_API_BASE=/api npm run build</code></pre></div>
+</li>
+<li><b>Примените новые файлы базы</b>
+<div class="codebox"><pre><code>set -a; . /etc/trindelka.env; set +a
+SCHEMA=$(sed -n &#x27;s/^SCHEMA = &quot;\(.*\)&quot;$/\1/p&#x27; backend/chats/index.py)
+export PGOPTIONS=&quot;-c search_path=$SCHEMA&quot;
+psql &quot;$DATABASE_URL&quot; -v ON_ERROR_STOP=1 -f db_migrations/V0022__sessions_never_expire.sql
+psql &quot;$DATABASE_URL&quot; -v ON_ERROR_STOP=1 -f db_migrations/V0023__chat_folders.sql
+psql &quot;$DATABASE_URL&quot; -c &quot;SELECT count(*) FROM information_schema.tables WHERE table_schema = &#x27;$SCHEMA&#x27;&quot;</code></pre></div>
+<p>Последняя команда должна показать <b>23</b>. Если до обновления показывало 22, значит всё применилось. Данные людей и переписка не затрагиваются: файлы только добавляют таблицу и колонку и снимают срок входа. Если вы переносили базу из CSV по разделу 4, ничего перезагружать не нужно.</p></li>
+<li><b>Включите раздачу лицензий в nginx</b>
+<div class="codebox"><pre><code>sed -i &#x27;s/(gifs|stickers|icons)/(gifs|stickers|icons|licenses)/&#x27; /etc/nginx/sites-available/trindelka
+nginx -t &amp;&amp; systemctl reload nginx</code></pre></div>
+<p>Если <code>nginx -t</code> написал ошибку, ничего не перезагружайте и напишите мне текст ошибки. Если строки с <code>(gifs|stickers|icons)</code> в файле нет, значит вы уже меняли её сами: просто добавьте <code>|licenses</code> внутрь скобок.</p></li>
+<li><b>Перезапустите службы</b>
+<div class="codebox"><pre><code>systemctl restart trindelka trindelka-web</code></pre></div>
+</li>
+<li><b>Проверьте обновление</b>
+<p>Откройте сайт и нажмите Ctrl+F5 (на телефоне закройте и откройте страницу). Вход должен остаться: людям заново входить не нужно. Затем проверьте:</p>
+<ul>
+<li>Профиль → «О приложении» показывает версию 1.4.0 и ссылки на авторов стикеров и GIF.</li>
+<li>Над списком чатов видны вкладки «Все» и кнопка «+» для папок.</li>
+<li>В панели смайлов есть вкладки «Эмодзи», «Стикеры» и «GIF», вкладки ICQ нет.</li>
+<li>Проверка из консоли сервера (должно вернуть 200): <code>curl -s -o /dev/null -w '%{http_code}' https://ВАШ-ДОМЕН/stickers/v2/faces/joy.webp</code></li>
+</ul></li>
+</ol>
+
+<h3>Как обновлять базу, если данные приходят только в CSV</h3>
+<p>Из poehali.dev данные можно получить только файлами CSV, поэтому после переезда <b>главной становится база на вашем сервере</b>. Дальше все новые сообщения и люди живут у вас, а CSV с платформы больше не нужны. Это важно: <b>не загружайте свежие CSV поверх работающего сервера</b>, так можно потерять то, что люди написали уже у вас. Вот что делать в разных случаях.</p>
+<ul>
+<li><b>Сервер уже работает с людьми.</b> Загрузка CSV не нужна. Обновляйте только по шагам выше, а при появлении новых файлов в <code>db_migrations</code> применяйте их так же, как <code>V0022</code> и <code>V0023</code>.</li>
+<li><b>Данные ещё не переносили (сервер пустой).</b> Сначала выполните шаги обновления выше, затем перенос из раздела 4. Скрипт загрузки уже знает про новые таблицы. Если вы скачали CSV до этого обновления, дополнительно скачайте <code>chat_folders.csv</code> (папки чатов) и снова скачайте <code>chat_members.csv</code> (в нём теперь есть колонка с номером папки). Если этих файлов нет, загрузка пройдёт, просто папки у людей будут пустыми.</li>
+<li><b>Перенос шёл, но остановился с ошибкой, а людей на сервере ещё нет.</b> Скрипт загружает всё одной транзакцией, поэтому после ошибки база остаётся пустой: исправьте файл и запустите загрузку ещё раз.</li>
+<li><b>Нужно загрузить данные заново на тестовом сервере.</b> Скрипт не загружает данные в непустые таблицы. Очистка ниже удаляет <b>все</b> сообщения и людей, поэтому делайте её только на тестовом сервере, где никто не живёт, и после резервной копии (<code>sh deploy/backup.sh</code>).</li>
+</ul>
+<div class="codebox"><pre><code>systemctl stop trindelka
+set -a; . /etc/trindelka.env; set +a
+SCHEMA=$(sed -n &#x27;s/^SCHEMA = &quot;\(.*\)&quot;$/\1/p&#x27; backend/chats/index.py)
+export PGOPTIONS=&quot;-c search_path=$SCHEMA&quot;
+TABLES=$(psql &quot;$DATABASE_URL&quot; -At -c &quot;SELECT string_agg(quote_ident(tablename), &#x27;, &#x27;) FROM pg_tables WHERE schemaname = &#x27;$SCHEMA&#x27; AND tablename &lt;&gt; &#x27;app_settings&#x27;&quot;)
+psql &quot;$DATABASE_URL&quot; -c &quot;TRUNCATE $TABLES RESTART IDENTITY CASCADE&quot;
+/var/www/trindelka/venv/bin/python deploy/import-csv.py /root/trindelka-csv
+systemctl start trindelka</code></pre></div>
+<p>Ключи уведомлений (таблица <code>app_settings</code>) очистка не трогает, поэтому подписки на уведомления переживают повторную загрузку.</p>
+<div class="note"><b>Если вы уже перенесли данные до этого обновления</b>Новую таблицу папок создаёт файл <code>V0023</code>, перенос из CSV для неё не нужен: у людей просто не будет папок, они создадут их сами.</div>
+
 <h3>Ночная резервная копия</h3>
 <p>Таймер <code>trindelka-backup.timer</code>, который вы включили в разделе 3, каждую ночь около 03:30 сохраняет базу и папку файлов в <code>/var/backups/trindelka</code> и хранит копии 14 дней. Запуск вручную: <code>sh /var/www/trindelka/app/deploy/backup.sh</code>. Если задать в <code>/etc/trindelka.env</code> переменную <code>BACKUP_PASSPHRASE</code>, копия шифруется, и вместе с ней сохраняется файл настроек. Если задать <code>BACKUP_REMOTE</code> (например, <code>user@другой-сервер:/backups/</code>), копия уходит на другой сервер.</p>
 <h3>Восстановление</h3>
