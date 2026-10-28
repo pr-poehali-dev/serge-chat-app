@@ -11,6 +11,8 @@ export interface Chat {
   isBot?: boolean;
   pinned?: boolean;
   folderId?: number | null;
+  archived?: boolean;
+  markedUnread?: boolean;
   avatarUrl?: string | null;
   statusText?: string;
   typing?: boolean;

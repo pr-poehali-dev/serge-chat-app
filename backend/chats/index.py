@@ -336,7 +336,7 @@ def handler(event: dict, context) -> dict:
                       AND topic_id IS NOT DISTINCT FROM %s
                 """, (chat_id, my_user_id, topic_id))
             cur.execute(f"""
-                UPDATE {SCHEMA}.chat_members SET last_read_at = NOW()
+                UPDATE {SCHEMA}.chat_members SET last_read_at = NOW(), marked_unread = false
                 WHERE chat_id = %s AND user_id = %s
             """, (chat_id, my_user_id))
             conn.commit()
@@ -818,6 +818,36 @@ def handler(event: dict, context) -> dict:
                 return reply(404, {"error": "Чат не найден"})
             conn.commit()
             return reply(200, {"folderId": folder_id})
+
+        # POST /chats?action=archive — отправить чат в архив или вернуть из архива
+        if method == "POST" and action == "archive":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = int(body.get("chat_id") or 0)
+            archived = bool(body.get("archived"))
+            cur.execute(
+                f"UPDATE {SCHEMA}.chat_members SET archived_at = {'NOW()' if archived else 'NULL'} WHERE chat_id = %s AND user_id = %s",
+                (chat_id, my_user_id),
+            )
+            if cur.rowcount == 0:
+                return reply(404, {"error": "Чат не найден"})
+            conn.commit()
+            return reply(200, {"archived": archived})
+
+        # POST /chats?action=mark-unread — отметить чат непрочитанным или снять отметку
+        if method == "POST" and action == "mark-unread":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = int(body.get("chat_id") or 0)
+            marked = bool(body.get("marked"))
+            cur.execute(
+                f"UPDATE {SCHEMA}.chat_members SET marked_unread = %s WHERE chat_id = %s AND user_id = %s",
+                (marked, chat_id, my_user_id),
+            )
+            if cur.rowcount == 0:
+                return reply(404, {"error": "Чат не найден"})
+            conn.commit()
+            return reply(200, {"marked": marked})
 
         # POST /chats?action=pin — закрепить/открепить чат
         if method == "POST" and action == "pin":
@@ -1858,7 +1888,11 @@ def handler(event: dict, context) -> dict:
                 cm_me.notify_enabled,
                 c.avatar_url, c.description, cm_me.role, cm_me.chat_bg,
                 o.mood_emoji, o.mood_text, o.bio,
-                cm_me.folder_id
+                cm_me.folder_id,
+                (cm_me.archived_at IS NOT NULL) as archived,
+                cm_me.marked_unread,
+                (SELECT MAX(m.created_at) > cm_me.archived_at FROM {SCHEMA}.messages m
+                   WHERE m.chat_id = c.id AND m.removed_at IS NULL) as news_after_archive
             FROM {SCHEMA}.chats c
             JOIN {SCHEMA}.chat_members cm_me ON cm_me.chat_id = c.id AND cm_me.user_id = %(me)s
             LEFT JOIN {SCHEMA}.messages pm ON pm.id = c.pinned_message_id AND pm.removed_at IS NULL
@@ -1896,13 +1930,15 @@ def handler(event: dict, context) -> dict:
                 "color": display_color,
                 "lastMsg": r[4] or ("Группа создана" if is_group else ""),
                 "time": r[5] or "",
-                "unread": int(r[6]) if r[6] else 0,
+                "unread": (int(r[6]) if r[6] else 0) or (1 if r[32] else 0),
                 "online": False if is_group else is_online(seen_ago),
                 "statusText": "" if is_group else status_text(seen_ago),
                 "typing": False if is_group else bool(r[13]),
                 "avatar": avatar,
                 "pinned": bool(r[14]) if r[14] is not None else False,
                 "folderId": r[30],
+                "archived": bool(r[31]) and not bool(r[33]),
+                "markedUnread": bool(r[32]),
                 "avatarUrl": r[23] if is_group else r[11],
                 "description": (r[24] or "") if is_group else "",
                 "myRole": r[25] if is_group else None,

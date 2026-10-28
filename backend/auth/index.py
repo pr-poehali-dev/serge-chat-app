@@ -85,22 +85,29 @@ def save_file(key: str, data: bytes, content_type: str) -> str:
     return f"{public_base.rstrip('/')}/{key}"
 
 
+AVATAR_TYPES = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+MAX_AVATAR_BYTES = 3 * 1024 * 1024
+
+
 def upload_avatar(user_id: int, image_base64: str, content_type: str) -> str:
+    ctype = (content_type or "image/png").lower().split(";")[0].strip()
+    ext = AVATAR_TYPES.get(ctype)
+    if not ext:
+        raise ValueError("Подходят только JPG, PNG, WebP и GIF")
     if "," in image_base64:
         image_base64 = image_base64.split(",", 1)[1]
-    data = base64.b64decode(image_base64)
-
-    ext = "png"
-    if "jpeg" in content_type or "jpg" in content_type:
-        ext = "jpg"
-    elif "webp" in content_type:
-        ext = "webp"
-    elif "gif" in content_type:
-        ext = "gif"
+    try:
+        data = base64.b64decode(image_base64)
+    except Exception:
+        raise ValueError("Не удалось прочитать изображение")
+    if not data:
+        raise ValueError("Пустое изображение")
+    if len(data) > MAX_AVATAR_BYTES:
+        raise ValueError("Фото слишком большое. Выберите поменьше")
 
     key = f"avatars/{user_id}-{uuid.uuid4().hex}.{ext}"
 
-    return save_file(key, data, content_type or "image/png")
+    return save_file(key, data, ctype)
 
 
 def handler(event: dict, context) -> dict:
@@ -346,8 +353,11 @@ def handler(event: dict, context) -> dict:
 
             try:
                 avatar_url = upload_avatar(current[0], image_base64, content_type)
-            except Exception:
-                return {"statusCode": 500, "headers": CORS, "body": json.dumps({"error": "Не удалось загрузить изображение"})}
+            except ValueError as e:
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": str(e)})}
+            except Exception as e:
+                print(f"avatar upload failed: {type(e).__name__}: {e}")
+                return {"statusCode": 500, "headers": CORS, "body": json.dumps({"error": "Не удалось сохранить фото на сервере. Попробуйте ещё раз"})}
 
             cur.execute(f"""
                 UPDATE {SCHEMA}.users SET avatar_url = %s WHERE id = %s

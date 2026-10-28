@@ -1,6 +1,7 @@
 import { RefObject, useState, useEffect } from "react";
 import { Chat, Message, PollData } from "../types";
 import { resolveBg } from "../background/chatBackgrounds";
+import { useSwipeReply } from "./useSwipeReply";
 import MessageBody from "./messageList/MessageBody";
 import MessageMeta from "./messageList/MessageMeta";
 import RemoveConfirmModal from "./messageList/RemoveConfirmModal";
@@ -77,7 +78,10 @@ export default function MessageList({
   const [menu, setMenu] = useState<{ msg: Message; x: number; y: number } | null>(null);
   const [confirmHideId, setConfirmHideId] = useState<number | null>(null);
   const selectedSet = new Set(selectedIds);
+  const swipe = useSwipeReply(onReply, !selectMode);
+
   const openMenuByTap = (msg: Message, e: React.MouseEvent) => {
+    if (swipe.justSwiped.current) return true;
     if (msg.removed || msg.id >= 1e12 || selectMode) return false;
     if (!window.matchMedia("(pointer: coarse)").matches) return false;
     const target = e.target as HTMLElement;
@@ -116,7 +120,7 @@ export default function MessageList({
     <>
       {/* Messages */}
       <div
-        className="relative flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-6 py-4 sm:py-5 space-y-3"
+        className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-6 py-4 sm:py-5 space-y-3"
         style={chatBg ? ({ ...chatBg.style, ...chatBg.vars } as React.CSSProperties) : undefined}
         data-chat-bg={activeChat.chatBg ? "custom" : undefined}
       >
@@ -138,7 +142,7 @@ export default function MessageList({
             <div
               key={msg.id}
               id={`msg-${msg.id}`}
-              className={`group/msg flex rounded-2xl transition-colors duration-500 ${msg.out ? "justify-end" : "justify-start"} animate-fade-in ${
+              className={`group/msg relative flex rounded-2xl transition-colors duration-500 ${msg.out ? "justify-end" : "justify-start"} animate-fade-in ${
                 highlightId === msg.id ? "bg-purple-500/15" : ""
               } ${currentMatchId === msg.id ? "bg-amber-400/10 ring-1 ring-amber-400/40" : matchIdSet.has(msg.id) ? "bg-amber-400/[0.04]" : ""} ${
                 selectMode && !msg.removed && msg.id < 1e12 ? "cursor-pointer" : ""
@@ -163,8 +167,18 @@ export default function MessageList({
                 e.preventDefault();
                 setMenu({ msg, x: e.clientX, y: e.clientY });
               }}
-              style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
+              {...swipe.bind(msg)}
+              style={{ animationDelay: `${Math.min(i * 20, 200)}ms`, touchAction: "pan-y" }}
             >
+              {onReply && !selectMode && !msg.removed && msg.id < 1e12 && (
+                <span
+                  data-swipe-hint
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -left-10 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-purple-500/25 text-purple-300 opacity-0"
+                >
+                  <Icon name="Reply" size={16} />
+                </span>
+              )}
               {selectMode && (
                 <div className="mr-2 flex shrink-0 items-center self-center">
                   {!msg.removed && msg.id < 1e12 ? (

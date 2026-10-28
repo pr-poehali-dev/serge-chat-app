@@ -78,43 +78,72 @@ export default function ProfileTab({
     }
   };
 
+  const prepareAvatar = (file: File): Promise<{ dataUrl: string; type: string }> =>
+    new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        const size = Math.min(512, side);
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("canvas"));
+          return;
+        }
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+        resolve({ dataUrl: canvas.toDataURL("image/jpeg", 0.88), type: "image/jpeg" });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("decode"));
+      };
+      img.src = url;
+    });
+
   const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !authUser) return;
 
-    if (!file.type.startsWith("image/")) {
+    if (file.type && !file.type.startsWith("image/")) {
       setAvatarError("Выберите файл изображения");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setAvatarError("Изображение должно быть меньше 5 МБ");
+    if (file.size > 25 * 1024 * 1024) {
+      setAvatarError("Изображение слишком большое. Выберите поменьше");
       return;
     }
 
     setAvatarError("");
     setAvatarUploading(true);
     try {
-      const base64: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      let payload: { dataUrl: string; type: string };
+      try {
+        payload = await prepareAvatar(file);
+      } catch {
+        setAvatarError("Не удалось открыть это фото. Выберите JPG, PNG или WebP");
+        return;
+      }
 
       const res = await fetch(API_AUTH, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Session-Id": authUser.sessionId },
-        body: JSON.stringify({ action: "upload-avatar", imageBase64: base64, contentType: file.type }),
+        body: JSON.stringify({ action: "upload-avatar", imageBase64: payload.dataUrl, contentType: payload.type }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.user) {
         setAvatarError(data.error || "Не удалось загрузить фото");
         return;
       }
       onAvatarUpdated(data.user);
     } catch {
-      setAvatarError("Не удалось загрузить фото");
+      setAvatarError("Не удалось связаться с сервером. Проверьте интернет");
     } finally {
       setAvatarUploading(false);
     }

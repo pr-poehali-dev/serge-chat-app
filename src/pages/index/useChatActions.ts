@@ -109,11 +109,48 @@ export function useChatActions({
     });
   };
 
+  const postChatFlag = async (action: string, payload: Record<string, unknown>) => {
+    try {
+      const res = await fetch(`${API_CHATS}?action=${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(payload),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const setChatArchived = async (chatId: number, archived: boolean): Promise<string | null> => {
+    if (chatId < 0) return "Локальный чат нельзя отправить в архив";
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, archived } : c)));
+    const ok = await postChatFlag("archive", { chat_id: chatId, archived });
+    if (!ok) {
+      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, archived: !archived } : c)));
+      return "Не удалось выполнить действие";
+    }
+    return null;
+  };
+
+  const markChatUnread = async (chatId: number, marked: boolean): Promise<string | null> => {
+    if (chatId < 0) return "Локальный чат нельзя отметить";
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, markedUnread: marked, unread: marked ? Math.max(c.unread, 1) : 0 } : c)));
+    const ok = await postChatFlag("mark-unread", { chat_id: chatId, marked });
+    if (!ok) {
+      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, markedUnread: !marked } : c)));
+      return "Не удалось выполнить действие";
+    }
+    return null;
+  };
+
   return {
     startChatWithUser,
     setChatNotify,
     setChatBackground,
     uploadChatBackground,
     togglePinChat,
+    setChatArchived,
+    markChatUnread,
   };
 }

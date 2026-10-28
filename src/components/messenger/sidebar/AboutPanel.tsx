@@ -1,6 +1,6 @@
 import Icon from "@/components/ui/icon";
 
-export const APP_VERSION = "1.4.0";
+export const APP_VERSION = "1.5.0";
 
 const LICENSE_URL = "/licenses/fluent-emoji-MIT.txt";
 

@@ -28,6 +28,8 @@ interface SidebarProps {
   onRenameFolder: (id: number, name: string) => Promise<string | null>;
   onDeleteFolder: (id: number) => Promise<string | null>;
   onMoveChatToFolder: (chatId: number, folderId: number | null) => void;
+  onToggleArchive: (chatId: number, archived: boolean) => void;
+  onToggleUnread: (chatId: number, marked: boolean) => void;
   authUser: AuthUser | null;
   onUpdateProfile: (login: string, firstName: string, lastName: string) => Promise<string | null>;
   onLogout: () => void;
@@ -61,6 +63,8 @@ export default function Sidebar({
   onRenameFolder,
   onDeleteFolder,
   onMoveChatToFolder,
+  onToggleArchive,
+  onToggleUnread,
   authUser,
   onUpdateProfile,
   onLogout,
@@ -74,8 +78,24 @@ export default function Sidebar({
   const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
   const [groupToLeave, setGroupToLeave] = useState<Chat | null>(null);
   const [folderFilter, setFolderFilter] = useState<FolderFilter>("all");
-  const activeFolder: FolderFilter = folderFilter !== "all" && !folders.some((f) => f.id === folderFilter) ? "all" : folderFilter;
-  const visibleChats = activeFolder === "all" ? filteredChats : filteredChats.filter((c) => c.folderId === activeFolder);
+  const hasArchived = chats.some((c) => c.archived);
+  const activeFolder: FolderFilter =
+    folderFilter === "all"
+      ? "all"
+      : folderFilter === "archive"
+      ? hasArchived
+        ? "archive"
+        : "all"
+      : folders.some((f) => f.id === folderFilter)
+      ? folderFilter
+      : "all";
+  const searching = searchQuery.trim().length > 0;
+  const visibleChats =
+    activeFolder === "archive"
+      ? filteredChats.filter((c) => c.archived)
+      : activeFolder === "all"
+      ? filteredChats.filter((c) => searching || !c.archived)
+      : filteredChats.filter((c) => !c.archived && c.folderId === activeFolder);
 
   return (
     <aside
@@ -117,7 +137,15 @@ export default function Sidebar({
                 onTogglePinChat={onTogglePinChat}
                 folders={folders}
                 onMoveChatToFolder={onMoveChatToFolder}
-                emptyText={activeFolder !== "all" ? "В этой папке пока нет чатов. Нажмите значок папки у чата, чтобы добавить его сюда." : undefined}
+                onToggleArchive={onToggleArchive}
+                onToggleUnread={onToggleUnread}
+                emptyText={
+                  activeFolder === "archive"
+                    ? "В архиве пусто"
+                    : activeFolder !== "all"
+                    ? "В этой папке пока нет чатов. Откройте меню чата (три точки или правый клик) и выберите папку."
+                    : undefined
+                }
               />
             </>
           )}

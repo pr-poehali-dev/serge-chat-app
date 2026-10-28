@@ -292,6 +292,26 @@
         "folder_id": 1
       },
       "expectedStatus": 401
+    },
+    {
+      "name": "Archive chat without session returns 401",
+      "method": "POST",
+      "path": "/?action=archive",
+      "body": {
+        "chat_id": 1,
+        "archived": true
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Mark unread without session returns 401",
+      "method": "POST",
+      "path": "/?action=mark-unread",
+      "body": {
+        "chat_id": 1,
+        "marked": true
+      },
+      "expectedStatus": 401
     }
   ]
 }

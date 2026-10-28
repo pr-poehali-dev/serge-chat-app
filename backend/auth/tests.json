@@ -11,7 +11,11 @@
       "name": "Login with wrong credentials returns 401",
       "method": "POST",
       "path": "/",
-      "body": {"action": "login", "email": "nonexistent@example.com", "password": "wrongpass"},
+      "body": {
+        "action": "login",
+        "email": "nonexistent@example.com",
+        "password": "wrongpass"
+      },
       "expectedStatus": 401,
       "bodyMatcher": "partial"
     },
@@ -19,7 +23,11 @@
       "name": "Register with short password returns 400",
       "method": "POST",
       "path": "/",
-      "body": {"action": "register", "email": "test@example.com", "password": "123"},
+      "body": {
+        "action": "register",
+        "email": "test@example.com",
+        "password": "123"
+      },
       "expectedStatus": 400,
       "bodyMatcher": "partial"
     },
@@ -27,7 +35,10 @@
       "name": "Forgot password with invalid email returns 400",
       "method": "POST",
       "path": "/",
-      "body": {"action": "forgot-password", "email": "not-an-email"},
+      "body": {
+        "action": "forgot-password",
+        "email": "not-an-email"
+      },
       "expectedStatus": 400,
       "bodyMatcher": "partial"
     },
@@ -35,7 +46,10 @@
       "name": "Reset password without token returns 400",
       "method": "POST",
       "path": "/",
-      "body": {"action": "reset-password", "password": "newpass123"},
+      "body": {
+        "action": "reset-password",
+        "password": "newpass123"
+      },
       "expectedStatus": 400,
       "bodyMatcher": "partial"
     },
@@ -44,6 +58,18 @@
       "method": "GET",
       "path": "/?action=users&search=Алиса",
       "expectedStatus": 200
+    },
+    {
+      "name": "Upload avatar without session returns 401",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "upload-avatar",
+        "imageBase64": "x",
+        "contentType": "image/png"
+      },
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
     }
   ]
 }

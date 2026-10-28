@@ -138,6 +138,8 @@ export function useMessaging({
     messagesEndRef: send.messagesEndRef,
     startChatWithUser: chatActions.startChatWithUser,
     togglePinChat: chatActions.togglePinChat,
+    setChatArchived: chatActions.setChatArchived,
+    markChatUnread: chatActions.markChatUnread,
     folders: folderState.folders,
     createFolder: folderState.createFolder,
     renameFolder: folderState.renameFolder,

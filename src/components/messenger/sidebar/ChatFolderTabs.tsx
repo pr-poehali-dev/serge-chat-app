@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "@/components/ui/icon";
 import { Chat, ChatFolder } from "../types";
 
-export type FolderFilter = "all" | number;
+export type FolderFilter = "all" | "archive" | number;
 
 interface ChatFolderTabsProps {
   folders: ChatFolder[];
@@ -27,7 +27,11 @@ export default function ChatFolderTabs({ folders, chats, active, onSelect, onCre
   }, [editor]);
 
   const unreadIn = (folderId: FolderFilter) =>
-    chats.filter((c) => (folderId === "all" ? true : c.folderId === folderId)).reduce((sum, c) => sum + (c.notifyEnabled === false ? 0 : c.unread), 0);
+    chats
+      .filter((c) => (folderId === "archive" ? c.archived : !c.archived && (folderId === "all" || c.folderId === folderId)))
+      .reduce((sum, c) => sum + (c.notifyEnabled === false ? 0 : c.unread), 0);
+
+  const archivedCount = chats.filter((c) => c.archived).length;
 
   const submit = async () => {
     if (!editor) return;
@@ -89,6 +93,7 @@ export default function ChatFolderTabs({ folders, chats, active, onSelect, onCre
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tab("all", "Все")}
         {folders.map((f) => tab(f.id, f.name, f))}
+        {(archivedCount > 0 || active === "archive") && tab("archive", `Архив · ${archivedCount}`)}
         <button
           onClick={() => {
             setError("");
@@ -100,7 +105,7 @@ export default function ChatFolderTabs({ folders, chats, active, onSelect, onCre
         >
           <Icon name="Plus" size={14} />
         </button>
-        {active !== "all" && (
+        {typeof active === "number" && (
           <button
             onClick={() => {
               const f = folders.find((x) => x.id === active);

@@ -227,6 +227,8 @@ export default function Index() {
           onRenameFolder={msg.renameFolder}
           onDeleteFolder={msg.deleteFolder}
           onMoveChatToFolder={(chatId, folderId) => { msg.moveChatToFolder(chatId, folderId); }}
+          onToggleArchive={(chatId, archived) => { msg.setChatArchived(chatId, archived); }}
+          onToggleUnread={(chatId, marked) => { msg.markChatUnread(chatId, marked); }}
           authUser={authUser}
           onUpdateProfile={handleUpdateProfile}
           onLogout={handleLogout}

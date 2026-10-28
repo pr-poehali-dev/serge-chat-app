@@ -23,7 +23,7 @@ export default function SidebarHeader({
   onOpenCreateGroup,
 }: SidebarHeaderProps) {
   const tabs: { id: Tab; icon: string; badge?: number }[] = [
-    { id: "chats", icon: "MessageCircle", badge: chats.reduce((s, c) => s + c.unread, 0) || undefined },
+    { id: "chats", icon: "MessageCircle", badge: chats.filter((c) => !c.archived).reduce((s, c) => s + c.unread, 0) || undefined },
     { id: "contacts", icon: "Users" },
     { id: "bots", icon: "Bot", badge: bots.length || undefined },
     { id: "notifications", icon: "Bell", badge: unreadNotifications || undefined },

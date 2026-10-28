@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Icon from "@/components/ui/icon";
 import { Chat, ChatFolder } from "../types";
-import MoveToFolderMenu from "./MoveToFolderMenu";
+import ChatActionsMenu from "./ChatActionsMenu";
 
 interface ChatsListProps {
   activeChatId: number | null;
@@ -12,6 +12,8 @@ interface ChatsListProps {
   onTogglePinChat: (chatId: number) => void;
   folders: ChatFolder[];
   onMoveChatToFolder: (chatId: number, folderId: number | null) => void;
+  onToggleArchive: (chatId: number, archived: boolean) => void;
+  onToggleUnread: (chatId: number, marked: boolean) => void;
   emptyText?: string;
 }
 
@@ -24,9 +26,36 @@ export default function ChatsList({
   onTogglePinChat,
   folders,
   onMoveChatToFolder,
+  onToggleArchive,
+  onToggleUnread,
   emptyText,
 }: ChatsListProps) {
-  const [moveFor, setMoveFor] = useState<number | null>(null);
+  const [menu, setMenu] = useState<{ chat: Chat; x: number; y: number } | null>(null);
+  const holdRef = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const cancelHold = () => {
+    if (holdRef.current) {
+      window.clearTimeout(holdRef.current.timer);
+      holdRef.current = null;
+    }
+  };
+  const startHold = (chat: Chat, e: React.TouchEvent) => {
+    const t = e.touches[0];
+    cancelHold();
+    holdRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      timer: window.setTimeout(() => {
+        holdRef.current = null;
+        setMenu({ chat, x: t.clientX, y: t.clientY });
+      }, 500),
+    };
+  };
+  const moveHold = (e: React.TouchEvent) => {
+    const h = holdRef.current;
+    if (!h) return;
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - h.x) > 10 || Math.abs(t.clientY - h.y) > 10) cancelHold();
+  };
   const sortedChats = [...filteredChats].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
   return (
@@ -54,6 +83,14 @@ export default function ChatsList({
                 : "hover:bg-fg/[0.04]"
             } ${chat.pinned ? "bg-fg/[0.03]" : ""}`}
             style={{ animationDelay: `${i * 40}ms` }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ chat, x: e.clientX, y: e.clientY });
+            }}
+            onTouchStart={(e) => startHold(chat, e)}
+            onTouchMove={moveHold}
+            onTouchEnd={cancelHold}
+            onTouchCancel={cancelHold}
           >
             <button
               onClick={() => setActiveChatId(chat.id)}
@@ -96,23 +133,18 @@ export default function ChatsList({
                 </div>
               </div>
             </button>
-            {chat.id > 0 && !chat.isBot && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setMoveFor(moveFor === chat.id ? null : chat.id); }}
-                title="Переместить в папку"
-                aria-label="Переместить в папку"
-                className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
-                  chat.folderId
-                    ? "text-purple-400 opacity-100"
-                    : "text-fg/20 opacity-0 group-hover:opacity-100 hover:text-purple-400 hover:bg-purple-400/10"
-                }`}
-              >
-                <Icon name="FolderInput" size={14} />
-              </button>
-            )}
-            {moveFor === chat.id && (
-              <MoveToFolderMenu chat={chat} folders={folders} onMove={onMoveChatToFolder} onClose={() => setMoveFor(null)} />
-            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = e.currentTarget.getBoundingClientRect();
+                setMenu({ chat, x: r.right - 240, y: r.bottom + 4 });
+              }}
+              title="Действия с чатом"
+              aria-label="Действия с чатом"
+              className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-fg/20 opacity-0 group-hover:opacity-100 hover:text-fg/70 hover:bg-fg/[0.08] transition-all"
+            >
+              <Icon name="MoreHorizontal" size={14} />
+            </button>
             <button
               onClick={(e) => { e.stopPropagation(); onTogglePinChat(chat.id); }}
               title={chat.pinned ? "Открепить чат" : "Закрепить чат"}
@@ -124,17 +156,22 @@ export default function ChatsList({
             >
               <Icon name="Pin" size={14} className={chat.pinned ? "fill-amber-400" : ""} />
             </button>
-            {chat.isGroup && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onRequestLeaveGroup(chat); }}
-                title="Выйти из группы"
-                className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-fg/20 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-400/10 transition-all"
-              >
-                <Icon name="LogOut" size={14} />
-              </button>
-            )}
           </div>
         ))
+      )}
+      {menu && (
+        <ChatActionsMenu
+          chat={menu.chat}
+          folders={folders}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          onTogglePin={onTogglePinChat}
+          onMoveToFolder={onMoveChatToFolder}
+          onToggleArchive={onToggleArchive}
+          onToggleUnread={onToggleUnread}
+          onLeaveGroup={onRequestLeaveGroup}
+        />
       )}
     </div>
   );

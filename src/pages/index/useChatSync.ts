@@ -126,7 +126,7 @@ export function useChatSync({
     let cancelled = false;
     setLoadingMsgs(true);
     setMessages([]);
-    setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, unread: 0 } : c)));
+    setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, unread: 0, markedUnread: false } : c)));
     fetch(messagesUrl(activeChatId, activeTopicId), { headers: authHeaders() })
       .then((r) => r.json())
       .then((data) => {
@@ -186,7 +186,7 @@ export function useChatSync({
             });
           }
           prevChatsRef.current[c.id] = { unread: c.unread, lastMsg: c.lastMsg, time: c.time };
-          return isOpen ? { ...c, unread: 0 } : c;
+          return isOpen ? { ...c, unread: 0, markedUnread: false } : c;
         });
 
         setChats(normalized);
