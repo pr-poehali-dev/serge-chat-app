@@ -11,12 +11,11 @@ interface GalleryTabProps {
   onOpenFoundMessage?: (found: FoundMessage, query: string) => void;
 }
 
-type TypeFilter = "all" | "photo" | "gif" | "video";
+type TypeFilter = "all" | "photo" | "video";
 
 const TYPES: { id: TypeFilter; label: string }[] = [
   { id: "all", label: "Всё" },
   { id: "photo", label: "Фото" },
-  { id: "gif", label: "GIF" },
   { id: "video", label: "Видео" },
 ];
 
@@ -169,9 +168,6 @@ export default function GalleryTab({ activeTab, authUser, chats, onOpenFoundMess
                 </>
               ) : (
                 <img src={item.url} alt={item.fileName || ""} loading="lazy" className="h-full w-full object-cover" />
-              )}
-              {item.type === "gif" && (
-                <span className="absolute top-1 left-1 rounded-md bg-black/50 px-1.5 py-0.5 text-[9px] font-bold text-white">GIF</span>
               )}
             </button>
           ))}

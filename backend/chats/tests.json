@@ -273,6 +273,25 @@
       "method": "GET",
       "path": "/?action=gallery",
       "expectedStatus": 401
+    },
+    {
+      "name": "Create folder without session returns 401",
+      "method": "POST",
+      "path": "/?action=folder-create",
+      "body": {
+        "name": "Work"
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "Move chat to folder without session returns 401",
+      "method": "POST",
+      "path": "/?action=chat-folder",
+      "body": {
+        "chat_id": 1,
+        "folder_id": 1
+      },
+      "expectedStatus": 401
     }
   ]
 }

@@ -101,7 +101,7 @@ def preview_for(kind: str, text: str, file_name: str) -> str:
         return "📎 " + (file_name or "Файл")
     if text and (text.lower().endswith(".gif") and " " not in text.strip()):
         return "🎞 GIF"
-    if text and (re.match(r"^/stickers/[a-z]+/[a-z0-9-]+\.png$", text) or re.search(r"/stickers/user/[a-f0-9]{32}\.(png|webp|jpg)$", text)):
+    if text and (re.match(r"^/stickers/(v2/)?[a-z]+/[a-z0-9-]+\.(png|webp)$", text) or re.search(r"/stickers/user/[a-f0-9]{32}\.(png|webp|jpg)$", text)):
         return "🖼 Стикер"
     return (text or "Новое сообщение")[:140]
 
@@ -126,21 +126,28 @@ def notify_members(conn, cur, chat_id: int, sender_id: int, topic_id, kind: str,
     if not info:
         return
     is_group, chat_name, sender_name = info
+    handles = set()
+    if is_group and kind == "text" and text and "@" in text:
+        handles = {h.lower().rstrip(".-") for h in re.findall(r"(?<![\w@])@([\w.\-]{2,40})", text)}
     cur.execute(f"""
-        SELECT cm.user_id, u.quiet_enabled, u.quiet_from, u.quiet_to, u.quiet_tz
+        SELECT cm.user_id, u.quiet_enabled, u.quiet_from, u.quiet_to, u.quiet_tz, cm.notify_enabled,
+               LOWER(COALESCE(NULLIF(u.login, ''), u.username))
         FROM {SCHEMA}.chat_members cm
         JOIN {SCHEMA}.users u ON u.id = cm.user_id
-        WHERE cm.chat_id = %s AND cm.user_id != %s AND cm.notify_enabled = true
+        WHERE cm.chat_id = %s AND cm.user_id != %s
     """, (chat_id, sender_id))
     now_utc = datetime.now(timezone.utc)
     targets = []
     quiet_targets = []
-    for uid, q_on, q_from, q_to, q_tz in cur.fetchall():
-        if q_on and in_quiet_hours(now_utc, q_from, q_to, q_tz):
-            quiet_targets.append(uid)
-        else:
-            targets.append(uid)
-    if not targets and not quiet_targets:
+    mention_targets = []
+    mention_quiet = []
+    for uid, q_on, q_from, q_to, q_tz, notify_on, handle in cur.fetchall():
+        quiet = bool(q_on and in_quiet_hours(now_utc, q_from, q_to, q_tz))
+        if handle and handle in handles:
+            (mention_quiet if quiet else mention_targets).append(uid)
+        elif notify_on is not False:
+            (quiet_targets if quiet else targets).append(uid)
+    if not targets and not quiet_targets and not mention_targets and not mention_quiet:
         return
     body = preview_for(kind, text, file_name)
     if is_group:
@@ -162,6 +169,18 @@ def notify_members(conn, cur, chat_id: int, sender_id: int, topic_id, kind: str,
         push_utils.send_to_users(conn, targets, payload)
     if quiet_targets:
         push_utils.send_to_users(conn, quiet_targets, {**payload, "silent": True})
+    if mention_targets or mention_quiet:
+        mention_payload = {
+            **payload,
+            "title": f"{sender_name} упомянул(а) вас",
+            "body": f"{chat_name or 'Группа'}: {preview_for(kind, text, file_name)}",
+            "tag": f"mention-{message_id}",
+            "mention": True,
+        }
+        if mention_targets:
+            push_utils.send_to_users(conn, mention_targets, mention_payload)
+        if mention_quiet:
+            push_utils.send_to_users(conn, mention_quiet, {**mention_payload, "silent": True})
 
 
 def dispatch_due() -> dict:

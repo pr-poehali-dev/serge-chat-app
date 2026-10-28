@@ -1,5 +1,7 @@
+import { useState } from "react";
 import Icon from "@/components/ui/icon";
-import { Chat } from "../types";
+import { Chat, ChatFolder } from "../types";
+import MoveToFolderMenu from "./MoveToFolderMenu";
 
 interface ChatsListProps {
   activeChatId: number | null;
@@ -8,6 +10,9 @@ interface ChatsListProps {
   filteredChats: Chat[];
   onRequestLeaveGroup: (chat: Chat) => void;
   onTogglePinChat: (chatId: number) => void;
+  folders: ChatFolder[];
+  onMoveChatToFolder: (chatId: number, folderId: number | null) => void;
+  emptyText?: string;
 }
 
 export default function ChatsList({
@@ -17,11 +22,18 @@ export default function ChatsList({
   filteredChats,
   onRequestLeaveGroup,
   onTogglePinChat,
+  folders,
+  onMoveChatToFolder,
+  emptyText,
 }: ChatsListProps) {
+  const [moveFor, setMoveFor] = useState<number | null>(null);
   const sortedChats = [...filteredChats].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
   return (
     <div className="space-y-1">
+      {!loadingChats && sortedChats.length === 0 && emptyText && (
+        <p className="px-3 py-8 text-center text-xs text-fg/35">{emptyText}</p>
+      )}
       {loadingChats ? (
         Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-3 py-3 rounded-2xl">
@@ -36,7 +48,7 @@ export default function ChatsList({
         sortedChats.map((chat, i) => (
           <div
             key={chat.id}
-            className={`group w-full flex items-center gap-3 rounded-2xl px-3 py-3 transition-all animate-fade-in ${
+            className={`group relative w-full flex items-center gap-3 rounded-2xl px-3 py-3 transition-all animate-fade-in ${
               activeChatId === chat.id
                 ? "bg-fg/[0.08] border border-fg/[0.08]"
                 : "hover:bg-fg/[0.04]"
@@ -84,6 +96,23 @@ export default function ChatsList({
                 </div>
               </div>
             </button>
+            {chat.id > 0 && !chat.isBot && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setMoveFor(moveFor === chat.id ? null : chat.id); }}
+                title="Переместить в папку"
+                aria-label="Переместить в папку"
+                className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
+                  chat.folderId
+                    ? "text-purple-400 opacity-100"
+                    : "text-fg/20 opacity-0 group-hover:opacity-100 hover:text-purple-400 hover:bg-purple-400/10"
+                }`}
+              >
+                <Icon name="FolderInput" size={14} />
+              </button>
+            )}
+            {moveFor === chat.id && (
+              <MoveToFolderMenu chat={chat} folders={folders} onMove={onMoveChatToFolder} onClose={() => setMoveFor(null)} />
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); onTogglePinChat(chat.id); }}
               title={chat.pinned ? "Открепить чат" : "Закрепить чат"}

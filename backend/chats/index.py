@@ -91,7 +91,7 @@ def promote_successor(cur, chat_id: int, leaving_user: int) -> None:
         cur.execute(f"UPDATE {SCHEMA}.chat_members SET role = 'owner' WHERE chat_id = %s AND user_id = %s", (chat_id, row[0]))
 
 
-STICKER_RE = re.compile(r"^/stickers/(animals|food|hearts|party)/[a-z0-9-]{1,30}\.png$")
+STICKER_RE = re.compile(r"^(/stickers/v2/[a-z]+/[a-z0-9-]{1,30}\.webp|/stickers/(animals|food|hearts|party)/[a-z0-9-]{1,30}\.png)$")
 MOOD_EMOJI_RE = re.compile(r"^[^\w\s<>&\"'`]{1,8}$")
 MAX_POLL_OPTIONS = 10
 MIN_POLL_OPTIONS = 2
@@ -745,6 +745,80 @@ def handler(event: dict, context) -> dict:
 
             return reply(200, {"added": added, "reactions": reactions})
 
+        # POST /chats?action=folder-create — создать папку чатов
+        if method == "POST" and action == "folder-create":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            name = (body.get("name") or "").strip()[:40]
+            if not name:
+                return reply(400, {"error": "Введите название папки"})
+            cur.execute(f"SELECT COUNT(*), COALESCE(MAX(position), 0) FROM {SCHEMA}.chat_folders WHERE user_id = %s", (my_user_id,))
+            cnt, last_pos = cur.fetchone()
+            if cnt >= 12:
+                return reply(400, {"error": "Можно создать не больше 12 папок"})
+            cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_folders WHERE user_id = %s AND LOWER(name) = LOWER(%s)", (my_user_id, name))
+            if cur.fetchone():
+                return reply(400, {"error": "Папка с таким названием уже есть"})
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.chat_folders (user_id, name, position) VALUES (%s, %s, %s) RETURNING id",
+                (my_user_id, name, last_pos + 1),
+            )
+            folder_id = cur.fetchone()[0]
+            conn.commit()
+            return reply(200, {"folder": {"id": folder_id, "name": name}})
+
+        # POST /chats?action=folder-rename — переименовать папку
+        if method == "POST" and action == "folder-rename":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            name = (body.get("name") or "").strip()[:40]
+            if not name:
+                return reply(400, {"error": "Введите название папки"})
+            cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_folders WHERE user_id = %s AND LOWER(name) = LOWER(%s) AND id != %s", (my_user_id, name, int(body.get("folder_id") or 0)))
+            if cur.fetchone():
+                return reply(400, {"error": "Папка с таким названием уже есть"})
+            cur.execute(
+                f"UPDATE {SCHEMA}.chat_folders SET name = %s WHERE id = %s AND user_id = %s",
+                (name, int(body.get("folder_id") or 0), my_user_id),
+            )
+            if cur.rowcount == 0:
+                return reply(404, {"error": "Папка не найдена"})
+            conn.commit()
+            return reply(200, {"ok": True})
+
+        # POST /chats?action=folder-delete — удалить папку (чаты остаются, просто возвращаются во «Все»)
+        if method == "POST" and action == "folder-delete":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            folder_id = int(body.get("folder_id") or 0)
+            cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_folders WHERE id = %s AND user_id = %s", (folder_id, my_user_id))
+            if not cur.fetchone():
+                return reply(404, {"error": "Папка не найдена"})
+            cur.execute(f"UPDATE {SCHEMA}.chat_members SET folder_id = NULL WHERE user_id = %s AND folder_id = %s", (my_user_id, folder_id))
+            cur.execute(f"DELETE FROM {SCHEMA}.chat_folders WHERE id = %s AND user_id = %s", (folder_id, my_user_id))
+            conn.commit()
+            return reply(200, {"ok": True})
+
+        # POST /chats?action=chat-folder — перенести чат в папку (folder_id = null: убрать из папки)
+        if method == "POST" and action == "chat-folder":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            chat_id = int(body.get("chat_id") or 0)
+            folder_id = body.get("folder_id")
+            if folder_id is not None:
+                folder_id = int(folder_id)
+                cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_folders WHERE id = %s AND user_id = %s", (folder_id, my_user_id))
+                if not cur.fetchone():
+                    return reply(404, {"error": "Папка не найдена"})
+            cur.execute(
+                f"UPDATE {SCHEMA}.chat_members SET folder_id = %s WHERE chat_id = %s AND user_id = %s",
+                (folder_id, chat_id, my_user_id),
+            )
+            if cur.rowcount == 0:
+                return reply(404, {"error": "Чат не найден"})
+            conn.commit()
+            return reply(200, {"folderId": folder_id})
+
         # POST /chats?action=pin — закрепить/открепить чат
         if method == "POST" and action == "pin":
             chat_id = body.get("chat_id")
@@ -763,7 +837,7 @@ def handler(event: dict, context) -> dict:
                 return reply(403, {"error": "Нет доступа к чату"})
             cur.execute(f"""
                 SELECT u.id, u.display_name, u.avatar_initials, u.avatar_color, u.avatar_url, cm.role,
-                       u.mood_emoji, u.mood_text
+                       u.mood_emoji, u.mood_text, COALESCE(NULLIF(u.login, ''), u.username)
                 FROM {SCHEMA}.users u
                 JOIN {SCHEMA}.chat_members cm ON cm.user_id = u.id
                 WHERE cm.chat_id = %s
@@ -773,7 +847,7 @@ def handler(event: dict, context) -> dict:
             members = [{
                 "id": r[0], "displayName": r[1], "avatarInitials": r[2],
                 "avatarColor": r[3], "avatarUrl": r[4], "role": r[5],
-                "moodEmoji": r[6] or "", "moodText": r[7] or "",
+                "moodEmoji": r[6] or "", "moodText": r[7] or "", "login": r[8] or "",
             } for r in rows]
             cur.execute(f"SELECT name, description, avatar_url, avatar_color FROM {SCHEMA}.chats WHERE id = %s", (chat_id,))
             info = cur.fetchone()
@@ -1659,12 +1733,12 @@ def handler(event: dict, context) -> dict:
             chat_row = cur.fetchone()
             return reply(200, {"poll": poll, "chatName": chat_row[0] if chat_row else None})
 
-        # GET /chats?action=gallery&type=all|photo|gif|video[&chat_id=][&offset=] — фото, GIF и видео из моих чатов
+        # GET /chats?action=gallery&type=all|photo|video[&chat_id=][&offset=] — фото, GIF и видео из моих чатов
         if method == "GET" and action == "gallery":
             if not authed:
                 return reply(401, {"error": "Нужна авторизация"})
             kind_filter = params.get("type") or "all"
-            if kind_filter not in ("all", "photo", "gif", "video"):
+            if kind_filter not in ("all", "photo", "video"):
                 return reply(400, {"error": "Некорректный тип"})
             try:
                 offset = max(0, int(params.get("offset") or 0))
@@ -1676,10 +1750,8 @@ def handler(event: dict, context) -> dict:
             except ValueError:
                 tz = 0
             photo_sql = r"(m.kind = 'image' AND COALESCE(m.media_url, '') !~* '[.]gif([?#]|$)')"
-            gif_sql = (r"((m.kind = 'image' AND COALESCE(m.media_url, '') ~* '[.]gif([?#]|$)') "
-                       r"OR (m.kind = 'text' AND m.text ~* '^(https?://[^ ]+|/gifs/[^ ]+)[.]gif$'))")
             video_sql = r"((m.kind = 'file' AND COALESCE(m.file_name, '') ~* '[.](mp4|mov|webm|m4v|mkv|avi)$') OR m.kind = 'circle')"
-            kind_sql = {"photo": photo_sql, "gif": gif_sql, "video": video_sql}.get(kind_filter) or f"({photo_sql} OR {gif_sql} OR {video_sql})"
+            kind_sql = {"photo": photo_sql, "video": video_sql}.get(kind_filter) or f"({photo_sql} OR {video_sql})"
             conds = [kind_sql]
             args: list = [str(tz), my_user_id, my_user_id]
             if params.get("chat_id"):
@@ -1717,15 +1789,10 @@ def handler(event: dict, context) -> dict:
                     partner_names.setdefault(cid, name)
             items = []
             for r in rows:
-                if r[3] == "text":
-                    media_type, url = "gif", (r[5] or "").strip()
-                elif r[3] == "circle":
-                    media_type, url = "video", r[4]
-                elif r[3] == "file":
+                if r[3] in ("circle", "file"):
                     media_type, url = "video", r[4]
                 else:
-                    media_type = "gif" if (r[4] or "").lower().split("?")[0].split("#")[0].endswith(".gif") else "photo"
-                    url = r[4]
+                    media_type, url = "photo", r[4]
                 if not url:
                     continue
                 items.append({
@@ -1757,7 +1824,7 @@ def handler(event: dict, context) -> dict:
                                 WHEN m.kind = 'image' THEN '🖼 Фото'
                                 WHEN m.kind = 'file' THEN '📎 ' || COALESCE(m.file_name, 'Файл')
                                 WHEN m.kind = 'text' AND m.text ~* '^(https?://[^ ]+|/gifs/[^ ]+)[.]gif$' THEN '🎞 GIF'
-                                WHEN m.kind = 'text' AND (m.text ~ '^/stickers/[a-z]+/[a-z0-9-]+[.]png$' OR m.text ~ '/stickers/user/[a-f0-9]{32}[.](png|webp|jpg)$') THEN '🖼 Стикер'
+                                WHEN m.kind = 'text' AND (m.text ~ '^/stickers/(v2/)?[a-z]+/[a-z0-9-]+[.](png|webp)$' OR m.text ~ '/stickers/user/[a-f0-9]{32}[.](png|webp|jpg)$') THEN '🖼 Стикер'
                                 WHEN EXISTS (SELECT 1 FROM {SCHEMA}.polls pp WHERE pp.message_id = m.id) THEN m.text
                                 ELSE m.text END
                     FROM {SCHEMA}.messages m
@@ -1790,7 +1857,8 @@ def handler(event: dict, context) -> dict:
                 pm.id, pm.text, pm.kind, pm.file_name, pm.topic_id, pu.display_name,
                 cm_me.notify_enabled,
                 c.avatar_url, c.description, cm_me.role, cm_me.chat_bg,
-                o.mood_emoji, o.mood_text, o.bio
+                o.mood_emoji, o.mood_text, o.bio,
+                cm_me.folder_id
             FROM {SCHEMA}.chats c
             JOIN {SCHEMA}.chat_members cm_me ON cm_me.chat_id = c.id AND cm_me.user_id = %(me)s
             LEFT JOIN {SCHEMA}.messages pm ON pm.id = c.pinned_message_id AND pm.removed_at IS NULL
@@ -1834,6 +1902,7 @@ def handler(event: dict, context) -> dict:
                 "typing": False if is_group else bool(r[13]),
                 "avatar": avatar,
                 "pinned": bool(r[14]) if r[14] is not None else False,
+                "folderId": r[30],
                 "avatarUrl": r[23] if is_group else r[11],
                 "description": (r[24] or "") if is_group else "",
                 "myRole": r[25] if is_group else None,
@@ -1875,7 +1944,10 @@ def handler(event: dict, context) -> dict:
             for r in cur.fetchall() if r[3] and int(r[3]) > 0
         ]
 
-        return reply(200, {"chats": chats, "incomingCall": incoming_call, "groupCalls": group_calls})
+        cur.execute(f"SELECT id, name FROM {SCHEMA}.chat_folders WHERE user_id = %s ORDER BY position, id", (my_user_id,))
+        folders = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
+
+        return reply(200, {"chats": chats, "folders": folders, "incomingCall": incoming_call, "groupCalls": group_calls})
 
     finally:
         cur.close()

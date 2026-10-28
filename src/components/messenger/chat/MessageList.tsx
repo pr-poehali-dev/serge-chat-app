@@ -1,4 +1,4 @@
-import { RefObject, useState, useEffect, useRef } from "react";
+import { RefObject, useState, useEffect } from "react";
 import { Chat, Message, PollData } from "../types";
 import { resolveBg } from "../background/chatBackgrounds";
 import MessageBody from "./messageList/MessageBody";
@@ -77,31 +77,15 @@ export default function MessageList({
   const [menu, setMenu] = useState<{ msg: Message; x: number; y: number } | null>(null);
   const [confirmHideId, setConfirmHideId] = useState<number | null>(null);
   const selectedSet = new Set(selectedIds);
-  const holdRef = useRef<{ timer: number; x: number; y: number } | null>(null);
-  const cancelHold = () => {
-    if (holdRef.current) {
-      window.clearTimeout(holdRef.current.timer);
-      holdRef.current = null;
-    }
-  };
-  const startHold = (msg: Message, e: React.TouchEvent) => {
-    if (msg.removed || msg.id >= 1e12 || selectMode) return;
-    const t = e.touches[0];
-    cancelHold();
-    holdRef.current = {
-      x: t.clientX,
-      y: t.clientY,
-      timer: window.setTimeout(() => {
-        holdRef.current = null;
-        setMenu({ msg, x: t.clientX, y: t.clientY });
-      }, 550),
-    };
-  };
-  const moveHold = (e: React.TouchEvent) => {
-    const h = holdRef.current;
-    if (!h) return;
-    const t = e.touches[0];
-    if (Math.abs(t.clientX - h.x) > 10 || Math.abs(t.clientY - h.y) > 10) cancelHold();
+  const openMenuByTap = (msg: Message, e: React.MouseEvent) => {
+    if (msg.removed || msg.id >= 1e12 || selectMode) return false;
+    if (!window.matchMedia("(pointer: coarse)").matches) return false;
+    const target = e.target as HTMLElement;
+    if (target.closest("a, input, textarea, video, audio, button, [role='button']")) return false;
+    const sel = window.getSelection()?.toString();
+    if (sel && sel.length > 0) return false;
+    setMenu({ msg, x: e.clientX, y: e.clientY });
+    return true;
   };
   const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
@@ -159,22 +143,14 @@ export default function MessageList({
               } ${currentMatchId === msg.id ? "bg-amber-400/10 ring-1 ring-amber-400/40" : matchIdSet.has(msg.id) ? "bg-amber-400/[0.04]" : ""} ${
                 selectMode && !msg.removed && msg.id < 1e12 ? "cursor-pointer" : ""
               } ${selectMode && selectedSet.has(msg.id) ? "bg-purple-500/15" : ""}`}
-              onClick={
-                selectMode
-                  ? !msg.removed && msg.id < 1e12
-                    ? () => onToggleSelect?.(msg.id)
-                    : undefined
-                  : matchIdSet.has(msg.id) && onSelectMatch
-                  ? () => onSelectMatch(msg.id)
-                  : undefined
-              }
-              onTouchStart={(e) => {
-                if ((e.target as HTMLElement).closest("a, input, textarea, video, audio, button")) return;
-                startHold(msg, e);
+              onClick={(e) => {
+                if (selectMode) {
+                  if (!msg.removed && msg.id < 1e12) onToggleSelect?.(msg.id);
+                  return;
+                }
+                if (openMenuByTap(msg, e)) return;
+                if (matchIdSet.has(msg.id) && onSelectMatch) onSelectMatch(msg.id);
               }}
-              onTouchMove={moveHold}
-              onTouchEnd={cancelHold}
-              onTouchCancel={cancelHold}
               onContextMenu={(e) => {
                 if (msg.removed || msg.id >= 1e12 || selectMode) {
                   if (selectMode) e.preventDefault();
@@ -252,6 +228,7 @@ export default function MessageList({
                     onVotePoll={selectMode ? undefined : onVotePoll}
                     onClosePoll={onClosePoll}
                     onForwardPoll={msg.poll && onForwardPoll && !selectMode ? () => onForwardPoll(msg.poll as PollData) : undefined}
+                    isGroup={activeChat.isGroup}
                   />
 
                   <MessageMeta

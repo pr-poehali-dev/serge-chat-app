@@ -4,6 +4,7 @@ import { useChatSync } from "./useChatSync";
 import { useSendMessage } from "./useSendMessage";
 import { useMessageActions } from "./useMessageActions";
 import { useChatActions } from "./useChatActions";
+import { useChatFolders } from "./useChatFolders";
 
 interface UseMessagingParams {
   authUser: AuthUser | null;
@@ -58,10 +59,13 @@ export function useMessaging({
   sendBotMessage,
   onIncomingCallHint,
 }: UseMessagingParams) {
+  const folderState = useChatFolders({ authHeaders, setChats });
+
   const sync = useChatSync({
     authUser,
     authHeaders,
     setChats,
+    setFolders: folderState.setFolders,
     setMessages,
     activeChatId,
     setActiveChatId,
@@ -134,6 +138,11 @@ export function useMessaging({
     messagesEndRef: send.messagesEndRef,
     startChatWithUser: chatActions.startChatWithUser,
     togglePinChat: chatActions.togglePinChat,
+    folders: folderState.folders,
+    createFolder: folderState.createFolder,
+    renameFolder: folderState.renameFolder,
+    deleteFolder: folderState.deleteFolder,
+    moveChatToFolder: folderState.moveChatToFolder,
     setChatBackground: chatActions.setChatBackground,
     uploadChatBackground: chatActions.uploadChatBackground,
     setChatNotify: chatActions.setChatNotify,

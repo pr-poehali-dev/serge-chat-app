@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Dispatch, SetStateAction } from "react";
-import { Chat, Message, Tab, AuthUser, NotificationItem } from "@/components/messenger/types";
+import { Chat, ChatFolder, Message, Tab, AuthUser, NotificationItem } from "@/components/messenger/types";
 import { API_CHATS } from "./config";
 import { readNotifyPrefs, isQuietNow } from "@/components/messenger/sidebar/SettingsPanels";
 import { registerServiceWorker } from "@/lib/push";
@@ -34,6 +34,7 @@ interface UseChatSyncParams {
   authUser: AuthUser | null;
   authHeaders: () => Record<string, string>;
   setChats: Dispatch<SetStateAction<Chat[]>>;
+  setFolders?: Dispatch<SetStateAction<ChatFolder[]>>;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   activeChatId: number | null;
   setActiveChatId: (id: number | null) => void;
@@ -49,6 +50,7 @@ export function useChatSync({
   authUser,
   authHeaders,
   setChats,
+  setFolders,
   setMessages,
   activeChatId,
   setActiveChatId,
@@ -72,6 +74,7 @@ export function useChatSync({
       .then((r) => r.json())
       .then((data) => {
         setChats(data.chats || []);
+        setFolders?.(data.folders || []);
         if (data.chats?.length > 0 && !activeChatId) {
           setActiveChatIdRaw(data.chats[0].id);
         }
@@ -187,6 +190,7 @@ export function useChatSync({
         });
 
         setChats(normalized);
+        if (Array.isArray(data.folders)) setFolders?.(data.folders);
         if (newNotes.length > 0) {
           const prefs = readNotifyPrefs();
           if (prefs.inApp) setNotifications((prev) => [...newNotes, ...prev].slice(0, 50));

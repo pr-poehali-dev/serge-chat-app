@@ -20,6 +20,7 @@ interface MessageBodyProps {
   onVotePoll?: (pollId: number, optionIds: number[]) => void;
   onClosePoll?: (pollId: number) => void;
   onForwardPoll?: () => void;
+  isGroup?: boolean;
 }
 
 export default function MessageBody({
@@ -33,6 +34,7 @@ export default function MessageBody({
   onVotePoll,
   onClosePoll,
   onForwardPoll,
+  isGroup = false,
 }: MessageBodyProps) {
   return (
     <>
@@ -63,7 +65,7 @@ export default function MessageBody({
             <ImageAttachment msg={msg} />
             {msg.text && (
               <p className="px-3 py-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words">
-                {highlightText(msg.text, searchQuery, currentMatchId === msg.id)}
+                {highlightText(msg.text, searchQuery, currentMatchId === msg.id, isGroup)}
               </p>
             )}
           </>
@@ -72,7 +74,7 @@ export default function MessageBody({
             <FileCard msg={msg} out={msg.out} />
             {msg.text && (
               <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap break-words">
-                {highlightText(msg.text, searchQuery, currentMatchId === msg.id)}
+                {highlightText(msg.text, searchQuery, currentMatchId === msg.id, isGroup)}
               </p>
             )}
           </>
@@ -103,7 +105,7 @@ export default function MessageBody({
           />
         ) : (
           <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-            {highlightText(msg.text, searchQuery, currentMatchId === msg.id)}
+            {highlightText(msg.text, searchQuery, currentMatchId === msg.id, isGroup)}
           </p>
         )}
       </div>

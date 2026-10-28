@@ -9,6 +9,7 @@ import SearchBar from "./chat/SearchBar";
 import PinnedBar from "./chat/PinnedBar";
 import PinnedPoll from "./chat/PinnedPoll";
 import SelectionBar from "./chat/SelectionBar";
+import { useMentionMembers } from "./chat/useMentionMembers";
 import { EmojiCategory, GifCategory, GifItem } from "./chat/EmojiGifPicker";
 
 interface ChatAreaProps {
@@ -38,8 +39,8 @@ interface ChatAreaProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
   emojiPickerRef: RefObject<HTMLDivElement | null>;
-  emojiTab: "emoji" | "icq" | "stickers" | "gif";
-  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "stickers" | "gif">>;
+  emojiTab: "emoji" | "stickers" | "gif";
+  setEmojiTab: Dispatch<SetStateAction<"emoji" | "stickers" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];
   GIF_CATEGORIES: GifCategory[];
   gifSearch: string;
@@ -174,6 +175,7 @@ export default function ChatArea({
   onScheduleSticker,
   foundFocus,
 }: ChatAreaProps) {
+  const mentionMembers = useMentionMembers(activeChat?.id, !!activeChat?.isGroup, sessionId);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const pendingFocusRef = useRef<number | null>(null);
@@ -456,6 +458,8 @@ export default function ChatArea({
             onUpdateScheduled={onUpdateScheduled}
             onScheduleSticker={onScheduleSticker}
             onEditLast={onEdit ? editLast : undefined}
+            mentionMembers={mentionMembers}
+            currentUserId={currentUserId}
           />
           )}
         </>

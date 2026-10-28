@@ -1,4 +1,4 @@
-import { RefObject, Dispatch, SetStateAction, useState } from "react";
+import { RefObject, Dispatch, SetStateAction, useRef, useState } from "react";
 import Icon from "@/components/ui/icon";
 import { Attachment, Message, ScheduledItem } from "../types";
 import MediaRecorderControls from "../media/MediaRecorderControls";
@@ -7,6 +7,8 @@ import EmojiGifPicker, { EmojiCategory, GifCategory, GifItem } from "./EmojiGifP
 import { replyLabel } from "./ReplyQuote";
 import ScheduledList from "./ScheduledList";
 import SchedulePopover from "./SchedulePopover";
+import MentionSuggest from "./MentionSuggest";
+import { GroupMember } from "../groupMembers/types";
 
 interface MessageInputProps {
   attachments: Attachment[];
@@ -21,8 +23,8 @@ interface MessageInputProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
   emojiPickerRef: RefObject<HTMLDivElement | null>;
-  emojiTab: "emoji" | "icq" | "stickers" | "gif";
-  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "stickers" | "gif">>;
+  emojiTab: "emoji" | "stickers" | "gif";
+  setEmojiTab: Dispatch<SetStateAction<"emoji" | "stickers" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];
   GIF_CATEGORIES: GifCategory[];
   gifSearch: string;
@@ -51,6 +53,8 @@ interface MessageInputProps {
   onUpdateScheduled?: (id: number, patch: { text?: string; whenMs?: number }) => Promise<string | null>;
   onScheduleSticker?: (path: string, whenMs: number) => Promise<string | null>;
   onEditLast?: () => void;
+  mentionMembers?: GroupMember[];
+  currentUserId?: number;
 }
 
 export default function MessageInput({
@@ -94,9 +98,44 @@ export default function MessageInput({
   onUpdateScheduled,
   onScheduleSticker,
   onEditLast,
+  mentionMembers = [],
+  currentUserId,
 }: MessageInputProps) {
   const [recordingActive, setRecordingActive] = useState(false);
   const hasDraft = inputText.trim().length > 0 || attachments.length > 0 || !!editingMessage;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [caret, setCaret] = useState(0);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionClosedAt, setMentionClosedAt] = useState<number | null>(null);
+
+  const mentionMatch = mentionMembers.length > 0 ? /(?:^|\s)@([\p{L}\p{N}_.-]*)$/u.exec(inputText.slice(0, caret)) : null;
+  const mentionStart = mentionMatch ? caret - mentionMatch[1].length - 1 : -1;
+  const mentionQuery = (mentionMatch?.[1] || "").toLowerCase();
+  const mentionOptions =
+    mentionMatch && mentionClosedAt !== mentionStart
+      ? mentionMembers
+          .filter((m) => m.id !== currentUserId)
+          .filter((m) => !mentionQuery || (m.login || "").toLowerCase().includes(mentionQuery) || m.displayName.toLowerCase().includes(mentionQuery))
+          .slice(0, 6)
+      : [];
+  const activeMention = Math.min(mentionIndex, Math.max(mentionOptions.length - 1, 0));
+
+  const pickMention = (member: GroupMember) => {
+    const handle = member.login || member.displayName.replace(/\s+/g, "_");
+    const before = inputText.slice(0, mentionStart);
+    const after = inputText.slice(caret);
+    const next = `${before}@${handle} ${after.replace(/^\s/, "")}`;
+    const pos = before.length + handle.length + 2;
+    setInputText(next);
+    setMentionIndex(0);
+    window.requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+      setCaret(pos);
+    });
+  };
 
   return (
     <>
@@ -236,13 +275,21 @@ export default function MessageInput({
           <input ref={fileInputRef} type="file" multiple className="hidden" accept="*" onChange={handleFileSelect} />
           <input ref={imageInputRef} type="file" multiple className="hidden" accept="image/*,video/*" onChange={handleFileSelect} />
 
-          <div className={`${recordingActive ? "hidden" : "flex"} flex-1 items-end gap-3 rounded-2xl bg-fg/[0.05] border border-fg/[0.07] px-4 py-3 focus-within:border-purple-500/40 transition-all`}>
+          <div className={`${recordingActive ? "hidden" : "flex"} relative flex-1 items-end gap-3 rounded-2xl bg-fg/[0.05] border border-fg/[0.07] px-4 py-3 focus-within:border-purple-500/40 transition-all`}>
+            <MentionSuggest members={mentionOptions} activeIndex={activeMention} onPick={pickMention} onHover={setMentionIndex} />
             <textarea
+              ref={textareaRef}
               rows={1}
               className="flex-1 resize-none bg-transparent text-sm text-fg/85 placeholder:text-fg/25 outline-none"
               placeholder={editingMessage ? "Измените сообщение..." : attachments.length > 0 ? "Добавить подпись..." : "Сообщение..."}
               value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
+              onChange={(e) => {
+                setInputText(e.target.value);
+                setCaret(e.target.selectionStart ?? e.target.value.length);
+                setMentionIndex(0);
+                setMentionClosedAt(null);
+              }}
+              onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
               onPaste={(e) => {
                 if (!onAddFiles) return;
                 const files = Array.from(e.clipboardData?.files || []);
@@ -251,6 +298,28 @@ export default function MessageInput({
                 onAddFiles(files);
               }}
               onKeyDown={(e) => {
+                if (mentionOptions.length > 0) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setMentionIndex((activeMention + 1) % mentionOptions.length);
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setMentionIndex((activeMention - 1 + mentionOptions.length) % mentionOptions.length);
+                    return;
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    pickMention(mentionOptions[activeMention]);
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setMentionClosedAt(mentionStart);
+                    return;
+                  }
+                }
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   sendMessage();
@@ -278,10 +347,12 @@ export default function MessageInput({
             <SchedulePopover onSchedule={onScheduleMessage} />
           )}
 
-          {(hasDraft || !onSendMedia) && (
+          {!recordingActive && (
             <button
               onClick={sendMessage}
               disabled={(!inputText.trim() && attachments.length === 0) || sending}
+              title={editingMessage ? "Сохранить" : "Отправить"}
+              aria-label={editingMessage ? "Сохранить" : "Отправить"}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl gradient-btn text-white shadow-lg shadow-purple-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:-translate-y-0.5"
             >
               <Icon name={sending ? "Loader" : editingMessage ? "Check" : "Send"} size={16} className={sending ? "animate-spin" : ""} />

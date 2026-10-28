@@ -1,6 +1,5 @@
 import { RefObject, Dispatch, SetStateAction } from "react";
 import Icon from "@/components/ui/icon";
-import { SMILEYS, Smiley } from "../smileys/Smiley";
 import { useGifSearch } from "@/pages/index/useGifSearch";
 import StickerPanel from "../stickers/StickerPanel";
 
@@ -24,8 +23,8 @@ interface EmojiGifPickerProps {
   emojiPickerOpen: boolean;
   setEmojiPickerOpen: Dispatch<SetStateAction<boolean>>;
   emojiPickerRef: RefObject<HTMLDivElement | null>;
-  emojiTab: "emoji" | "icq" | "stickers" | "gif";
-  setEmojiTab: Dispatch<SetStateAction<"emoji" | "icq" | "stickers" | "gif">>;
+  emojiTab: "emoji" | "stickers" | "gif";
+  setEmojiTab: Dispatch<SetStateAction<"emoji" | "stickers" | "gif">>;
   EMOJI_CATEGORIES: EmojiCategory[];
   GIF_CATEGORIES: GifCategory[];
   gifSearch: string;
@@ -81,7 +80,6 @@ export default function EmojiGifPicker({
             <div className="flex border-b border-fg/[0.07] shrink-0">
               {[
                 { id: "emoji" as const, label: "😊 Эмодзи" },
-                { id: "icq" as const, label: "🌼 ICQ" },
                 ...(onPickSticker ? [{ id: "stickers" as const, label: "🖼 Стикеры" }] : []),
                 { id: "gif" as const, label: "🎬 GIF" },
               ].map((t) => (
@@ -138,30 +136,6 @@ export default function EmojiGifPicker({
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {emojiTab === "icq" && (
-              <div className="flex-1 overflow-y-auto p-3">
-                <p className="mb-2 px-1 text-[10px] font-medium uppercase tracking-wider text-fg/25">Классические смайлы</p>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {SMILEYS.map((sm) => (
-                    <button
-                      key={sm.id}
-                      title={`${sm.title}  ${sm.codes[0]}`}
-                      onClick={() => {
-                        setInputText((prev) => (prev && !prev.endsWith(" ") ? prev + " " : prev) + sm.codes[0] + " ");
-                        setEmojiPickerOpen(false);
-                      }}
-                      className="flex h-11 w-full items-center justify-center rounded-xl transition-transform hover:scale-110 hover:bg-fg/[0.08]"
-                    >
-                      <Smiley def={sm} size={30} />
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-3 px-1 text-[11px] leading-snug text-fg/30">
-                  Можно набирать и вручную: например :-) или ;-) превратятся в смайл.
-                </p>
               </div>
             )}
 

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Chat, Tab, AuthUser, NotificationItem, FoundMessage } from "./types";
+import { Chat, ChatFolder, Tab, AuthUser, NotificationItem, FoundMessage } from "./types";
 import SidebarHeader from "./sidebar/SidebarHeader";
 import ChatsList from "./sidebar/ChatsList";
+import ChatFolderTabs, { FolderFilter } from "./sidebar/ChatFolderTabs";
 import ContactsAndBots from "./sidebar/ContactsAndBots";
 import MiscTabs from "./sidebar/MiscTabs";
 
@@ -22,6 +23,11 @@ interface SidebarProps {
   onOpenCreateGroup: () => void;
   onLeaveGroup: (id: number) => void;
   onTogglePinChat: (id: number) => void;
+  folders: ChatFolder[];
+  onCreateFolder: (name: string) => Promise<string | null>;
+  onRenameFolder: (id: number, name: string) => Promise<string | null>;
+  onDeleteFolder: (id: number) => Promise<string | null>;
+  onMoveChatToFolder: (chatId: number, folderId: number | null) => void;
   authUser: AuthUser | null;
   onUpdateProfile: (login: string, firstName: string, lastName: string) => Promise<string | null>;
   onLogout: () => void;
@@ -50,6 +56,11 @@ export default function Sidebar({
   onOpenCreateGroup,
   onLeaveGroup,
   onTogglePinChat,
+  folders,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
+  onMoveChatToFolder,
   authUser,
   onUpdateProfile,
   onLogout,
@@ -62,6 +73,9 @@ export default function Sidebar({
 }: SidebarProps) {
   const [botToDelete, setBotToDelete] = useState<Chat | null>(null);
   const [groupToLeave, setGroupToLeave] = useState<Chat | null>(null);
+  const [folderFilter, setFolderFilter] = useState<FolderFilter>("all");
+  const activeFolder: FolderFilter = folderFilter !== "all" && !folders.some((f) => f.id === folderFilter) ? "all" : folderFilter;
+  const visibleChats = activeFolder === "all" ? filteredChats : filteredChats.filter((c) => c.folderId === activeFolder);
 
   return (
     <aside
@@ -84,14 +98,28 @@ export default function Sidebar({
         <div className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4 safe-bottom">
           {/* CHATS */}
           {activeTab === "chats" && (
-            <ChatsList
-              activeChatId={activeChatId}
-              setActiveChatId={setActiveChatId}
-              loadingChats={loadingChats}
-              filteredChats={filteredChats}
-              onRequestLeaveGroup={setGroupToLeave}
-              onTogglePinChat={onTogglePinChat}
-            />
+            <>
+              <ChatFolderTabs
+                folders={folders}
+                chats={chats}
+                active={activeFolder}
+                onSelect={setFolderFilter}
+                onCreate={onCreateFolder}
+                onRename={onRenameFolder}
+                onDelete={onDeleteFolder}
+              />
+              <ChatsList
+                activeChatId={activeChatId}
+                setActiveChatId={setActiveChatId}
+                loadingChats={loadingChats}
+                filteredChats={visibleChats}
+                onRequestLeaveGroup={setGroupToLeave}
+                onTogglePinChat={onTogglePinChat}
+                folders={folders}
+                onMoveChatToFolder={onMoveChatToFolder}
+                emptyText={activeFolder !== "all" ? "В этой папке пока нет чатов. Нажмите значок папки у чата, чтобы добавить его сюда." : undefined}
+              />
+            </>
           )}
 
           <ContactsAndBots

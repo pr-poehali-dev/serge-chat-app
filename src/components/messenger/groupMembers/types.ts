@@ -9,6 +9,7 @@ export interface GroupMember {
   role?: GroupRole;
   moodEmoji?: string;
   moodText?: string;
+  login?: string;
 }
 
 export type ConfirmState = { kind: "transfer" | "remove" | "leave"; member?: GroupMember };

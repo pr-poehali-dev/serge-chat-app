@@ -11,7 +11,7 @@ export function useComposer() {
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
-  const [emojiTab, setEmojiTab] = useState<"emoji" | "icq" | "stickers" | "gif">("emoji");
+  const [emojiTab, setEmojiTab] = useState<"emoji" | "stickers" | "gif">("emoji");
   const [gifSearch, setGifSearch] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);

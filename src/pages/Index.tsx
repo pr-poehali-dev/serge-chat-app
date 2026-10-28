@@ -222,6 +222,11 @@ export default function Index() {
           onOpenCreateGroup={() => bg.setCreateGroupOpen(true)}
           onLeaveGroup={bg.leaveGroup}
           onTogglePinChat={msg.togglePinChat}
+          folders={msg.folders}
+          onCreateFolder={msg.createFolder}
+          onRenameFolder={msg.renameFolder}
+          onDeleteFolder={msg.deleteFolder}
+          onMoveChatToFolder={(chatId, folderId) => { msg.moveChatToFolder(chatId, folderId); }}
           authUser={authUser}
           onUpdateProfile={handleUpdateProfile}
           onLogout={handleLogout}

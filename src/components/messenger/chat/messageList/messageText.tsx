@@ -1,18 +1,30 @@
 import { ReactNode } from "react";
-import { Smiley, splitSmileys } from "../../smileys/Smiley";
 
-function renderPlain(text: string): ReactNode {
-  const parts = splitSmileys(text);
-  if (parts.length === 1 && typeof parts[0] === "string") return text;
-  const onlySmileys = parts.every((p) => typeof p !== "string" || p.trim() === "");
-  return parts.map((p, i) =>
-    typeof p === "string" ? <span key={i}>{p}</span> : <Smiley key={i} def={p} size={onlySmileys ? 34 : 20} />
-  );
+const MENTION_RE = /(?<![\p{L}\p{N}_@])@[\p{L}\p{N}_](?:[\p{L}\p{N}_.-]*[\p{L}\p{N}_])?/gu;
+
+function renderPlain(text: string, mentions = false): ReactNode {
+  if (!mentions || !text.includes("@")) return text;
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  for (const m of text.matchAll(MENTION_RE)) {
+    const idx = m.index ?? 0;
+    if (idx > last) parts.push(text.slice(last, idx));
+    parts.push(
+      <span key={key++} className="rounded-md bg-purple-500/25 px-1 font-semibold text-purple-200">
+        {m[0]}
+      </span>
+    );
+    last = idx + m[0].length;
+  }
+  if (parts.length === 0) return text;
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
 }
 
-export function highlightText(text: string, query: string, isCurrent: boolean): ReactNode {
+export function highlightText(text: string, query: string, isCurrent: boolean, mentions = false): ReactNode {
   const q = query.trim();
-  if (!q) return renderPlain(text);
+  if (!q) return renderPlain(text, mentions);
   const lower = text.toLowerCase();
   const needle = q.toLowerCase();
   const parts: ReactNode[] = [];

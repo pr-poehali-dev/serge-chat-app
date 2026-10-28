@@ -10,6 +10,7 @@ export interface Chat {
   avatar: string;
   isBot?: boolean;
   pinned?: boolean;
+  folderId?: number | null;
   avatarUrl?: string | null;
   statusText?: string;
   typing?: boolean;
@@ -198,7 +199,7 @@ export interface GalleryItem {
   messageId: number;
   chatId: number;
   topicId: number | null;
-  type: "photo" | "gif" | "video";
+  type: "photo" | "video";
   url: string;
   fileName?: string | null;
   caption?: string;
@@ -206,4 +207,9 @@ export interface GalleryItem {
   chatName: string;
   isGroup: boolean;
   senderName: string;
+}
+
+export interface ChatFolder {
+  id: number;
+  name: string;
 }
