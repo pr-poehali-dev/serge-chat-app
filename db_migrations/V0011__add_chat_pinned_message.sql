@@ -1,0 +1,1 @@
+ALTER TABLE t_p64541051_serge_chat_app.chats ADD COLUMN IF NOT EXISTS pinned_message_id INTEGER REFERENCES t_p64541051_serge_chat_app.messages(id);

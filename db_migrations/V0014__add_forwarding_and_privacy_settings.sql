@@ -1,0 +1,5 @@
+ALTER TABLE t_p64541051_serge_chat_app.messages ADD COLUMN IF NOT EXISTS forwarded_from VARCHAR(200);
+ALTER TABLE t_p64541051_serge_chat_app.users ADD COLUMN IF NOT EXISTS show_online BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE t_p64541051_serge_chat_app.users ADD COLUMN IF NOT EXISTS show_typing BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE t_p64541051_serge_chat_app.users ADD COLUMN IF NOT EXISTS read_receipts BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE t_p64541051_serge_chat_app.users ADD COLUMN IF NOT EXISTS who_can_message VARCHAR(16) NOT NULL DEFAULT 'all';
