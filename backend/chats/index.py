@@ -228,6 +228,7 @@ MAX_PACKS = 10
 MAX_STICKERS_PER_PACK = 60
 MAX_SCHEDULED = 50
 SCHEDULED_FILE_MAX_BYTES = 8 * 1024 * 1024
+GALLERY_PAGE = 60
 SEND_MESSAGE_URL = os.environ.get("SEND_MESSAGE_URL") or "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6"
 SEND_AT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})$")
 
@@ -244,7 +245,7 @@ def resolve_user(cur, headers: dict):
     session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
     if not session_id:
         return DEFAULT_USER_ID, False
-    cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
+    cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
     row = cur.fetchone()
     if row:
         return row[0], True
@@ -1657,6 +1658,90 @@ def handler(event: dict, context) -> dict:
             cur.execute(f"SELECT name FROM {SCHEMA}.chats WHERE id = %s", (row[1],))
             chat_row = cur.fetchone()
             return reply(200, {"poll": poll, "chatName": chat_row[0] if chat_row else None})
+
+        # GET /chats?action=gallery&type=all|photo|gif|video[&chat_id=][&offset=] — фото, GIF и видео из моих чатов
+        if method == "GET" and action == "gallery":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            kind_filter = params.get("type") or "all"
+            if kind_filter not in ("all", "photo", "gif", "video"):
+                return reply(400, {"error": "Некорректный тип"})
+            try:
+                offset = max(0, int(params.get("offset") or 0))
+            except ValueError:
+                offset = 0
+            tz = 0
+            try:
+                tz = max(-840, min(840, int(params.get("tz") or 0)))
+            except ValueError:
+                tz = 0
+            photo_sql = r"(m.kind = 'image' AND COALESCE(m.media_url, '') !~* '[.]gif([?#]|$)')"
+            gif_sql = (r"((m.kind = 'image' AND COALESCE(m.media_url, '') ~* '[.]gif([?#]|$)') "
+                       r"OR (m.kind = 'text' AND m.text ~* '^(https?://[^ ]+|/gifs/[^ ]+)[.]gif$'))")
+            video_sql = r"((m.kind = 'file' AND COALESCE(m.file_name, '') ~* '[.](mp4|mov|webm|m4v|mkv|avi)$') OR m.kind = 'circle')"
+            kind_sql = {"photo": photo_sql, "gif": gif_sql, "video": video_sql}.get(kind_filter) or f"({photo_sql} OR {gif_sql} OR {video_sql})"
+            conds = [kind_sql]
+            args: list = [str(tz), my_user_id, my_user_id]
+            if params.get("chat_id"):
+                try:
+                    conds.append("m.chat_id = %s")
+                    args.append(int(params["chat_id"]))
+                except ValueError:
+                    return reply(400, {"error": "Некорректный чат"})
+            cur.execute(f"""
+                SELECT m.id, m.chat_id, m.topic_id, m.kind, m.media_url, m.text, m.file_name,
+                       TO_CHAR(m.created_at + (%s || ' minutes')::interval, 'DD.MM.YYYY HH24:MI'),
+                       c.is_group, c.name, u.display_name, m.sender_id
+                FROM {SCHEMA}.messages m
+                JOIN {SCHEMA}.chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = %s
+                JOIN {SCHEMA}.chats c ON c.id = m.chat_id
+                LEFT JOIN {SCHEMA}.users u ON u.id = m.sender_id
+                WHERE m.removed_at IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.hidden_messages h WHERE h.message_id = m.id AND h.user_id = %s)
+                  AND {" AND ".join(conds)}
+                ORDER BY m.created_at DESC, m.id DESC
+                LIMIT {GALLERY_PAGE + 1} OFFSET {offset}
+            """, args)
+            rows = cur.fetchall()
+            has_more = len(rows) > GALLERY_PAGE
+            rows = rows[:GALLERY_PAGE]
+            chat_ids = sorted({r[1] for r in rows if not r[8]})
+            partner_names: dict = {}
+            if chat_ids:
+                cur.execute(f"""
+                    SELECT cm.chat_id, u.display_name FROM {SCHEMA}.chat_members cm
+                    JOIN {SCHEMA}.users u ON u.id = cm.user_id
+                    WHERE cm.chat_id = ANY(%s) AND cm.user_id != %s
+                """, (chat_ids, my_user_id))
+                for cid, name in cur.fetchall():
+                    partner_names.setdefault(cid, name)
+            items = []
+            for r in rows:
+                if r[3] == "text":
+                    media_type, url = "gif", (r[5] or "").strip()
+                elif r[3] == "circle":
+                    media_type, url = "video", r[4]
+                elif r[3] == "file":
+                    media_type, url = "video", r[4]
+                else:
+                    media_type = "gif" if (r[4] or "").lower().split("?")[0].split("#")[0].endswith(".gif") else "photo"
+                    url = r[4]
+                if not url:
+                    continue
+                items.append({
+                    "messageId": r[0],
+                    "chatId": r[1],
+                    "topicId": r[2],
+                    "type": media_type,
+                    "url": url,
+                    "fileName": r[6],
+                    "caption": (r[5] or "") if r[3] in ("image", "file") else "",
+                    "time": r[7],
+                    "chatName": (r[9] if r[8] else partner_names.get(r[1], r[9])) or "Чат",
+                    "isGroup": bool(r[8]),
+                    "senderName": "Вы" if r[11] == my_user_id else (r[10] or ""),
+                })
+            return reply(200, {"items": items, "hasMore": has_more})
 
         # GET /chats — список чатов
         cur.execute(f"""

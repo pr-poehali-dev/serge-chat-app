@@ -193,3 +193,17 @@ export interface StickerPack {
   title: string;
   stickers: CustomSticker[];
 }
+
+export interface GalleryItem {
+  messageId: number;
+  chatId: number;
+  topicId: number | null;
+  type: "photo" | "gif" | "video";
+  url: string;
+  fileName?: string | null;
+  caption?: string;
+  time: string;
+  chatName: string;
+  isGroup: boolean;
+  senderName: string;
+}

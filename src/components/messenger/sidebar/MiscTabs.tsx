@@ -39,7 +39,7 @@ export default function MiscTabs({
     <>
       <NotificationsTab activeTab={activeTab} notifications={notifications} />
 
-      <GalleryTab activeTab={activeTab} />
+      <GalleryTab activeTab={activeTab} authUser={authUser} chats={chats} onOpenFoundMessage={onOpenFoundMessage} />
 
       <SearchTab
         activeTab={activeTab}

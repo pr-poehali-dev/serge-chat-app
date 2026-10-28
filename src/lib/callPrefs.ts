@@ -18,7 +18,8 @@ const CallPrefs = registerPlugin<CallPrefsPlugin>("CallPrefs");
 export async function syncNativeSession(sessionId: string | null): Promise<void> {
   if (!isNativeApp()) return;
   try {
-    await CallPrefs.setSession({ sessionId: sessionId || "", api: API_PUSH });
+    const api = API_PUSH.startsWith("/") ? `${window.location.origin}${API_PUSH}` : API_PUSH;
+    await CallPrefs.setSession({ sessionId: sessionId || "", api });
   } catch {
     return;
   }

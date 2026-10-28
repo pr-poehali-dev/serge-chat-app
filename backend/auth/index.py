@@ -120,7 +120,7 @@ def handler(event: dict, context) -> dict:
             session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
             if not session_id:
                 return {"statusCode": 401, "headers": CORS, "body": json.dumps({"error": "Нет сессии"})}
-            cur.execute(f"SELECT {USER_FIELDS} FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
+            cur.execute(f"SELECT {USER_FIELDS} FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
             row = cur.fetchone()
             if not row:
                 return {"statusCode": 401, "headers": CORS, "body": json.dumps({"error": "Сессия недействительна"})}
@@ -130,7 +130,7 @@ def handler(event: dict, context) -> dict:
             session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
             exclude_id = None
             if session_id:
-                cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
+                cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
                 row = cur.fetchone()
                 exclude_id = row[0] if row else None
 
@@ -197,7 +197,7 @@ def handler(event: dict, context) -> dict:
                 INSERT INTO {SCHEMA}.users
                     (username, display_name, avatar_initials, avatar_color, is_online, session_id,
                      email, password_hash, password_salt, login, first_name, last_name, session_expires_at)
-                VALUES (%s, %s, %s, '#a855f7', true, %s, %s, %s, %s, %s, %s, %s, NOW() + INTERVAL '6 months')
+                VALUES (%s, %s, %s, '#a855f7', true, %s, %s, %s, %s, %s, %s, %s, NULL)
                 RETURNING {USER_FIELDS}
             """, (login, display_name, initials, session_id, email, pwd_hash, salt, login, first_name, last_name))
             row = cur.fetchone()
@@ -220,7 +220,7 @@ def handler(event: dict, context) -> dict:
                 return {"statusCode": 401, "headers": CORS, "body": json.dumps({"error": "Неверный email или пароль"})}
 
             session_id = secrets.token_hex(32)
-            cur.execute(f"UPDATE {SCHEMA}.users SET session_id = %s, session_expires_at = NOW() + INTERVAL '6 months', is_online = true WHERE id = %s", (session_id, row[0]))
+            cur.execute(f"UPDATE {SCHEMA}.users SET session_id = %s, session_expires_at = NULL, is_online = true WHERE id = %s", (session_id, row[0]))
             conn.commit()
 
             user_dict = user_row_to_dict((row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], session_id, row[10], row[11], row[12]))
@@ -285,7 +285,7 @@ def handler(event: dict, context) -> dict:
                 UPDATE {SCHEMA}.users SET
                     password_hash = %s, password_salt = %s,
                     reset_token = NULL, reset_token_expires = NULL,
-                    session_id = %s, session_expires_at = NOW() + INTERVAL '6 months'
+                    session_id = %s, session_expires_at = NULL
                 WHERE id = %s
                 RETURNING {USER_FIELDS}
             """, (pwd_hash, salt, session_id, row[0]))
@@ -302,7 +302,7 @@ def handler(event: dict, context) -> dict:
             first_name = (body.get("firstName") or "").strip()
             last_name = (body.get("lastName") or "").strip()
 
-            cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
+            cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
             current = cur.fetchone()
             if not current:
                 return {"statusCode": 401, "headers": CORS, "body": json.dumps({"error": "Сессия недействительна"})}
@@ -339,7 +339,7 @@ def handler(event: dict, context) -> dict:
             if not image_base64:
                 return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Изображение не передано"})}
 
-            cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
+            cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
             current = cur.fetchone()
             if not current:
                 return {"statusCode": 401, "headers": CORS, "body": json.dumps({"error": "Сессия недействительна"})}

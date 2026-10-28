@@ -267,6 +267,12 @@
       "method": "GET",
       "path": "/?action=search-messages&q=test",
       "expectedStatus": 401
+    },
+    {
+      "name": "Gallery without session returns 401",
+      "method": "GET",
+      "path": "/?action=gallery",
+      "expectedStatus": 401
     }
   ]
 }

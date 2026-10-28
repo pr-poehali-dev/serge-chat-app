@@ -3,7 +3,6 @@ import { Chat, Message, PollData } from "../types";
 import { resolveBg } from "../background/chatBackgrounds";
 import MessageBody from "./messageList/MessageBody";
 import MessageMeta from "./messageList/MessageMeta";
-import MessageActions from "./messageList/MessageActions";
 import RemoveConfirmModal from "./messageList/RemoveConfirmModal";
 import MessageContextMenu from "./MessageContextMenu";
 import Icon from "@/components/ui/icon";
@@ -94,7 +93,6 @@ export default function MessageList({
       y: t.clientY,
       timer: window.setTimeout(() => {
         holdRef.current = null;
-        setReactionPickerFor(null);
         setMenu({ msg, x: t.clientX, y: t.clientY });
       }, 550),
     };
@@ -105,8 +103,6 @@ export default function MessageList({
     const t = e.touches[0];
     if (Math.abs(t.clientX - h.x) > 10 || Math.abs(t.clientY - h.y) > 10) cancelHold();
   };
-  const [reactionPickerFor, setReactionPickerFor] = useState<number | null>(null);
-  const reactionPickerRef = useRef<HTMLDivElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
 
@@ -131,17 +127,6 @@ export default function MessageList({
     if (!jumpRequest) return;
     jumpTo(jumpRequest.id);
   }, [jumpRequest]);
-
-  useEffect(() => {
-    if (reactionPickerFor === null) return;
-    const handler = (e: MouseEvent) => {
-      if (reactionPickerRef.current && !reactionPickerRef.current.contains(e.target as Node)) {
-        setReactionPickerFor(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [reactionPickerFor]);
 
   return (
     <>
@@ -200,7 +185,6 @@ export default function MessageList({
                 const sel = window.getSelection()?.toString();
                 if (sel && sel.length > 0) return;
                 e.preventDefault();
-                setReactionPickerFor(null);
                 setMenu({ msg, x: e.clientX, y: e.clientY });
               }}
               style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
@@ -278,23 +262,6 @@ export default function MessageList({
                   />
                 </div>
 
-                {!selectMode && (
-                <MessageActions
-                  msg={msg}
-                  pinnedMessageId={pinnedMessageId}
-                  onToggleReaction={onToggleReaction}
-                  onReply={onReply}
-                  onEdit={onEdit}
-                  onRemove={onRemove}
-                  onTogglePin={onTogglePin}
-                  onForward={onForward}
-                  onDeleteForMe={onDeleteForMe ? (id) => setConfirmHideId(id) : undefined}
-                  setConfirmRemoveId={setConfirmRemoveId}
-                  reactionPickerFor={reactionPickerFor}
-                  setReactionPickerFor={setReactionPickerFor}
-                  reactionPickerRef={reactionPickerRef}
-                />
-                )}
               </div>
             </div>
           );})

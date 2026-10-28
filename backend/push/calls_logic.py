@@ -140,7 +140,7 @@ def handler(event: dict, context) -> dict:
         session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
         me = None
         if session_id:
-            cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
+            cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
             r = cur.fetchone()
             me = r[0] if r else None
         if me is None:

@@ -1,0 +1,8 @@
+{
+  "appId": "ru.trindelka.messenger",
+  "appName": "Трынделка",
+  "webDir": "android-web",
+  "android": {
+    "allowMixedContent": false
+  }
+}

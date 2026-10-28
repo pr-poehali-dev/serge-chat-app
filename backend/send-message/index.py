@@ -30,7 +30,7 @@ def resolve_user_id(cur, headers: dict) -> int:
     session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
     if not session_id:
         return DEFAULT_USER_ID
-    cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
+    cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
     row = cur.fetchone()
     if not row:
         raise PermissionError("session_expired")

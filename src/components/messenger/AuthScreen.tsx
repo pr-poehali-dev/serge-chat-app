@@ -19,7 +19,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [lastName, setLastName] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState(() =>
-    localStorage.getItem("trindelka_session_expired") ? "Сеанс завершён: прошло больше 6 месяцев. Войдите заново." : ""
+    localStorage.getItem("trindelka_session_expired") ? "Сеанс завершён. Войдите заново." : ""
   );
   const [loading, setLoading] = useState(false);
 

@@ -44,7 +44,7 @@ def handler(event: dict, context) -> dict:
             session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
             gid = None
             if session_id:
-                cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
+                cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
                 grow = cur.fetchone()
                 gid = grow[0] if grow else None
             if gid is None:
@@ -58,7 +58,7 @@ def handler(event: dict, context) -> dict:
         session_id = headers.get("X-Session-Id") or headers.get("x-session-id")
         user_id = None
         if session_id:
-            cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s AND (session_expires_at IS NULL OR session_expires_at > NOW())", (session_id,))
+            cur.execute(f"SELECT id FROM {SCHEMA}.users WHERE session_id = %s", (session_id,))
             row = cur.fetchone()
             user_id = row[0] if row else None
         if user_id is None:
