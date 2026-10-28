@@ -1,0 +1,7 @@
+[Unit]
+Description=Trindelka: send scheduled messages that are due
+After=trindelka.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/curl -fsS -m 25 -X POST -H "Content-Type: application/json" -d '{"action":"dispatch-due"}' http://127.0.0.1:8000/api/send-message

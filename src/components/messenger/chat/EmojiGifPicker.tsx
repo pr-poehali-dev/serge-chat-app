@@ -34,6 +34,7 @@ interface EmojiGifPickerProps {
   setInputText: Dispatch<SetStateAction<string>>;
   onPickGif?: (url: string) => void;
   onPickSticker?: (path: string) => void;
+  onScheduleSticker?: (path: string, whenMs: number) => Promise<string | null>;
   sessionId?: string | null;
 }
 
@@ -51,6 +52,7 @@ export default function EmojiGifPicker({
   setInputText,
   onPickGif,
   onPickSticker,
+  onScheduleSticker,
   sessionId = null,
 }: EmojiGifPickerProps) {
   const remote = useGifSearch(gifSearch, emojiPickerOpen && emojiTab === "gif");
@@ -166,6 +168,7 @@ export default function EmojiGifPicker({
             {emojiTab === "stickers" && onPickSticker && (
               <StickerPanel
                 sessionId={sessionId}
+                onSchedule={onScheduleSticker}
                 onPick={(path) => {
                   onPickSticker(path);
                   setEmojiPickerOpen(false);

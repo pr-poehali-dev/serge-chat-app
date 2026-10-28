@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useSearchParams, useNavigate } from "@/lib/router-compat";
 import Icon from "@/components/ui/icon";
+import { API_AUTH } from "@/pages/index/config";
 
-const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
 const SESSION_STORAGE_KEY = "trindelka_session_id";
 
 export default function ResetPassword() {

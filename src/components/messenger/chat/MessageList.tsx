@@ -78,6 +78,33 @@ export default function MessageList({
   const [menu, setMenu] = useState<{ msg: Message; x: number; y: number } | null>(null);
   const [confirmHideId, setConfirmHideId] = useState<number | null>(null);
   const selectedSet = new Set(selectedIds);
+  const holdRef = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const cancelHold = () => {
+    if (holdRef.current) {
+      window.clearTimeout(holdRef.current.timer);
+      holdRef.current = null;
+    }
+  };
+  const startHold = (msg: Message, e: React.TouchEvent) => {
+    if (msg.removed || msg.id >= 1e12 || selectMode) return;
+    const t = e.touches[0];
+    cancelHold();
+    holdRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      timer: window.setTimeout(() => {
+        holdRef.current = null;
+        setReactionPickerFor(null);
+        setMenu({ msg, x: t.clientX, y: t.clientY });
+      }, 550),
+    };
+  };
+  const moveHold = (e: React.TouchEvent) => {
+    const h = holdRef.current;
+    if (!h) return;
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - h.x) > 10 || Math.abs(t.clientY - h.y) > 10) cancelHold();
+  };
   const [reactionPickerFor, setReactionPickerFor] = useState<number | null>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
@@ -156,6 +183,13 @@ export default function MessageList({
                   ? () => onSelectMatch(msg.id)
                   : undefined
               }
+              onTouchStart={(e) => {
+                if ((e.target as HTMLElement).closest("a, input, textarea, video, audio, button")) return;
+                startHold(msg, e);
+              }}
+              onTouchMove={moveHold}
+              onTouchEnd={cancelHold}
+              onTouchCancel={cancelHold}
               onContextMenu={(e) => {
                 if (msg.removed || msg.id >= 1e12 || selectMode) {
                   if (selectMode) e.preventDefault();

@@ -171,6 +171,14 @@ def pinned_poll(cur, message_id: int, user_id: int):
     return poll or None
 
 
+def scheduled_item(sid, chat_id, topic_id, text, epoch, kind, media_url, file_name) -> dict:
+    return {
+        "id": sid, "chatId": chat_id, "topicId": topic_id, "text": text or "",
+        "sendAtMs": int(float(epoch) * 1000), "kind": kind or "text",
+        "mediaUrl": media_url, "fileName": file_name,
+    }
+
+
 def utc_now_naive() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -219,7 +227,8 @@ CUSTOM_STICKER_MAX_BYTES = 1024 * 1024
 MAX_PACKS = 10
 MAX_STICKERS_PER_PACK = 60
 MAX_SCHEDULED = 50
-SEND_MESSAGE_URL = "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6"
+SCHEDULED_FILE_MAX_BYTES = 8 * 1024 * 1024
+SEND_MESSAGE_URL = os.environ.get("SEND_MESSAGE_URL") or "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6"
 SEND_AT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})$")
 
 
@@ -660,7 +669,7 @@ def handler(event: dict, context) -> dict:
             if not message_id or not text:
                 return reply(400, {"error": "Укажите текст сообщения"})
             cur.execute(f"""
-                SELECT sender_id, kind, removed_at FROM {SCHEMA}.messages WHERE id = %s
+                SELECT sender_id, kind, removed_at, text FROM {SCHEMA}.messages WHERE id = %s
             """, (message_id,))
             row = cur.fetchone()
             if not row or row[2] is not None:
@@ -669,6 +678,12 @@ def handler(event: dict, context) -> dict:
                 return reply(403, {"error": "Можно редактировать только свои сообщения"})
             if row[1] not in ("text", "image", "file"):
                 return reply(400, {"error": "Это сообщение нельзя изменить"})
+            old_text = (row[3] or "").strip()
+            if poll_for_message(cur, message_id) or STICKER_ANY_RE.match(old_text) or re.match(r"^\S+\.gif$", old_text, re.I):
+                return reply(400, {"error": "Опрос, стикер и GIF изменить нельзя"})
+            text = clean_text(text, 4000)
+            if not text:
+                return reply(400, {"error": "Укажите текст сообщения"})
             cur.execute(f"""
                 UPDATE {SCHEMA}.messages SET text = %s, edited_at = NOW() WHERE id = %s
             """, (text, message_id))
@@ -1189,38 +1204,100 @@ def handler(event: dict, context) -> dict:
             conn.commit()
             return reply(200, {"moodEmoji": emoji, "moodText": text, "bio": bio})
 
-        # GET /chats?action=search-messages&q=слово — поиск по всем моим чатам и группам
+        # GET /chats?action=search-senders — люди из моих чатов для фильтра поиска
+        if method == "GET" and action == "search-senders":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            cur.execute(f"""
+                SELECT DISTINCT u.id, u.display_name
+                FROM {SCHEMA}.chat_members me
+                JOIN {SCHEMA}.chat_members cm ON cm.chat_id = me.chat_id
+                JOIN {SCHEMA}.users u ON u.id = cm.user_id
+                WHERE me.user_id = %s AND u.id != %s
+                ORDER BY u.display_name LIMIT 300
+            """, (my_user_id, my_user_id))
+            return reply(200, {"senders": [{"id": r[0], "name": r[1]} for r in cur.fetchall()]})
+
+        # GET /chats?action=search-messages&q=слово[&chat_id=][&sender_id=][&date_from=][&date_to=][&tz=] — поиск по моим чатам
         if method == "GET" and action == "search-messages":
             if not authed:
                 return reply(401, {"error": "Нужна авторизация"})
             q = clean_text(params.get("q"), 100)
-            if len(q) < 2:
+            conds = []
+            args: list = [my_user_id, my_user_id]
+            has_filter = False
+            if params.get("chat_id"):
+                try:
+                    conds.append("m.chat_id = %s")
+                    args.append(int(params["chat_id"]))
+                    has_filter = True
+                except ValueError:
+                    return reply(400, {"error": "Некорректный чат"})
+            if params.get("sender_id"):
+                try:
+                    sender = int(params["sender_id"])
+                except ValueError:
+                    return reply(400, {"error": "Некорректный отправитель"})
+                conds.append("m.sender_id = %s")
+                args.append(sender)
+                has_filter = True
+            try:
+                tz = max(-840, min(840, int(params.get("tz") or 0)))
+            except ValueError:
+                tz = 0
+            for key, op, shift in (("date_from", ">=", 0), ("date_to", "<", 1)):
+                raw = params.get(key)
+                if not raw:
+                    continue
+                try:
+                    day = datetime.strptime(raw, "%Y-%m-%d") + timedelta(days=shift)
+                except ValueError:
+                    return reply(400, {"error": "Некорректная дата"})
+                conds.append(f"m.created_at {op} %s")
+                args.append(day - timedelta(minutes=tz))
+                has_filter = True
+            if len(q) < 2 and not has_filter:
                 return reply(200, {"results": [], "query": q})
             needle = q.lower()
+            extra = (" AND " + " AND ".join(conds)) if conds else ""
             cur.execute(f"""
                 SELECT m.id, m.chat_id, m.topic_id, m.text, m.sender_id, u.display_name,
-                       TO_CHAR(m.created_at, 'DD.MM.YYYY HH24:MI'), c.is_group, c.name, ct.name
+                       TO_CHAR(m.created_at + (%s || ' minutes')::interval, 'DD.MM.YYYY HH24:MI'),
+                       c.is_group, c.name, ct.name, m.kind
                 FROM {SCHEMA}.messages m
                 JOIN {SCHEMA}.chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = %s
                 JOIN {SCHEMA}.chats c ON c.id = m.chat_id
                 LEFT JOIN {SCHEMA}.users u ON u.id = m.sender_id
                 LEFT JOIN {SCHEMA}.chat_topics ct ON ct.id = m.topic_id
-                WHERE m.removed_at IS NULL AND m.text <> '' AND m.kind IN ('text', 'image', 'file')
+                WHERE m.removed_at IS NULL
                   AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.hidden_messages h WHERE h.message_id = m.id AND h.user_id = %s)
+                  {extra}
                 ORDER BY m.created_at DESC
                 LIMIT 4000
-            """, (my_user_id, my_user_id))
+            """, [str(tz)] + args)
             found = []
             for r in cur.fetchall():
                 text = r[3] or ""
                 if text.startswith("/stickers/") or "/stickers/user/" in text:
                     continue
-                idx = text.lower().find(needle)
-                if idx < 0:
-                    continue
-                start = max(0, idx - 50)
-                end = min(len(text), idx + len(needle) + 90)
-                snippet = ("…" if start > 0 else "") + text[start:end] + ("…" if end < len(text) else "")
+                if needle:
+                    idx = text.lower().find(needle)
+                    if idx < 0:
+                        continue
+                    start = max(0, idx - 50)
+                    end = min(len(text), idx + len(needle) + 90)
+                    snippet = ("…" if start > 0 else "") + text[start:end] + ("…" if end < len(text) else "")
+                else:
+                    if r[10] in ("voice", "circle"):
+                        snippet = "🎤 Голосовое сообщение" if r[10] == "voice" else "⭕ Видеосообщение"
+                    elif r[10] == "image" and not text:
+                        snippet = "🖼 Фото"
+                    elif r[10] == "file" and not text:
+                        snippet = "📎 Файл"
+                    elif not text:
+                        continue
+                    else:
+                        snippet = text[:160] + ("…" if len(text) > 160 else "")
                 found.append((r, snippet))
                 if len(found) >= 40:
                     break
@@ -1275,15 +1352,20 @@ def handler(event: dict, context) -> dict:
             conn.commit()
             return reply(200, {"ok": True, "removed": own, "hidden": others})
 
-        # POST /chats?action=schedule-message — запланировать текстовое сообщение
+        # POST /chats?action=schedule-message — запланировать текст, фото или файл (стикер это текст с путём)
         if method == "POST" and action == "schedule-message":
             if not authed:
                 return reply(401, {"error": "Нужна авторизация"})
             chat_id = body.get("chat_id")
+            kind = body.get("kind") or "text"
             text = clean_text(body.get("text"), 4000)
             send_at = str(body.get("send_at") or "")
-            if not isinstance(chat_id, int) or not text:
+            if not isinstance(chat_id, int) or kind not in ("text", "image", "file"):
+                return reply(400, {"error": "Некорректные данные"})
+            if kind == "text" and not text:
                 return reply(400, {"error": "Напишите текст сообщения"})
+            if kind != "text" and not body.get("media"):
+                return reply(400, {"error": "Не передан файл"})
             if not is_member(cur, chat_id, my_user_id):
                 return reply(403, {"error": "Нет доступа к чату"})
             topic_id = body.get("topic_id")
@@ -1307,14 +1389,45 @@ def handler(event: dict, context) -> dict:
             """, (my_user_id,))
             if cur.fetchone()[0] >= MAX_SCHEDULED:
                 return reply(400, {"error": f"Не больше {MAX_SCHEDULED} запланированных сообщений"})
+            media_url = None
+            file_name = None
+            file_size = None
+            if kind != "text":
+                raw = str(body.get("media") or "")
+                if "," in raw:
+                    raw = raw.split(",", 1)[1]
+                try:
+                    data = base64.b64decode(raw, validate=False)
+                except Exception:
+                    return reply(400, {"error": "Не удалось прочитать файл"})
+                if not data:
+                    return reply(400, {"error": "Пустой файл"})
+                if len(data) > SCHEDULED_FILE_MAX_BYTES:
+                    return reply(413, {"error": "Файл слишком большой (лимит 8 МБ)"})
+                file_name = clean_text(body.get("fileName"), 200) or None
+                ctype = str(body.get("contentType") or "application/octet-stream")[:100]
+                ext = "bin"
+                if file_name and "." in file_name:
+                    cand = file_name.rsplit(".", 1)[-1].lower()
+                    if cand.isalnum() and len(cand) <= 8:
+                        ext = cand
+                elif kind == "image":
+                    ext = "jpg"
+                try:
+                    media_url = save_file(f"messages/{kind}/{uuid.uuid4().hex}.{ext}", data, ctype)
+                except Exception as e:
+                    print(f"schedule upload failed: {type(e).__name__}: {e}")
+                    return reply(400, {"error": "Не удалось загрузить файл"})
+                file_size = len(data)
             cur.execute(f"""
-                INSERT INTO {SCHEMA}.scheduled_messages (chat_id, topic_id, sender_id, text, send_at)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO {SCHEMA}.scheduled_messages
+                    (chat_id, topic_id, sender_id, text, send_at, kind, media_url, file_name, file_size)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id, EXTRACT(EPOCH FROM send_at)
-            """, (chat_id, topic_id, my_user_id, text, when))
+            """, (chat_id, topic_id, my_user_id, text, when, kind, media_url, file_name, file_size))
             sid, epoch = cur.fetchone()
             conn.commit()
-            return reply(200, {"item": {"id": sid, "chatId": chat_id, "topicId": topic_id, "text": text, "sendAtMs": int(float(epoch) * 1000)}})
+            return reply(200, {"item": scheduled_item(sid, chat_id, topic_id, text, epoch, kind, media_url, file_name)})
 
         # GET /chats?action=list-scheduled&chat_id=X — мои запланированные сообщения в чате
         if method == "GET" and action == "list-scheduled":
@@ -1325,16 +1438,55 @@ def handler(event: dict, context) -> dict:
             except (TypeError, ValueError):
                 return reply(400, {"error": "Нужен chat_id"})
             cur.execute(f"""
-                SELECT id, topic_id, text, EXTRACT(EPOCH FROM send_at)
+                SELECT id, topic_id, text, EXTRACT(EPOCH FROM send_at), kind, media_url, file_name
                 FROM {SCHEMA}.scheduled_messages
                 WHERE sender_id = %s AND chat_id = %s AND status = 'pending'
                 ORDER BY send_at ASC LIMIT 50
             """, (my_user_id, chat_id))
-            items = [
-                {"id": r[0], "chatId": chat_id, "topicId": r[1], "text": r[2], "sendAtMs": int(float(r[3]) * 1000)}
-                for r in cur.fetchall()
-            ]
+            items = [scheduled_item(r[0], chat_id, r[1], r[2], r[3], r[4], r[5], r[6]) for r in cur.fetchall()]
             return reply(200, {"items": items})
+
+        # POST /chats?action=edit-scheduled — изменить текст (подпись) и время запланированного сообщения
+        if method == "POST" and action == "edit-scheduled":
+            if not authed:
+                return reply(401, {"error": "Нужна авторизация"})
+            sid = body.get("id")
+            if not isinstance(sid, int):
+                return reply(400, {"error": "Нужен id"})
+            cur.execute(f"""
+                SELECT chat_id, topic_id, text, EXTRACT(EPOCH FROM send_at), kind, media_url, file_name
+                FROM {SCHEMA}.scheduled_messages
+                WHERE id = %s AND sender_id = %s AND status = 'pending' FOR UPDATE
+            """, (sid, my_user_id))
+            row = cur.fetchone()
+            if not row:
+                return reply(404, {"error": "Сообщение уже отправлено или отменено"})
+            new_text = row[2]
+            if "text" in body:
+                new_text = clean_text(body.get("text"), 4000)
+                is_sticker = row[4] == "text" and STICKER_ANY_RE.match(row[2] or "")
+                if row[4] == "text" and not new_text:
+                    return reply(400, {"error": "Текст не может быть пустым"})
+                if is_sticker:
+                    new_text = row[2]
+            new_when = None
+            if body.get("send_at"):
+                new_when = parse_send_at(str(body.get("send_at")))
+                if new_when is None:
+                    return reply(400, {"error": "Не удалось разобрать дату и время"})
+                now_utc = utc_now_naive()
+                if new_when <= now_utc + timedelta(seconds=20):
+                    return reply(400, {"error": "Выберите время в будущем"})
+                if new_when > now_utc + timedelta(days=366):
+                    return reply(400, {"error": "Можно запланировать не дальше чем на год"})
+            if new_when is not None:
+                cur.execute(f"UPDATE {SCHEMA}.scheduled_messages SET text = %s, send_at = %s WHERE id = %s", (new_text, new_when, sid))
+            else:
+                cur.execute(f"UPDATE {SCHEMA}.scheduled_messages SET text = %s WHERE id = %s", (new_text, sid))
+            conn.commit()
+            cur.execute(f"SELECT EXTRACT(EPOCH FROM send_at) FROM {SCHEMA}.scheduled_messages WHERE id = %s", (sid,))
+            epoch = cur.fetchone()[0]
+            return reply(200, {"item": scheduled_item(sid, row[0], row[1], new_text, epoch, row[4], row[5], row[6])})
 
         # POST /chats?action=cancel-scheduled — отменить запланированное сообщение
         if method == "POST" and action == "cancel-scheduled":

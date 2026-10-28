@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<title>Перенос Трынделки на свой сервер — инструкция</title>
+<title>Перенос Трынделки на VPS Ubuntu — инструкция</title>
 <style>
 :root{
   --bg:#f6f6fb;--card:#ffffff;--ink:#181430;--muted:#5d5a75;--line:#e1e0ee;
@@ -79,880 +79,280 @@ footer{text-align:center;color:var(--muted);font-size:13px;padding:10px 0 36px}
 
 <header class="top">
   <div class="wrap">
-    <h1>Перенос мессенджера «Трынделка» на свой сервер</h1>
-    <p>Пошаговая инструкция: отдельно для VPS-сервера и отдельно для виртуального хостинга с панелью ISPmanager. Все команды можно копировать кнопкой «Копировать».</p>
+    <h1>Перенос мессенджера «Трынделка» на VPS Ubuntu</h1>
+    <p>Пошаговая инструкция: код, база данных, файлы и секреты. Все команды можно копировать кнопкой «Копировать».</p>
   </div>
 </header>
 
 <div class="wrap">
 
 <nav class="toc">
-  <strong>Содержание</strong>
-  <ol>
-    <li><a href="#what">Из чего состоит проект</a></li>
-    <li><a href="#choose">Какой вариант вам подходит</a></li>
-    <li><a href="#prepare">Что подготовить заранее</a></li>
-    <li><a href="#code">Как получить код</a></li>
-    <li><a href="#vps">Часть 1. VPS-сервер (Ubuntu)</a></li>
-    <li><a href="#isp">Часть 2. Хостинг с ISPmanager</a></li>
-    <li><a href="#isp-vps">Часть 3. VPS, на котором стоит ISPmanager</a></li>
-    <li><a href="#data">Перенос пользователей, переписки и файлов</a></li>
-    <li><a href="#check">Проверка после запуска</a></li>
-    <li><a href="#update">Обновление и резервные копии</a></li>
-    <li><a href="#apk">Приложение для Android (APK)</a></li>
-    <li><a href="#features">Уведомления, звонки, GIF и вставка файлов</a></li>
-    <li><a href="#firebase">Firebase: уведомления в Android-приложении</a></li>
-    <li><a href="#more">Группы, поиск GIF, смайлы, галочки, сессии</a></li>
-    <li><a href="#backup">Ночное резервное копирование и восстановление</a></li>
-    <li><a href="#social">Стикеры, опросы, настроение, краткий профиль</a></li>
-    <li><a href="#groups2">Управление группами, фоны чатов, кто прочитал, звонок на весь экран</a></li>
-    <li><a href="#trouble">Если что-то не работает</a></li>
-    <li><a href="#env">Справочник: переменные настроек</a></li>
-  </ol>
+<strong>Содержание</strong>
+<ol>
+<li><a href="#what">Из чего состоит проект</a></li>
+<li><a href="#prepare">Что подготовить заранее</a></li>
+<li><a href="#install">Установка на VPS Ubuntu</a></li>
+<li><a href="#data">Перенос базы, пользователей и файлов</a></li>
+<li><a href="#secrets">Перенос секретов</a></li>
+<li><a href="#check">Проверка после запуска</a></li>
+<li><a href="#update">Обновление и резервные копии</a></li>
+<li><a href="#push">Уведомления, звонки и Firebase</a></li>
+<li><a href="#features">Что умеет мессенджер</a></li>
+<li><a href="#trouble">Если что-то не работает</a></li>
+<li><a href="#env">Справочник: переменные настроек</a></li>
+</ol>
 </nav>
 
 <section id="what">
-  <h2>1. Из чего состоит проект</h2>
-  <p>Сейчас мессенджер работает на платформе poehali.dev и состоит из четырёх частей. При переносе каждую нужно поставить на ваш сервер:</p>
-  <div class="table-wrap"><table>
-    <tr><th>Часть</th><th>Что это</th><th>Где будет на вашем сервере</th></tr>
-    <tr><td>Сайт</td><td>React-приложение, папка <code>src</code>. Собирается командой в папку <code>dist</code> (обычные HTML, JS, CSS)</td><td>Обычная папка сайта</td></tr>
-    <tr><td>Серверная часть</td><td>4 функции на Python 3: <code>auth</code> (вход, профиль), <code>chats</code> (чаты, настройки), <code>send-message</code> (отправка, пересылка, файлы), <code>transcribe</code> (голос в текст)</td><td>Запускаются через готовую обёртку из папки <code>deploy</code> по адресам <code>/api/auth</code>, <code>/api/chats</code> и т. д.</td></tr>
-    <tr><td>База данных</td><td>PostgreSQL. Таблицы создаются файлами из папки <code>db_migrations</code></td><td>PostgreSQL на сервере</td></tr>
-    <tr><td>Файлы</td><td>Аватары, фото, голосовые, кружки, документы. Сейчас лежат в хранилище платформы</td><td>Папка <code>files</code> на сервере</td></tr>
-  </table></div>
-  <div class="note"><b>Что уже подготовлено в проекте</b>
-    В папке <code>deploy</code> лежат готовые файлы: запуск серверной части (<code>app.py</code>), конфиг веб-сервера (<code>nginx.conf</code>), автозапуск (<code>trindelka.service</code>), шаблон настроек (<code>env.example</code>), скрипт замены адресов (<code>replace-api-urls.sh</code>), скрипт переноса файлов (<code>migrate-files.py</code>) и вход для хостинга (<code>passenger_wsgi.py</code>).
-    Сохранение файлов теперь умеет работать и в обычную папку на сервере: достаточно указать её в настройках.
-  </div>
-  <div class="warn"><b>Важно про проверку</b>
-    Обёртку серверной части я запускал у себя: она стартует и отвечает на проверочный адрес. Реальный сервер и панель ISPmanager я не видел, поэтому названия пунктов меню панели могут слегка отличаться у вашего хостера. Перед тем как переключать настоящих пользователей, сделайте пробный запуск и пройдите чек-лист из раздела 9.
-  </div>
-</section>
-
-<section id="choose">
-  <h2>2. Какой вариант вам подходит</h2>
-  <div class="table-wrap"><table>
-    <tr><th>У вас есть</th><th>Что получится</th><th>Куда смотреть</th></tr>
-    <tr><td>VPS с правами root (Ubuntu 22.04 или 24.04)<span class="tag a">лучший вариант</span></td><td>Всё на вашем сервере: сайт, серверная часть, база, файлы</td><td>Часть 1</td></tr>
-    <tr><td>Виртуальный хостинг с ISPmanager, где есть <b>PostgreSQL</b> и <b>Python (WSGI/Passenger)</b><span class="tag b">зависит от тарифа</span></td><td>Всё на хостинге</td><td>Часть 2, сценарий А</td></tr>
-    <tr><td>Хостинг с ISPmanager, где есть только PHP и MySQL<span class="tag b">частичный перенос</span></td><td>Сайт на хостинге, а серверная часть остаётся на poehali.dev или уезжает на отдельный VPS</td><td>Часть 2, сценарии Б и В</td></tr>
-    <tr><td>VPS, где уже стоит ISPmanager и есть root</td><td>Как в части 1, но домен и сертификат ведутся через панель</td><td>Часть 3</td></tr>
-  </table></div>
-  <div class="bad"><b>MySQL не подходит</b>
-    Проект написан под PostgreSQL (используются его схемы, <code>RETURNING</code>, функции времени и другое). На базу MySQL он не запустится, и «переделать одной настройкой» нельзя. Если на хостинге доступен только MySQL, выбирайте сценарии Б или В.
-  </div>
-  <div class="note"><b>Как узнать, что есть на вашем хостинге</b>
-    В ISPmanager откройте «Базы данных» → «Создать» и посмотрите, есть ли в списке типов PostgreSQL. Затем откройте настройки сайта и поищите режим работы Python (WSGI, Passenger). Если не нашли, напишите в поддержку хостера: «Доступен ли PostgreSQL и запуск Python-приложений через Passenger/WSGI на моём тарифе?»
-  </div>
+<h2>1. Из чего состоит проект</h2>
+<p>Мессенджер состоит из пяти частей. При переносе на свой сервер каждая ставится отдельно:</p>
+<div class="table-wrap"><table><tr><th>Часть</th><th>Что это</th><th>Где будет на вашем сервере</th></tr><tr><td>Сайт</td><td>Приложение на TanStack Start (React). Страницы сначала собираются на сервере, потом оживают в браузере. Собирается в папку <code>dist</code>: <code>dist/client</code> (картинки, скрипты, стили) и <code>dist/server</code> (серверная часть сайта)</td><td>Служба <code>trindelka-web</code> на порту 3000, перед ней nginx</td></tr><tr><td>Серверные функции</td><td>5 функций на Python 3: <code>auth</code> (вход, профиль), <code>chats</code> (чаты, группы, настройки, поиск, опросы, стикеры), <code>send-message</code> (отправка, пересылка, файлы, запланированные), <code>transcribe</code> (голос в текст), <code>push</code> (уведомления, звонки, GIF)</td><td>Служба <code>trindelka</code> (обёртка из <code>deploy/app.py</code>) на порту 8000, адреса <code>/api/...</code></td></tr><tr><td>База данных</td><td>PostgreSQL, 22 таблицы. Создаются файлами из <code>db_migrations</code></td><td>PostgreSQL на сервере</td></tr><tr><td>Файлы</td><td>Аватары, фото, документы, голосовые, кружки, свои стикеры</td><td>Папка <code>/var/www/trindelka/files</code></td></tr><tr><td>Минутный таймер</td><td>Отправляет запланированные сообщения, у которых наступило время</td><td>Таймер <code>trindelka-dispatch.timer</code></td></tr></table></div>
+<div class="warn"><b>Важное изменение</b>Раньше сайт был набором готовых файлов, и его можно было выложить на любой хостинг. Теперь у сайта есть серверная часть на Node.js, поэтому нужен <b>VPS с правами root</b>. Обычный виртуальный хостинг (ISPmanager и подобные) для нового сайта не подходит, и в этой инструкции его нет.</div>
+<div class="note"><b>Что не проверено</b>Команды для запуска нового сайта я составил по документации и исходникам движка, но на реальном сервере не проверял: у меня нет доступа к вашему VPS. Поэтому сначала сделайте пробный запуск и пройдите чек-лист из раздела 6, и только потом переключайте людей.</div>
 </section>
 
 <section id="prepare">
-  <h2>3. Что подготовить заранее</h2>
-  <ul>
-    <li><b>Домен</b>, например <code>chat.example.ru</code>. В DNS у регистратора добавьте запись <b>A</b> на IP-адрес вашего сервера. Изменения могут применяться до нескольких часов.</li>
-    <li><b>Доступ на сервер</b>: IP, логин и пароль или SSH-ключ. Для Windows подойдёт программа PuTTY или встроенный <code>ssh</code> в PowerShell.</li>
-    <li><b>Почта для писем восстановления пароля</b>: адрес SMTP-сервера, порт (465 или 587), логин и пароль. Для Яндекса и Gmail нужен специальный «пароль приложения», а не основной пароль.</li>
-    <li><b>Ключ OpenAI</b> нужен только для расшифровки голосовых в текст. Без него мессенджер работает, а эта кнопка нет. С российских серверов доступ к OpenAI может быть закрыт.</li>
-    <li><b>Node.js версии 20 или новее</b> нужен только для сборки сайта. Собрать можно на своём компьютере (nodejs.org) или прямо на VPS.</li>
-  </ul>
-  <div class="warn"><b>Пароли и секреты</b>
-    Придумывайте длинные пароли. Если в пароле есть символы <code>@ : / # ?</code>, в адресе базы их нужно закодировать (например, <code>@</code> превращается в <code>%40</code>). Проще использовать пароль из латинских букв и цифр.
-  </div>
+<h2>2. Что подготовить заранее</h2>
+<ul>
+<li><b>VPS с Ubuntu 22.04 или 24.04</b> и правами root. Подойдёт 1–2 ядра и 2 ГБ памяти (сборка сайта занимает 1–3 минуты и любит память).</li>
+<li><b>Домен</b>, например <code>chat.example.ru</code>. В DNS у регистратора добавьте запись A на IP сервера. Применение может занять до нескольких часов.</li>
+<li><b>SSH-доступ</b>: IP, логин и пароль или ключ. На Windows подойдёт PuTTY или встроенный <code>ssh</code> в PowerShell.</li>
+<li><b>Почта для писем восстановления пароля</b>: адрес SMTP-сервера, порт (465 или 587), логин и пароль. Для Яндекса и Gmail нужен «пароль приложения», а не основной пароль.</li>
+<li><b>Значения ваших секретов с poehali.dev</b> (список в разделе 5). Я не вижу значений секретов, их нужно открыть в настройках секретов проекта самим.</li>
+<li><b>Адрес базы poehali.dev</b> (секрет <code>DATABASE_URL</code>), если нужно перенести людей и переписку.</li>
+</ul>
+<div class="note">Придумывайте длинные пароли из латинских букв и цифр. Если в пароле есть символы <code>@ : / # ?</code>, в адресе базы их придётся кодировать (например, <code>@</code> превращается в <code>%40</code>).</div>
 </section>
 
-<section id="code">
-  <h2>4. Как получить код проекта</h2>
-  <p>Есть два способа, оба в меню проекта на poehali.dev:</p>
-  <ol>
-    <li><b>Скачать → Скачать код</b> — архив со всем проектом. Распакуйте и загрузите на сервер.</li>
-    <li><b>Скачать → Подключить GitHub</b> — код уходит в ваш репозиторий. Это удобнее: на сервере код получают командой <code>git clone</code>, а потом обновляют командой <code>git pull</code>.</li>
-  </ol>
-  <p>Подробности: <a href="https://docs.poehali.dev/deploy/github" target="_blank" rel="noopener">docs.poehali.dev/deploy/github</a>.</p>
-  <div class="note"><b>Что внутри архива</b>
-    <code>src</code> (сайт), <code>backend</code> (4 функции), <code>db_migrations</code> (таблицы базы), <code>deploy</code> (файлы для переноса), <code>public</code> (в том числе эта страница), <code>package.json</code>.
-  </div>
-</section>
-
-<!-- ================= VPS ================= -->
-<section id="vps">
-  <h2>5. Часть 1. Перенос на VPS-сервер (Ubuntu 22.04 / 24.04)</h2>
-  <p>Подойдёт сервер от 1 ядра и 2 ГБ памяти. Все команды выполняются на сервере под пользователем <code>root</code>. Где написано <code>example.ru</code>, подставьте свой домен.</p>
-
-  <ol class="steps">
-    <li>
-      <h4>Подключитесь к серверу и обновите систему</h4>
-      <div class="codebox"><pre><code>ssh root@IP_ВАШЕГО_СЕРВЕРА
+<section id="install">
+<h2>3. Установка на VPS Ubuntu</h2>
+<p>Все команды выполняются на сервере под пользователем <code>root</code>. Где написано <code>example.ru</code>, подставьте свой домен, а вместо <code>ПАРОЛЬ</code> вставьте придуманный пароль базы.</p>
+<ol class="steps">
+<li><b>Подключитесь и обновите систему</b>
+<div class="codebox"><pre><code>ssh root@IP_ВАШЕГО_СЕРВЕРА
 apt update &amp;&amp; apt upgrade -y</code></pre></div>
-    </li>
-
-    <li>
-      <h4>Установите нужные программы</h4>
-      <div class="codebox"><pre><code>apt install -y nginx postgresql postgresql-contrib python3 python3-venv python3-pip git curl ufw certbot python3-certbot-nginx
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+</li>
+<li><b>Установите программы</b>
+<div class="codebox"><pre><code>apt install -y nginx postgresql postgresql-contrib python3 python3-venv python3-pip git curl ufw certbot python3-certbot-nginx
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt install -y nodejs
 node -v</code></pre></div>
-      <p>Последняя команда должна показать версию <code>v20</code> или выше.</p>
-    </li>
-
-    <li>
-      <h4>Включите защиту: открыты только SSH, сайт и защищённый сайт</h4>
-      <div class="codebox"><pre><code>ufw allow OpenSSH
-ufw allow 'Nginx Full'
+<p>Последняя команда должна показать <code>v22</code> или выше. Движку сайта нужен Node.js не ниже 22.12.</p></li>
+<li><b>Включите защиту</b>
+<div class="codebox"><pre><code>ufw allow OpenSSH
+ufw allow &#x27;Nginx Full&#x27;
 ufw --force enable</code></pre></div>
-      <div class="warn"><b>Не пропускайте <code>ufw allow OpenSSH</code></b> до включения защиты, иначе вы потеряете доступ к серверу.</div>
-    </li>
-
-    <li>
-      <h4>Создайте папки и скачайте код</h4>
-      <p>Если код на GitHub (замените адрес на свой репозиторий):</p>
-      <div class="codebox"><pre><code>mkdir -p /var/www/trindelka/files
+<p>Не пропускайте <code>ufw allow OpenSSH</code> до включения защиты, иначе потеряете доступ к серверу.</p></li>
+<li><b>Скачайте код</b>
+<div class="codebox"><pre><code>mkdir -p /var/www/trindelka/files
 cd /var/www/trindelka
 git clone https://github.com/ВАШ_АККАУНТ/ВАШ_РЕПОЗИТОРИЙ.git app</code></pre></div>
-      <p>Если у вас архив: загрузите его на сервер (программой WinSCP или FileZilla) и распакуйте так, чтобы получилась папка <code>/var/www/trindelka/app</code> с папками <code>src</code>, <code>backend</code>, <code>deploy</code> внутри.</p>
-    </li>
-
-    <li>
-      <h4>Создайте базу данных</h4>
-      <p>Придумайте пароль и вставьте его вместо <code>ПРИДУМАЙТЕ_ПАРОЛЬ</code> (латинские буквы и цифры).</p>
-      <div class="codebox"><pre><code>sudo -u postgres psql -c "CREATE USER trindelka WITH PASSWORD 'ПРИДУМАЙТЕ_ПАРОЛЬ';"
-sudo -u postgres psql -c "CREATE DATABASE trindelka OWNER trindelka;"
-sudo -u postgres psql -d trindelka -c "CREATE SCHEMA t_p64541051_serge_chat_app AUTHORIZATION trindelka;"</code></pre></div>
-      <div class="note"><b>Почему именно такое имя схемы</b>
-        Имя <code>t_p64541051_serge_chat_app</code> прописано и в коде, и в файлах таблиц. Оставьте его как есть, тогда ничего менять не придётся.
-      </div>
-    </li>
-
-    <li>
-      <h4>Создайте таблицы</h4>
-      <p>Файлы применяются по порядку. Два файла с демонстрационными данными (<code>V0003</code> и <code>V0005</code>) пропускаем: второй из них повторно добавляет те же тестовые аккаунты и на чистой базе даст ошибку «уже существует». Это вывод из чтения файлов, на пустой базе я их не прогонял.</p>
-      <div class="codebox"><pre><code>cd /var/www/trindelka/app
-export DATABASE_URL="postgresql://trindelka:ПРИДУМАЙТЕ_ПАРОЛЬ@127.0.0.1:5432/trindelka"
+<p>Код берётся в меню проекта: <b>Скачать → Подключить GitHub</b> (удобнее, потом обновляется командой <code>git pull</code>) или <b>Скачать → Скачать код</b> (архив; распакуйте так, чтобы получилась папка <code>/var/www/trindelka/app</code> с папками <code>src</code>, <code>backend</code>, <code>deploy</code>).</p></li>
+<li><b>Создайте базу данных</b>
+<div class="codebox"><pre><code>sudo -u postgres psql -c &quot;CREATE USER trindelka WITH PASSWORD &#x27;ПАРОЛЬ&#x27;;&quot;
+sudo -u postgres psql -c &quot;CREATE DATABASE trindelka OWNER trindelka;&quot;
+cd /var/www/trindelka/app
+SCHEMA=$(sed -n &#x27;s/^SCHEMA = &quot;\(.*\)&quot;$/\1/p&#x27; backend/chats/index.py)
+echo &quot;$SCHEMA&quot;
+sudo -u postgres psql -d trindelka -c &quot;CREATE SCHEMA \&quot;$SCHEMA\&quot; AUTHORIZATION trindelka;&quot;</code></pre></div>
+<p>Имя схемы прописано в коде серверных функций и в файлах таблиц, поэтому его не придумывают: команда выше сама достаёт его из кода. Команда <code>echo</code> должна вывести непустое имя.</p></li>
+<li><b>Создайте таблицы</b>
+<div class="codebox"><pre><code>export DATABASE_URL=&quot;postgresql://trindelka:ПАРОЛЬ@127.0.0.1:5432/trindelka&quot;
+export PGOPTIONS=&quot;-c search_path=$SCHEMA&quot;
 for f in $(ls db_migrations/*.sql | grep -v -e V0003 -e V0005); do
-  echo "== $f"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f" || break
-done</code></pre></div>
-      <p>Проверьте, что таблицы появились:</p>
-      <div class="codebox"><pre><code>psql "$DATABASE_URL" -c "\dt t_p64541051_serge_chat_app.*"</code></pre></div>
-      <p>В списке должны быть шесть таблиц: <code>users</code>, <code>chats</code>, <code>chat_members</code>, <code>messages</code>, <code>message_reactions</code>, <code>chat_topics</code>.</p>
-    </li>
-
-    <li>
-      <h4>Настройте адреса и соберите сайт</h4>
-      <p>Скрипт заменяет адреса функций poehali.dev на ваши <code>/api/...</code> и убирает служебные скрипты платформы из <code>index.html</code>.</p>
-      <div class="codebox"><pre><code>cd /var/www/trindelka/app
-sh deploy/replace-api-urls.sh /api
-npm ci
-npm run build
-ls dist</code></pre></div>
-      <p>В папке <code>dist</code> должны появиться <code>index.html</code> и папка <code>assets</code>. Сборка занимает 1–3 минуты.</p>
-      <div class="note"><b>Метрика</b>
-        В <code>index.html</code> подключён счётчик Яндекс.Метрики платформы. Если он вам не нужен, удалите блок <code>Yandex.Metrika counter</code> до сборки. Если нужен ваш, замените номер счётчика.
-      </div>
-    </li>
-
-    <li>
-      <h4>Установите серверную часть</h4>
-      <div class="codebox"><pre><code>cd /var/www/trindelka
+  echo &quot;== $f&quot;
+  psql &quot;$DATABASE_URL&quot; -v ON_ERROR_STOP=1 -q -f &quot;$f&quot; || break
+done
+psql &quot;$DATABASE_URL&quot; -c &quot;SELECT count(*) FROM information_schema.tables WHERE table_schema = &#x27;$SCHEMA&#x27;&quot;</code></pre></div>
+<p>Файлы применяются по порядку, всего 21 (до <code>V0021</code>). Два файла с демонстрационными данными (<code>V0003</code> и <code>V0005</code>) пропускаются. Последняя команда должна показать <b>22</b> таблицы. Переменная <code>PGOPTIONS</code> нужна: в новых файлах (<code>V0020</code>, <code>V0021</code>) имя схемы не указано и берётся из неё. Если остановились на ошибке, исправьте причину и запустите цикл снова: файлы написаны так, что повторный запуск безопасен.</p></li>
+<li><b>Установите серверные функции</b>
+<div class="codebox"><pre><code>cd /var/www/trindelka
 python3 -m venv venv
 ./venv/bin/pip install -r app/deploy/requirements.txt</code></pre></div>
-    </li>
-
-    <li>
-      <h4>Создайте файл настроек</h4>
-      <p>Здесь хранятся пароли. Файл доступен только администратору.</p>
-      <div class="codebox"><pre><code>cp /var/www/trindelka/app/deploy/env.example /etc/trindelka.env
+</li>
+<li><b>Создайте файл настроек</b>
+<div class="codebox"><pre><code>cp /var/www/trindelka/app/deploy/env.example /etc/trindelka.env
 chmod 600 /etc/trindelka.env
 nano /etc/trindelka.env</code></pre></div>
-      <p>Заполните значения. Что куда писать, показывает таблица в <a href="#env">справочнике</a>. Минимум для старта:</p>
-      <div class="codebox"><pre><code>DATABASE_URL=postgresql://trindelka:ПРИДУМАЙТЕ_ПАРОЛЬ@127.0.0.1:5432/trindelka
-LOCAL_STORAGE_DIR=/var/www/trindelka/files
-PUBLIC_FILES_URL=https://example.ru/files
-SMTP_HOST=smtp.yandex.ru
-SMTP_PORT=465
-SMTP_USER=ваша_почта@yandex.ru
-SMTP_PASSWORD=пароль_приложения
-SMTP_FROM_EMAIL=ваша_почта@yandex.ru
-OPENAI_API_KEY=</code></pre></div>
-      <p>Сохранить в nano: <code>Ctrl+O</code>, <code>Enter</code>, выйти: <code>Ctrl+X</code>.</p>
-      <div class="warn"><b>Без кавычек</b> и пробелов вокруг знака «=». Строка <code>PUBLIC_FILES_URL</code> должна начинаться с <code>https://</code> и вашего домена.</div>
-    </li>
-
-    <li>
-      <h4>Запустите серверную часть как службу</h4>
-      <div class="codebox"><pre><code>chown -R www-data:www-data /var/www/trindelka/files
-cp /var/www/trindelka/app/deploy/trindelka.service /etc/systemd/system/
+<p>Заполните значения (что откуда брать, см. раздел 5). Минимум для старта: <code>DATABASE_URL</code>, <code>LOCAL_STORAGE_DIR</code>, <code>PUBLIC_FILES_URL</code>, <code>PUBLIC_SITE_URL</code>, <code>SEND_MESSAGE_URL</code> и данные почты. Без кавычек и пробелов вокруг «=». Сохранить в nano: <code>Ctrl+O</code>, <code>Enter</code>, выйти: <code>Ctrl+X</code>.</p></li>
+<li><b>Соберите сайт</b>
+<div class="codebox"><pre><code>cd /var/www/trindelka/app
+sh deploy/prepare-selfhost.sh
+npm install
+VITE_API_BASE=/api npm run build
+ls dist/client dist/server</code></pre></div>
+<p>Первая команда отключает служебные скрипты платформы poehali.dev в вашей копии. <code>VITE_API_BASE=/api</code> говорит сайту обращаться к функциям на вашем же домене. В <code>dist/server</code> должен появиться файл <code>server.js</code>, в <code>dist/client</code> папка <code>assets</code>. Если сборка падает с нехваткой памяти, добавьте на сервер файл подкачки (swap) или соберите на другом компьютере и скопируйте папку <code>dist</code>.</p><div class="note">В файле <code>src/routes/__root.tsx</code> подключён счётчик Яндекс.Метрики платформы. Если он вам не нужен, удалите блок <code>METRIKA_SCRIPT</code> до сборки; если нужен ваш, замените номер счётчика.</div>
+</li>
+<li><b>Запустите службы</b>
+<div class="codebox"><pre><code>chown -R www-data:www-data /var/www/trindelka/files
+cd /var/www/trindelka/app/deploy
+cp trindelka.service trindelka-web.service trindelka-dispatch.service trindelka-dispatch.timer trindelka-backup.service trindelka-backup.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now trindelka
-sleep 2
-curl http://127.0.0.1:8000/api/health</code></pre></div>
-      <p>Ответ должен быть примерно такой: <code>{"functions":["auth","chats","send-message","transcribe"],"status":"ok"}</code>.</p>
-      <p>Если ответа нет, смотрите журнал: <code>journalctl -u trindelka -n 50 --no-pager</code>.</p>
-    </li>
-
-    <li>
-      <h4>Подключите веб-сервер nginx</h4>
-      <div class="codebox"><pre><code>cp /var/www/trindelka/app/deploy/nginx.conf /etc/nginx/sites-available/trindelka
-sed -i 's/example.ru/ВАШ_ДОМЕН/g' /etc/nginx/sites-available/trindelka
+systemctl enable --now trindelka trindelka-web trindelka-dispatch.timer trindelka-backup.timer
+curl -s http://127.0.0.1:8000/api/health
+curl -sI http://127.0.0.1:3000/ | head -1</code></pre></div>
+<p>Первая проверка должна вернуть <code>{"functions":[...],"status":"ok"}</code>, вторая — <code>HTTP/1.1 200 OK</code>. Если нет, смотрите журнал: <code>journalctl -u trindelka -n 50 --no-pager</code> или <code>journalctl -u trindelka-web -n 50 --no-pager</code>.</p></li>
+<li><b>Подключите nginx</b>
+<div class="codebox"><pre><code>cp /var/www/trindelka/app/deploy/nginx.conf /etc/nginx/sites-available/trindelka
+sed -i &#x27;s/example.ru/ВАШ_ДОМЕН/g&#x27; /etc/nginx/sites-available/trindelka
 ln -s /etc/nginx/sites-available/trindelka /etc/nginx/sites-enabled/trindelka
 rm -f /etc/nginx/sites-enabled/default
 nginx -t &amp;&amp; systemctl reload nginx</code></pre></div>
-      <p>Команда <code>nginx -t</code> должна написать <code>syntax is ok</code>. Теперь сайт открывается по адресу <code>http://ваш-домен</code>.</p>
-    </li>
-
-    <li>
-      <h4>Включите HTTPS (бесплатный сертификат)</h4>
-      <div class="codebox"><pre><code>certbot --nginx -d ВАШ_ДОМЕН -d www.ВАШ_ДОМЕН --redirect -m ваша_почта@example.ru --agree-tos -n</code></pre></div>
-      <p>Если у домена нет <code>www</code>, уберите часть <code>-d www.ВАШ_ДОМЕН</code>. Сертификат продлевается автоматически.</p>
-      <p>После этого проверьте, что в <code>/etc/trindelka.env</code> адрес <code>PUBLIC_FILES_URL</code> начинается с <code>https://</code>, и перезапустите службу: <code>systemctl restart trindelka</code>.</p>
-    </li>
-
-    <li>
-      <h4>Откройте сайт и зарегистрируйтесь</h4>
-      <p>Зайдите на <code>https://ваш-домен</code>, нажмите «Регистрация» и создайте первый аккаунт. Затем пройдите <a href="#check">чек-лист проверки</a>.</p>
-    </li>
-  </ol>
+<p>nginx сам отдаёт файлы сайта из <code>dist/client</code>, загруженные файлы из <code>/files/</code>, <code>/api/</code> отправляет в функции, а всё остальное — на сайт (служба <code>trindelka-web</code>).</p></li>
+<li><b>Включите HTTPS</b>
+<div class="codebox"><pre><code>certbot --nginx -d ВАШ_ДОМЕН -d www.ВАШ_ДОМЕН --redirect -m ваша_почта@example.ru --agree-tos -n</code></pre></div>
+<p>Если у домена нет <code>www</code>, уберите часть <code>-d www.ВАШ_ДОМЕН</code>. Сертификат продлевается сам. Убедитесь, что в <code>/etc/trindelka.env</code> адреса <code>PUBLIC_FILES_URL</code> и <code>PUBLIC_SITE_URL</code> начинаются с <code>https://</code>, и перезапустите: <code>systemctl restart trindelka</code>.</p><div class="warn">Уведомления при закрытом приложении, звонки и запись голоса работают только по HTTPS.</div>
+</li>
+</ol>
 </section>
 
-<!-- ================= ISPmanager hosting ================= -->
-<section id="isp">
-  <h2>6. Часть 2. Виртуальный хостинг с ISPmanager</h2>
-  <p>На виртуальном хостинге нет прав администратора, поэтому нельзя поставить свои программы. Что можно сделать, зависит от тарифа. Сначала определите свой сценарий (см. <a href="#choose">раздел 2</a>).</p>
-  <div class="note"><b>Общий порядок действий в панели</b>
-    Названия пунктов в ISPmanager 6: «Сайты» (WWW-домены), «Базы данных», «Менеджер файлов», «SSL-сертификаты». У разных хостеров они могут слегка отличаться. Если пункта нет, возможно, он не включён в тариф.
-  </div>
-
-  <h3>Шаг 0. Соберите сайт на своём компьютере (нужен для всех сценариев)</h3>
-  <p>На хостинге Node.js, как правило, нет, поэтому сайт собирают дома и загружают готовую папку <code>dist</code>.</p>
-  <ol>
-    <li>Установите Node.js 20 или новее с сайта nodejs.org. На Windows ещё установите Git (git-scm.com): вместе с ним появится программа Git Bash, в которой работает команда <code>sh</code>.</li>
-    <li>Откройте папку проекта в терминале (в Windows: Git Bash). Выполните команды из таблицы, выбрав свой сценарий:</li>
-  </ol>
-  <div class="table-wrap"><table>
-    <tr><th>Сценарий</th><th>Команды</th></tr>
-    <tr><td><b>А</b>: серверная часть на этом же хостинге</td><td><code>sh deploy/replace-api-urls.sh /api</code><br><code>npm ci</code><br><code>npm run build</code></td></tr>
-    <tr><td><b>Б</b>: серверная часть остаётся на poehali.dev</td><td><code>npm ci</code><br><code>npm run build</code><br>(скрипт замены <b>не</b> запускать)</td></tr>
-    <tr><td><b>В</b>: серверная часть на отдельном VPS по адресу <code>https://api.example.ru</code></td><td><code>sh deploy/replace-api-urls.sh https://api.example.ru/api</code><br><code>npm ci</code><br><code>npm run build</code></td></tr>
-  </table></div>
-  <p>Результат: папка <code>dist</code> внутри проекта.</p>
-
-  <h3>Шаг 1. Создайте сайт и сертификат</h3>
-  <ol>
-    <li>«Сайты» → «Создать»: введите домен. Если домен куплен не у хостера, у регистратора пропишите NS-серверы хостера или A-запись на IP хостинга.</li>
-    <li>Откройте созданный сайт → включите «SSL-сертификат» → выпустите бесплатный сертификат Let's Encrypt. Включите принудительное перенаправление на HTTPS.</li>
-  </ol>
-
-  <h3>Шаг 2. Загрузите сайт</h3>
-  <ol>
-    <li>Откройте «Менеджер файлов», затем папку сайта. Обычно это <code>/var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен</code>.</li>
-    <li>Удалите оттуда стандартные файлы хостера (например, заглушку <code>index.html</code>).</li>
-    <li>Загрузите <b>содержимое</b> папки <code>dist</code> (не саму папку): <code>index.html</code>, папку <code>assets</code> и остальное. Удобно загрузить zip-архивом и распаковать в менеджере файлов.</li>
-    <li>Загрузите туда же файл <code>public/install.html</code>, если хотите, чтобы инструкция была доступна на сайте. Если нет, пропустите.</li>
-  </ol>
-
-  <h3>Шаг 3. Настройте открытие внутренних адресов</h3>
-  <p>Адрес вида <code>/reset-password</code> (письмо восстановления пароля) физически не существует, его обрабатывает сам сайт. Нужно сказать веб-серверу открывать в этом случае <code>index.html</code>. Создайте в папке сайта файл <code>.htaccess</code> (точка в начале имени обязательна) с таким содержимым:</p>
-  <div class="codebox"><pre><code>RewriteEngine On
-RewriteBase /
-RewriteCond %{REQUEST_URI} !^/api/
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ /index.html [L]
-
-&lt;IfModule mod_expires.c&gt;
-  ExpiresActive On
-  ExpiresByType image/svg+xml "access plus 1 month"
-&lt;/IfModule&gt;</code></pre></div>
-  <div class="warn"><b>Если после этого адрес /reset-password даёт ошибку 404</b>
-    Значит, на вашем тарифе Apache не используется (работает только nginx), и <code>.htaccess</code> игнорируется. Тогда в настройках сайта найдите поле «Дополнительные директивы nginx» (или попросите поддержку добавить правило) и впишите:
-    <pre><code>location / {
-  try_files $uri $uri/ /index.html;
-}</code></pre>
-  </div>
-
-  <h3>Сценарий А. Полный перенос на хостинг (нужны PostgreSQL и Python)</h3>
-  <ol class="steps">
-    <li>
-      <h4>Создайте базу PostgreSQL</h4>
-      <p>«Базы данных» → «Создать» → тип <b>PostgreSQL</b>. Запишите имя базы, пользователя, пароль и адрес сервера (чаще всего <code>localhost</code>, порт 5432). Обычно перед именами ставится префикс вашего аккаунта, например <code>u123456_chat</code>.</p>
-    </li>
-    <li>
-      <h4>Создайте таблицы</h4>
-      <p>Нужна схема с именем <code>t_p64541051_serge_chat_app</code>. Откройте веб-интерфейс базы (в панели рядом с базой есть кнопка «phpPgAdmin» или «Adminer»; если её нет, подключитесь по SSH, если тариф его даёт) и выполните по очереди:</p>
-      <ol>
-        <li>Запрос: <code>CREATE SCHEMA t_p64541051_serge_chat_app;</code></li>
-        <li>Содержимое файлов из папки <code>db_migrations</code> <b>строго по порядку номеров</b>: V0001, V0002, V0004, V0006, V0007, V0008, V0009, V0010, V0011, V0012, V0013, V0014. Файлы V0003 и V0005 (демо-данные) пропустите.</li>
-      </ol>
-      <p>Если у вас есть SSH, проще одной командой (подставьте свои данные):</p>
-      <div class="codebox"><pre><code>cd ~/trindelka-app
-export DATABASE_URL="postgresql://ПОЛЬЗОВАТЕЛЬ:ПАРОЛЬ@localhost:5432/ИМЯ_БАЗЫ"
-for f in $(ls db_migrations/*.sql | grep -v -e V0003 -e V0005); do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f" || break; done</code></pre></div>
-      <p>Если хостинг не разрешает создавать схему, напишите в поддержку. Схему с таким именем создаст и выдаст вам права только администратор.</p>
-    </li>
-    <li>
-      <h4>Загрузите серверную часть</h4>
-      <p>Создайте в корне вашего аккаунта (<b>вне</b> папки сайта) папку <code>trindelka-app</code> и загрузите в неё папки <code>backend</code> и <code>deploy</code>. Сайт при этом остаётся в своей папке.</p>
-    </li>
-    <li>
-      <h4>Включите Python для сайта</h4>
-      <p>«Сайты» → ваш домен → «Изменить» → найдите режим работы Python (может называться «Python», «WSGI», «Passenger»). Если пункта нет, сценарий А на вашем тарифе недоступен, переходите к сценариям Б или В.</p>
-      <p>Укажите:</p>
-      <ul>
-        <li>каталог приложения: <code>~/trindelka-app/deploy</code></li>
-        <li>файл запуска: <code>passenger_wsgi.py</code> (он уже лежит в <code>deploy</code>)</li>
-        <li>версию Python: 3.9 или новее (подойдёт самая новая из списка)</li>
-      </ul>
-    </li>
-    <li>
-      <h4>Установите зависимости</h4>
-      <p>Нужен SSH-доступ (в панели «Пользователи» → ваш пользователь → включить SSH). Команды:</p>
-      <div class="codebox"><pre><code>cd ~/trindelka-app
-python3 -m venv venv
-./venv/bin/pip install -r deploy/requirements.txt</code></pre></div>
-      <p>Если панель просит указать путь к интерпретатору, укажите <code>~/trindelka-app/venv/bin/python</code>. Если SSH на тарифе недоступен, попросите поддержку установить пакеты из файла <code>deploy/requirements.txt</code>.</p>
-    </li>
-    <li>
-      <h4>Файл настроек</h4>
-      <p>Создайте файл <code>~/trindelka-app/deploy/.env</code> (через менеджер файлов или SSH) и заполните по образцу <code>deploy/env.example</code>:</p>
-      <div class="codebox"><pre><code>DATABASE_URL=postgresql://ПОЛЬЗОВАТЕЛЬ:ПАРОЛЬ@localhost:5432/ИМЯ_БАЗЫ
-LOCAL_STORAGE_DIR=/var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен/files
-PUBLIC_FILES_URL=https://ваш-домен/files
-SMTP_HOST=smtp.yandex.ru
-SMTP_PORT=465
-SMTP_USER=ваша_почта@yandex.ru
-SMTP_PASSWORD=пароль_приложения
-SMTP_FROM_EMAIL=ваша_почта@yandex.ru
-OPENAI_API_KEY=</code></pre></div>
-      <p>Затем в папке сайта создайте папку <code>files</code> и дайте ей права на запись (755, владелец ваш пользователь). Путь в <code>LOCAL_STORAGE_DIR</code> должен точно совпадать с реальным путём к этой папке: его видно в менеджере файлов.</p>
-      <div class="warn"><b>Закройте файл настроек от посторонних</b>
-        Файл <code>.env</code> лежит вне папки сайта и поэтому по адресу сайта не открывается. Не копируйте его в папку сайта. Права на него: 600.
-      </div>
-    </li>
-    <li>
-      <h4>Перезапустите приложение и проверьте</h4>
-      <p>Нажмите в панели «Перезапустить» у Python-приложения (или создайте пустой файл <code>~/trindelka-app/deploy/tmp/restart.txt</code>, это перезапускает Passenger). Откройте в браузере <code>https://ваш-домен/api/health</code>: должен появиться ответ <code>status: ok</code>.</p>
-      <p>Если вместо этого открывается сайт или ошибка 404, значит запросы к <code>/api/</code> не доходят до Python-приложения. Проверьте, что в <code>.htaccess</code> есть строка <code>RewriteCond %{REQUEST_URI} !^/api/</code>, и что приложение привязано именно к этому домену.</p>
-    </li>
-  </ol>
-
-  <h3>Сценарий Б. Сайт на хостинге, серверная часть остаётся на poehali.dev</h3>
-  <p>Самый простой вариант: загружаете собранный сайт (шаги 0–3), больше ничего не нужно. Сайт будет обращаться к функциям и базе на poehali.dev, как сейчас.</p>
-  <div class="warn"><b>Что нужно знать</b>
-    <ul>
-      <li>Это не полный перенос: база, пользователи и файлы остаются на платформе.</li>
-      <li>Функции платформы ограничены количеством вызовов по вашему тарифу. Когда лимит исчерпан, сайт перестаёт работать (платформа отвечает 402 «Payment Required»). При моей последней проверке функции уже отвечали этой ошибкой. Если нужно больше вызовов, подписку продлевают на poehali.dev.</li>
-      <li>Письма восстановления пароля содержат ссылку на ваш новый домен: адрес берётся из заголовка запроса.</li>
-    </ul>
-  </div>
-
-  <h3>Сценарий В. Сайт на хостинге, серверная часть на отдельном VPS</h3>
-  <ol>
-    <li>Сделайте <b>часть 1</b> на VPS, но домен для него возьмите отдельный, например <code>api.example.ru</code>, и в конфиге nginx удалите блоки <code>location /files/</code>, <code>location /assets/</code> и <code>location /</code> (оставьте только <code>/api/</code>), а в шаге с адресами сайта не собирайте сайт на VPS.</li>
-    <li>Соберите сайт дома командой для сценария В (шаг 0) и загрузите на хостинг (шаги 1–3).</li>
-    <li>Для файлов в <code>/etc/trindelka.env</code> укажите <code>PUBLIC_FILES_URL=https://api.example.ru/files</code> и в nginx оставьте блок <code>location /files/</code>.</li>
-  </ol>
-  <p>Браузеру разрешено обращаться на другой адрес: серверная часть отдаёт все нужные заголовки.</p>
-</section>
-
-<!-- ================= ISP on VPS ================= -->
-<section id="isp-vps">
-  <h2>7. Часть 3. VPS, на котором стоит ISPmanager</h2>
-  <p>Если у вас VPS с root-доступом и уже установленной панелью, лучше не править конфигурацию nginx вручную: панель перезапишет её. Домен и сертификат ведите через панель, а серверную часть запускайте отдельной службой.</p>
-  <ol class="steps">
-    <li>
-      <h4>Сайт и сертификат в панели</h4>
-      <p>«Сайты» → «Создать» → ваш домен. Затем выпустите сертификат Let's Encrypt и включите перенаправление на HTTPS.</p>
-    </li>
-    <li>
-      <h4>База PostgreSQL</h4>
-      <p>Если PostgreSQL ещё не стоит, включите его в «Настройки → Возможности» (название пункта зависит от версии). Затем «Базы данных» → «Создать» → PostgreSQL. После этого выполните шаги 5–6 из части 1, подставив данные вашей базы.</p>
-    </li>
-    <li>
-      <h4>Код, сборка, серверная часть</h4>
-      <p>Выполните шаги 4, 7, 8, 9 и 10 из части 1 по SSH. Папку приложения можно оставить <code>/var/www/trindelka</code>. Файлы лучше хранить внутри папки сайта, например <code>/var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен/files</code> (и такой же путь в <code>LOCAL_STORAGE_DIR</code>), чтобы они отдавались как обычные файлы сайта.</p>
-    </li>
-    <li>
-      <h4>Положите собранный сайт в папку сайта</h4>
-      <div class="codebox"><pre><code>cp -r /var/www/trindelka/app/dist/. /var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен/
-chown -R ИМЯ_ПОЛЬЗОВАТЕЛЯ: /var/www/ИМЯ_ПОЛЬЗОВАТЕЛЯ/data/www/ваш-домен</code></pre></div>
-    </li>
-    <li>
-      <h4>Подключите /api через панель</h4>
-      <p>В настройках сайта найдите «Дополнительные директивы nginx» (или «Конфигурационные файлы nginx» у сайта) и добавьте:</p>
-      <div class="codebox"><pre><code>location /api/ {
-  proxy_pass http://127.0.0.1:8000;
-  proxy_set_header Host $host;
-  proxy_set_header X-Real-IP $remote_addr;
-  proxy_set_header X-Forwarded-Proto $scheme;
-  proxy_read_timeout 90s;
-}
-client_max_body_size 25m;
-location / {
-  try_files $uri $uri/ /index.html;
-}</code></pre></div>
-      <p>Сохраните: панель сама проверит и перезагрузит конфигурацию. Если панель пишет, что <code>location /</code> уже есть, уберите последний блок и оставьте только <code>/api/</code>, а открытие внутренних адресов включите в настройках сайта (режим «Обработчик» → «Статика», либо через файл <code>.htaccess</code> из части 2, шаг 3).</p>
-    </li>
-  </ol>
-</section>
-
-<!-- ================= data ================= -->
 <section id="data">
-  <h2>8. Перенос существующих пользователей, переписки и файлов</h2>
-  <p>Шаги выше создают <b>чистый</b> мессенджер без пользователей. Если нужно сохранить уже зарегистрированных людей, их переписку и загруженные файлы, нужны ещё два действия.</p>
-
-  <h3>8.1. Перенос данных базы</h3>
-  <p>В таблицах лежат адреса почты, хеши паролей и сообщения живых людей, поэтому готового файла выгрузки в проекте нет, и класть его туда нельзя: проект уходит в GitHub и в «Скачать код». Вместо файла в проекте есть скрипт <code>deploy/export-data.py</code>. Вы запускаете его сами, а файл с данными появляется только на вашем компьютере или сервере. Переносятся пользователи, чаты, участники, темы, сообщения и реакции. Пароли переносятся в виде хешей, поэтому люди входят с прежними паролями.</p>
-  <div class="warn"><b>Вам понадобится адрес базы на poehali.dev</b>
-    Скрипту нужна строка подключения к текущей базе проекта (секрет <code>DATABASE_URL</code>). Я не вижу значения секретов и не могу его вам передать. Посмотрите его в настройках секретов проекта на poehali.dev. Если там значение недоступно для просмотра, запросите внешний доступ к базе в поддержке: <a href="https://poehali.dev/help" target="_blank" rel="noopener">poehali.dev/help</a>. Без этого адреса выгрузку сделать нельзя.
-  </div>
-
-  <h4>Шаг 1. Сделайте выгрузку на своём компьютере</h4>
-  <p>Нужен Python 3 (python.org). В папке проекта выполните команды. Строку подключения вставьте вместо <code>АДРЕС_БАЗЫ_POEHALI</code>, внутри кавычек:</p>
-  <div class="codebox"><pre><code>pip install psycopg2-binary
-export SOURCE_DATABASE_URL="АДРЕС_БАЗЫ_POEHALI"
+<h2>4. Перенос базы, пользователей и файлов</h2>
+<p>Шаги из раздела 3 создают чистый мессенджер без людей. Чтобы сохранить зарегистрированных пользователей, переписку, группы, опросы, стикеры и запланированные сообщения, нужно перенести данные. Файл выгрузки содержит почты, хеши паролей и сообщения живых людей, поэтому готового файла в проекте нет и быть не должно. Его создаёте вы сами и храните только у себя.</p>
+<div class="warn">Пока идёт перенос, мессенджером никто не должен пользоваться. Всё, что люди напишут на poehali.dev после выгрузки, в новую базу не попадёт. Договоритесь о времени, сделайте выгрузку, загрузите и только потом переключайте людей на новый адрес.</div>
+<ol class="steps">
+<li><b>Сделайте выгрузку на своём компьютере</b>
+<div class="codebox"><pre><code>pip install psycopg2-binary
+export SOURCE_DATABASE_URL=&quot;АДРЕС_БАЗЫ_POEHALI&quot;
 python3 deploy/export-data.py trindelka-data.sql</code></pre></div>
-  <p>В конце скрипт напишет, сколько строк выгружено по каждой таблице. На момент подготовки в базе было: пользователей 11, чатов 16, участников чатов 34, тем 3, сообщений 102, реакций 6. Если цифры у вас сильно меньше, не продолжайте и проверьте адрес базы. Файл <code>trindelka-data.sql</code> создаётся с доступом только для вас и уже внесён в список игнорируемых файлов git, так что случайно в репозиторий он не попадёт.</p>
-  <div class="note"><b>Windows</b>
-    В PowerShell вместо <code>export</code> пишут: <code>$env:SOURCE_DATABASE_URL="АДРЕС_БАЗЫ_POEHALI"</code>, а команду <code>python3</code> заменяют на <code>python</code>. В Git Bash работает вариант выше.
-  </div>
-
-  <h4>Шаг 2. Передайте файл на сервер безопасно</h4>
-  <p>Лучший способ: <b>напрямую с вашего компьютера на сервер по SSH</b>. Файл при этом идёт в зашифрованном виде и нигде по пути не хранится.</p>
-  <div class="codebox"><pre><code>scp trindelka-data.sql root@IP_ВАШЕГО_СЕРВЕРА:/root/trindelka-data.sql</code></pre></div>
-  <p>Если вы работаете с хостингом ISPmanager, вместо <code>root</code> укажите своего пользователя, а загрузить файл можно программой WinSCP или FileZilla по протоколу SFTP (не обычный FTP, он не шифрует).</p>
-  <p>Хуже по надёжности, но допустимо: загрузить через «Менеджер файлов» панели. Тогда загружайте <b>вне папки сайта</b> (в корень аккаунта, не в <code>www</code>), иначе файл можно будет скачать по ссылке.</p>
-  <div class="bad"><b>Так делать нельзя</b>
-    <ul>
-      <li>Отправлять файл по почте, в Telegram, WhatsApp или в чат с ИИ.</li>
-      <li>Класть файл в папку сайта, в <code>public</code> проекта или в репозиторий GitHub.</li>
-      <li>Загружать на файлообменники и общие облачные диски со ссылкой «для всех».</li>
-    </ul>
-  </div>
-
-  <h4>Шаг 3. Загрузите данные в новую базу</h4>
-  <p>Сначала должны быть созданы таблицы (раздел 5, шаг 6) и база должна быть <b>пустой</b>: до этого момента никто не регистрировался. Затем:</p>
-  <div class="codebox"><pre><code>export DATABASE_URL="postgresql://trindelka:ПАРОЛЬ@127.0.0.1:5432/trindelka"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f /root/trindelka-data.sql</code></pre></div>
-  <p>Ключ <code>-1</code> загружает всё одной транзакцией: если что-то пойдёт не так, ничего не загрузится наполовину, и можно спокойно повторить после исправления. Проверьте итог:</p>
-  <div class="codebox"><pre><code>psql "$DATABASE_URL" -c "SELECT (SELECT count(*) FROM t_p64541051_serge_chat_app.users) AS users, (SELECT count(*) FROM t_p64541051_serge_chat_app.chats) AS chats, (SELECT count(*) FROM t_p64541051_serge_chat_app.messages) AS messages;"</code></pre></div>
-  <p>Цифры должны совпасть с тем, что показал скрипт на шаге 1.</p>
-
-  <h4>Шаг 4. Уберите следы</h4>
-  <div class="codebox"><pre><code>shred -u /root/trindelka-data.sql</code></pre></div>
-  <p>Удалите файл и на своём компьютере (<code>trindelka-data.sql</code>) после того, как убедитесь, что всё перенесено и сделана резервная копия новой базы (раздел 10). Если на сервере нет команды <code>shred</code>, используйте <code>rm</code>.</p>
-  <div class="warn"><b>Не давайте пользователям писать, пока идёт перенос</b>
-    Всё, что люди напишут на poehali.dev после выгрузки, в новую базу не попадёт. Договоритесь о времени, когда мессенджер не используется, сделайте выгрузку, загрузите её и только потом переключайте людей на новый адрес.
-  </div>
-
-  <h3>8.2. Перенос файлов (аватары, фото, голосовые, документы)</h3>
-  <p>В базе у файлов сохранены ссылки на хранилище платформы. Скрипт <code>deploy/migrate-files.py</code> скачивает все такие файлы в вашу папку <code>files</code> и заменяет ссылки в базе на ваши. Запускать <b>после</b> загрузки данных (пункт 8.1) и <b>пока проект на poehali.dev ещё не удалён</b>, иначе скачивать будет нечего.</p>
-  <div class="codebox"><pre><code>cd /var/www/trindelka/app
-set -a; . /etc/trindelka.env; set +a
+<p>Нужен Python 3. Адрес базы — это секрет <code>DATABASE_URL</code> проекта на poehali.dev. Если его нельзя посмотреть, запросите внешний доступ к базе в поддержке (poehali.dev/help). В PowerShell вместо <code>export</code> пишут <code>$env:SOURCE_DATABASE_URL="..."</code>, а вместо <code>python3</code> — <code>python</code>.</p><p>Скрипт сам находит схему, сам определяет порядок таблиц по связям и пишет, сколько строк выгружено по каждой таблице. Запомните эти цифры. Таблицы звонков не выгружаются: они временные.</p></li>
+<li><b>Передайте файл на сервер</b>
+<div class="codebox"><pre><code>scp trindelka-data.sql root@IP_ВАШЕГО_СЕРВЕРА:/root/trindelka-data.sql</code></pre></div>
+<p>Только так (по SSH) или через SFTP (WinSCP, FileZilla). Нельзя отправлять файл по почте, в мессенджеры, в чат с ИИ, класть в папку сайта или репозиторий GitHub.</p></li>
+<li><b>Загрузите данные в новую базу</b>
+<div class="codebox"><pre><code>cd /var/www/trindelka/app
+SCHEMA=$(sed -n &#x27;s/^SCHEMA = &quot;\(.*\)&quot;$/\1/p&#x27; backend/chats/index.py)
+export DATABASE_URL=&quot;postgresql://trindelka:ПАРОЛЬ@127.0.0.1:5432/trindelka&quot;
+export PGOPTIONS=&quot;-c search_path=$SCHEMA&quot;
+systemctl stop trindelka
+psql &quot;$DATABASE_URL&quot; -v ON_ERROR_STOP=1 -1 -f /root/trindelka-data.sql
+psql &quot;$DATABASE_URL&quot; -c &quot;SELECT (SELECT count(*) FROM users) AS users, (SELECT count(*) FROM chats) AS chats, (SELECT count(*) FROM messages) AS messages&quot;</code></pre></div>
+<p>Ключ <code>-1</code> загружает всё одной транзакцией: если что-то пойдёт не так, ничего не загрузится наполовину, и можно спокойно повторить. Цифры должны совпасть с выгрузкой. База перед загрузкой должна быть пустой, то есть до этого никто не регистрировался.</p></li>
+<li><b>Перенесите файлы (аватары, фото, документы, стикеры)</b>
+<div class="codebox"><pre><code>set -a; . /etc/trindelka.env; set +a
 /var/www/trindelka/venv/bin/python deploy/migrate-files.py
-chown -R www-data:www-data /var/www/trindelka/files</code></pre></div>
-  <p>В конце скрипт напишет, сколько файлов перенесено и сколько не удалось. Если часть не скачалась, запустите ещё раз: уже перенесённые повторно обрабатываться не будут.</p>
-  <div class="note"><b>На хостинге ISPmanager (сценарий А)</b>
-    Команды те же, только вместо <code>/etc/trindelka.env</code> укажите <code>~/trindelka-app/deploy/.env</code>, а вместо <code>/var/www/trindelka/venv/bin/python</code> — <code>~/trindelka-app/venv/bin/python</code>. Если на хостинге нет SSH, этот шаг нужно делать с любого компьютера с Python, указав адрес базы, к которой разрешён внешний доступ.
-  </div>
+chown -R www-data:www-data /var/www/trindelka/files
+systemctl start trindelka</code></pre></div>
+<p>В базе у файлов остались ссылки на хранилище платформы. Скрипт скачивает все такие файлы в вашу папку и заменяет ссылки в базе: в аватарах, фото, свои стикеры, фонах чатов и запланированных сообщениях. Запускать нужно, пока проект на poehali.dev ещё не удалён. Если часть файлов не скачалась, запустите ещё раз: уже скачанные пропускаются.</p></li>
+<li><b>Уберите следы</b>
+<div class="codebox"><pre><code>shred -u /root/trindelka-data.sql</code></pre></div>
+<p>Удалите файл и на своём компьютере после того, как убедились, что всё перенесено и сделана резервная копия новой базы.</p></li>
+</ol>
+<div class="note"><b>Что заметят люди</b>Сайт теперь на другом адресе, поэтому браузер не помнит вход: людям придётся один раз войти заново с тем же паролем. Подписки на уведомления привязаны к старому адресу, их нужно включить заново: Профиль → Уведомления.</div>
+</section>
+
+<section id="secrets">
+<h2>5. Перенос секретов</h2>
+<p>Секреты проекта на poehali.dev на ваш сервер сами не переезжают. Их значения я прочитать не могу, поэтому откройте настройки секретов проекта и по таблице перепишите нужные в файл <code>/etc/trindelka.env</code> (по одной строке вида <code>ИМЯ=значение</code>). После правки выполните <code>systemctl restart trindelka</code>.</p>
+<div class="table-wrap"><table><tr><th>Секрет на poehali.dev</th><th>Имя в <code>/etc/trindelka.env</code></th><th>Переносить значение как есть?</th></tr><tr><td><code>DATABASE_URL</code></td><td><code>DATABASE_URL</code></td><td>Нет, свой: адрес вашей новой базы. Старый нужен только один раз для выгрузки</td></tr><tr><td><code>MAIN_DB_SCHEMA</code></td><td>не нужен</td><td>Имя схемы берётся из кода</td></tr><tr><td><code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code></td><td>не нужны</td><td>Файлы лежат в папке на сервере (<code>LOCAL_STORAGE_DIR</code>). Ключи пригодятся только для скачивания файлов старым скриптом, а он ходит по публичным ссылкам</td></tr><tr><td><code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASSWORD</code>, <code>SMTP_FROM_EMAIL</code></td><td>то же имя</td><td>Да, можно взять те же</td></tr><tr><td><code>PUBLIC_SITE_URL</code></td><td>то же имя</td><td>Нет: впишите новый адрес сайта с https://</td></tr><tr><td><code>OPENAI_API_KEY</code></td><td>то же имя</td><td>Да. Нужен только для расшифровки голосовых. С российских серверов доступ к OpenAI может быть закрыт</td></tr><tr><td><code>KLIPY_API_KEY</code></td><td>то же имя</td><td>Да. Нужен для живого поиска GIF. Без него работают встроенные GIF</td></tr><tr><td><code>FIREBASE_SERVICE_ACCOUNT</code></td><td>то же имя</td><td>Да, весь JSON одной строкой без переносов. Нужен для уведомлений в Android-приложении</td></tr></table></div>
+<h3>Новые переменные, которых не было на платформе</h3>
+<div class="table-wrap"><table><tr><th>Переменная</th><th>Что в ней</th></tr><tr><td><code>LOCAL_STORAGE_DIR</code></td><td>Папка для файлов: <code>/var/www/trindelka/files</code></td></tr><tr><td><code>PUBLIC_FILES_URL</code></td><td>Публичный адрес этой папки: <code>https://ваш-домен/files</code></td></tr><tr><td><code>SEND_MESSAGE_URL</code></td><td>Внутренний адрес отправки сообщений: <code>http://127.0.0.1:8000/api/send-message</code>. Через него функции будят отправку запланированных сообщений</td></tr><tr><td><code>PUSH_CONTACT</code></td><td>Ваша почта для связи в уведомлениях (необязательно)</td></tr><tr><td><code>TURN_URL</code>, <code>TURN_USER</code>, <code>TURN_PASSWORD</code></td><td>Свой TURN-сервер для звонков (необязательно, см. раздел 7)</td></tr></table></div>
+<div class="warn">Файл <code>/etc/trindelka.env</code> хранит все пароли. Права на него — 600, не копируйте его в папку сайта и в GitHub. Ключ Firebase даёт полный доступ к отправке уведомлений от вашего имени: никому его не отправляйте, а если он утёк, удалите ключ в консоли Firebase и создайте новый.</div>
 </section>
 
 <section id="check">
-  <h2>9. Проверка после запуска</h2>
-  <p>Пройдите по списку на новом адресе. Лучше с телефона и с компьютера.</p>
-  <ol>
-    <li><code>https://ваш-домен/api/health</code> показывает <code>status: ok</code>.</li>
-    <li>Главная страница открывается, виден экран входа, замок в адресной строке закрыт.</li>
-    <li>Регистрация нового аккаунта проходит, вход работает.</li>
-    <li>«Забыли пароль?» присылает письмо, а ссылка из письма открывает форму нового пароля (проверяет и SMTP, и открытие адреса <code>/reset-password</code>).</li>
-    <li>Через поиск находится второй аккаунт, создаётся чат, сообщения уходят в обе стороны.</li>
-    <li>Смена фото профиля работает, аватар виден после обновления страницы (проверяет папку файлов и <code>PUBLIC_FILES_URL</code>).</li>
-    <li>Отправка фото и документа работает.</li>
-    <li>Кнопка «Переслать» открывает список чатов и пересылает сообщение.</li>
-    <li>Профиль → «Оформление» меняет тему, а профиль → «Приватность» сохраняет переключатели после обновления страницы.</li>
-  </ol>
-  <div class="ok"><b>Все пункты прошли</b> — можно показывать людям. Старые ссылки на poehali.dev не отключайте, пока не убедитесь, что всё перенесено.</div>
+<h2>6. Проверка после запуска</h2>
+<p>Пройдите по списку на новом адресе, лучше с телефона и с компьютера.</p>
+<ul>
+<li><code>https://ваш-домен/api/health</code> показывает <code>status: ok</code>.</li>
+<li>Главная страница открывается, замок в адресной строке закрыт. Любой несуществующий адрес показывает страницу «не найдено».</li>
+<li>Регистрация нового аккаунта и вход работают. Мессенджер открывается по адресу <code>/app</code>.</li>
+<li>«Забыли пароль?» присылает письмо, а ссылка из письма открывает форму нового пароля (проверяет SMTP и адрес <code>/reset-password</code>).</li>
+<li>Через поиск находится второй аккаунт, создаётся чат, сообщения уходят в обе стороны.</li>
+<li>Смена фото профиля работает и аватар виден после обновления страницы (проверяет папку файлов и <code>PUBLIC_FILES_URL</code>).</li>
+<li>Фото и документ отправляются. Свой набор стикеров создаётся и стикеры отправляются.</li>
+<li>Сообщение, запланированное на 2–3 минуты вперёд, приходит само (проверяет минутный таймер).</li>
+<li>Опрос создаётся, закрепляется сверху, пересылается в другую группу, ссылка на него открывается.</li>
+<li>Тихие часы сохраняются после обновления страницы.</li>
+</ul>
+<p>Старые ссылки на poehali.dev не отключайте, пока не убедитесь, что всё перенесено.</p>
 </section>
 
 <section id="update">
-  <h2>10. Обновление сайта и резервные копии</h2>
-  <h3>Как обновить после новых правок (VPS)</h3>
-  <p>Скрипт замены адресов меняет файлы проекта, поэтому перед обновлением его следы нужно откатить:</p>
-  <div class="codebox"><pre><code>cd /var/www/trindelka/app
-git checkout -- src index.html
+<h2>7. Обновление и резервные копии</h2>
+<h3>Как обновить после новых правок</h3>
+<div class="codebox"><pre><code>cd /var/www/trindelka/app
+git checkout -- src/platform
 git pull
-sh deploy/replace-api-urls.sh /api
-npm ci
-npm run build
-systemctl restart trindelka</code></pre></div>
-  <p>Если менялись файлы таблиц, примените только новые файлы из <code>db_migrations</code> (с номером больше последнего применённого) командой <code>psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db_migrations/ИМЯ_ФАЙЛА.sql</code>.</p>
-
-  <h3>Резервная копия базы каждую ночь (VPS)</h3>
-  <div class="codebox"><pre><code>mkdir -p /var/backups/trindelka
-crontab -l 2&gt;/dev/null | { cat; echo '30 3 * * * sudo -u postgres pg_dump trindelka | gzip &gt; /var/backups/trindelka/db-$(date +\%F).sql.gz &amp;&amp; find /var/backups/trindelka -name "db-*.sql.gz" -mtime +14 -delete'; } | crontab -</code></pre></div>
-  <p>Копии хранятся 14 дней. Также периодически копируйте на другой компьютер или в облако папки <code>/var/backups/trindelka</code> и <code>/var/www/trindelka/files</code>: копия на том же сервере не спасёт при его потере.</p>
-  <p>На хостинге ISPmanager резервные копии базы и файлов включаются в разделе «Резервные копии» панели или у хостера.</p>
+sh deploy/prepare-selfhost.sh
+npm install
+VITE_API_BASE=/api npm run build
+systemctl restart trindelka trindelka-web</code></pre></div>
+<p>Если появились новые файлы в <code>db_migrations</code> (номер больше последнего применённого), примените только их тем же способом: <code>export PGOPTIONS="-c search_path=$SCHEMA"</code>, затем <code>psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db_migrations/ИМЯ_ФАЙЛА.sql</code>. Имя схемы возьмите командой из раздела 3, шаг 5.</p>
+<h3>Ночная резервная копия</h3>
+<p>Таймер <code>trindelka-backup.timer</code>, который вы включили в разделе 3, каждую ночь около 03:30 сохраняет базу и папку файлов в <code>/var/backups/trindelka</code> и хранит копии 14 дней. Запуск вручную: <code>sh /var/www/trindelka/app/deploy/backup.sh</code>. Если задать в <code>/etc/trindelka.env</code> переменную <code>BACKUP_PASSPHRASE</code>, копия шифруется, и вместе с ней сохраняется файл настроек. Если задать <code>BACKUP_REMOTE</code> (например, <code>user@другой-сервер:/backups/</code>), копия уходит на другой сервер.</p>
+<h3>Восстановление</h3>
+<div class="codebox"><pre><code>systemctl stop trindelka
+sh /var/www/trindelka/app/deploy/restore.sh /var/backups/trindelka/trindelka-ДАТА.tar
+systemctl start trindelka</code></pre></div>
+<div class="warn">Копия на том же сервере не спасёт при его потере. Периодически копируйте <code>/var/backups/trindelka</code> на другой компьютер или в облако.</div>
 </section>
 
-<section id="apk">
-  <h2>Приложение для Android (APK)</h2>
-  <p>Проект подготовлен к сборке Android-приложения «Трынделка» (пакет <code>ru.trindelka.messenger</code>). Приложение показывает тот же мессенджер внутри оболочки Android и работает через интернет с вашим сервером. Готовый APK-файл собрать в среде poehali.dev нельзя: там нет Android SDK. Файл собирается у вас на компьютере за 10–20 минут.</p>
-  <div class="note"><b>Куда будет обращаться приложение</b>
-    По умолчанию в код зашиты адреса функций poehali.dev. Если вы уже перенесли проект на свой сервер, перед сборкой замените адреса на свой домен (шаг 2). Приложению нужен именно полный адрес с https://, а не короткий <code>/api</code>.
-  </div>
-  <ol class="steps">
-    <li><h4>Установите программы</h4>
-      <p>Node.js 20+ (nodejs.org), Git и Android Studio (developer.android.com/studio). При первом запуске Android Studio сама скачает Android SDK и нужную версию Java.</p></li>
-    <li><h4>Подготовьте проект</h4>
-      <p>Скачайте код проекта (раздел 4) и в папке проекта выполните. Первую строку выполняйте только если у вас свой сервер, подставив свой домен:</p>
-      <div class="codebox"><pre><code>sh deploy/replace-api-urls.sh https://ВАШ_ДОМЕН/api
-npm ci
-npm run android:sync</code></pre></div>
-      <p>Последняя команда собирает сайт и копирует его в папку <code>android</code>.</p></li>
-    <li><h4>Соберите APK</h4>
-      <p>Вариант А, через Android Studio: откройте папку <code>android</code> (File → Open), дождитесь окончания синхронизации и выберите Build → Build Bundle(s) / APK(s) → Build APK(s). Файл появится в <code>android/app/build/outputs/apk/debug/app-debug.apk</code>.</p>
-      <p>Вариант Б, командой (нужны установленные Android Studio и Java 17):</p>
-      <div class="codebox"><pre><code>npm run android:apk</code></pre></div></li>
-    <li><h4>Установите на телефон</h4>
-      <p>Передайте <code>app-debug.apk</code> на телефон кабелем или через облако, откройте его и разрешите установку из неизвестных источников. Это отладочная сборка: она работает как обычное приложение, но не подходит для Google Play и RuStore.</p></li>
-    <li><h4>Для публикации в магазинах</h4>
-      <p>В Android Studio: Build → Generate Signed Bundle / APK. Создайте ключ подписи и <b>сохраните файл ключа и пароль в надёжном месте</b>: без них нельзя будет выпускать обновления. RuStore принимает APK, Google Play требует формат AAB (в том же меню).</p></li>
-  </ol>
-  <div class="warn"><b>Что не проверено</b>
-    Сборку APK я здесь запустить не мог, поэтому приложение на реальном телефоне не проверялось. Проект Android создан штатными средствами Capacitor, иконка и разрешения (интернет, микрофон, камера) настроены. Вероятные места доработки: запись видеокружков и голосовых в оболочке Android, и ссылка из письма «Забыли пароль», которая откроет сайт в браузере, а не в приложении. Для писем задайте адрес сайта в настройке <code>PUBLIC_SITE_URL</code>.
-  </div>
+<section id="push">
+<h2>8. Уведомления, звонки и Firebase</h2>
+<h3>Уведомления в браузере</h3>
+<p>Ключи для уведомлений сервер создаёт сам при первом запуске и хранит в таблице <code>app_settings</code>. Если вы переносили базу выгрузкой, они переехали вместе с ней. Включает уведомления каждый человек сам: Профиль → Уведомления → «Уведомления на устройстве». На iPhone сначала нужно добавить сайт на экран «Домой» и открыть его оттуда (iOS 16.4 и новее). Серверу нужен выход в интернет на порт 443.</p>
+<p>В «Тихих часах» (там же) уведомления приходят без звука и вибрации. Время считается по часам телефона или компьютера человека.</p>
+<h3>Звонки</h3>
+<p>Личные звонки (голос и видео) и групповые идут напрямую между участниками, сервер только соединяет их. Обычно хватает бесплатных серверов Google. Если у кого-то строгий роутер или мобильная сеть с закрытыми соединениями, звонок может не соединиться: тогда нужен свой TURN-сервер (например, coturn на VPS). Впишите в <code>/etc/trindelka.env</code>:</p>
+<div class="codebox"><pre><code>TURN_URL=turn:ваш-домен:3478,turns:ваш-домен:5349
+TURN_USER=логин
+TURN_PASSWORD=пароль</code></pre></div>
+<h3>Firebase и Android</h3>
+<p>Уведомления в Android-приложении идут через Firebase. Нужно создать бесплатный проект на console.firebase.google.com, добавить Android-приложение с именем пакета <code>ru.trindelka.messenger</code>, затем в «Настройки проекта → Сервисные аккаунты» создать закрытый ключ и вставить весь JSON одной строкой в <code>FIREBASE_SERVICE_ACCOUNT</code>.</p>
+<div class="warn"><b>Android-приложение</b>При переходе на новый движок сайта папка с проектом Android-приложения (<code>android</code>) и настройка Capacitor из проекта пропали, поэтому собрать новый APK по этому проекту сейчас нельзя. Серверная часть для уведомлений Android готова и работает, если у вас остался прежний APK. Если нужно приложение, скажите, и я восстановлю сборку Android.</div>
 </section>
 
 <section id="features">
-  <h2>Уведомления, звонки, GIF и вставка файлов на своём сервере</h2>
-  <p>Эти функции работают из коробки на poehali.dev. При переносе на свой сервер нужно учесть несколько условий.</p>
-
-  <h3>Обязательно: только по HTTPS</h3>
-  <p>Уведомления при закрытом приложении и звонки (микрофон и камера) браузер разрешает <b>только на сайте с https://</b>. Без сертификата (часть 1, шаг 12) они не заработают. Исключение — адрес <code>localhost</code> для проверки.</p>
-
-  <h3>Уведомления при закрытом приложении</h3>
-  <ul>
-    <li>Ключи для уведомлений сервер создаёт сам при первом запуске и хранит в базе (таблица <code>app_settings</code>). Ничего вручную настраивать не нужно. Если вы переносите базу выгрузкой, ключи переедут вместе с ней, и устройства, уже подписанные на уведомления, продолжат получать их.</li>
-    <li>В <code>/etc/trindelka.env</code> можно указать <code>PUSH_CONTACT</code> — вашу почту для связи (необязательно, по умолчанию берётся <code>SMTP_FROM_EMAIL</code>).</li>
-    <li>Файл <code>sw.js</code> должен лежать в корне сайта и отдаваться без кеширования. В готовом <code>deploy/nginx.conf</code> это уже сделано. На хостинге ISPmanager он попадёт в корень вместе с содержимым <code>dist</code> (файл берётся из папки <code>public</code>).</li>
-    <li>Включать уведомления каждый пользователь должен сам: Профиль → Уведомления → «Уведомления на устройстве». Для каждого чата там же есть свой переключатель.</li>
-    <li><b>iPhone:</b> уведомления работают только если добавить сайт на экран «Домой» (Поделиться → На экран «Домой») и открыть его оттуда. Нужна iOS 16.4 или новее.</li>
-    <li><b>Приложение APK:</b> уведомления через браузерный механизм в нём не работают. Для APK нужна отдельная настройка Firebase (Google), она не входит в этот перенос.</li>
-    <li>Серверу нужен выход в интернет на порт 443: уведомления уходят через серверы Google, Mozilla и Apple. Из России доступность этих серверов может быть нестабильной, это зависит от вашего провайдера.</li>
-  </ul>
-
-  <h3>Звонки</h3>
-  <ul>
-    <li>Звонки идут напрямую между телефонами или компьютерами, сервер только соединяет собеседников. Работают в личных чатах между двумя людьми (в группах недоступны).</li>
-    <li>В большинстве случаев хватает бесплатных серверов Google для соединения. Но если у кого-то строгий роутер, корпоративная сеть или мобильный интернет с закрытыми соединениями, звонок может не соединиться. Для таких случаев нужен собственный TURN-сервер, например <b>coturn</b> на VPS. Когда он у вас будет, впишите в <code>/etc/trindelka.env</code> адреса и данные доступа:</li>
-  </ul>
-  <div class="codebox"><pre><code>TURN_URL=turn:ваш-домен:3478,turns:ваш-домен:5349
-TURN_USER=логин
-TURN_PASSWORD=пароль</code></pre></div>
-  <ul>
-    <li>После изменения файла настроек перезапустите службу: <code>systemctl restart trindelka</code>.</li>
-    <li>Звонки и уведомления используют ту же серверную часть (<code>/api/push</code>), поэтому отдельных служб добавлять не нужно. Новые таблицы создаются файлами <code>V0015</code> и <code>V0016</code> из папки <code>db_migrations</code>: примените их вместе с остальными (команда из части 1, шаг 6, уже подхватывает все файлы).</li>
-  </ul>
-
-  <h3>GIF и вставка файлов</h3>
-  <ul>
-    <li>Готовые GIF лежат в папке <code>public/gifs</code> и попадают на сайт вместе со сборкой. Внешние сервисы не нужны.</li>
-    <li>Файл можно вставить из буфера обмена (Ctrl+V в поле сообщения, в том числе скопированный снимок экрана) или перетащить в окно чата. Лимит 8 МБ на файл, как и раньше.</li>
-  </ul>
-</section>
-
-<section id="firebase">
-  <h2>Firebase: уведомления в Android-приложении</h2>
-  <p>Чтобы сообщения и звонки приходили в приложение, пока оно закрыто, нужен бесплатный проект Firebase (сервис Google). Нужно один раз сделать три вещи: создать проект, положить в приложение один файл и передать серверу один ключ. Платить ничего не нужно.</p>
-  <div class="warn"><b>Нужен аккаунт Google</b> Любой обычный адрес gmail.com. Используйте тот, к которому у вас всегда будет доступ: на него записывается проект.</div>
-
-  <ol class="steps">
-    <li><h4>Создайте проект Firebase</h4>
-      <p>Откройте <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> → «Создать проект» (Add project) → введите название, например <b>Trindelka</b> → отключите Google Analytics (он не нужен) → «Создать проект».</p></li>
-    <li><h4>Добавьте Android-приложение</h4>
-      <p>На главной странице проекта нажмите значок Android. Заполните:</p>
-      <ul>
-        <li><b>Имя пакета Android</b>: <code>ru.trindelka.messenger</code> (вводите точно так, без пробелов и с маленькими буквами)</li>
-        <li>Псевдоним: «Трынделка» (необязательно)</li>
-        <li>SHA-1 оставьте пустым</li>
-      </ul>
-      <p>Нажмите «Зарегистрировать приложение».</p></li>
-    <li><h4>Скачайте файл google-services.json</h4>
-      <p>На следующем шаге нажмите «Скачать google-services.json» и положите этот файл в папку проекта <code>android/app/</code> (рядом с файлом <code>build.gradle</code>). Остальные шаги в Firebase («Добавьте SDK», «Запустите приложение») пропускайте: всё уже настроено в проекте, просто нажимайте «Далее» и «Перейти к консоли».</p>
-      <div class="note"><b>Этот файл не секретный, но не выкладывайте его в общий репозиторий</b> без необходимости: в проекте он уже добавлен в список игнорируемых файлов.</div></li>
-    <li><h4>Получите ключ для сервера</h4>
-      <p>В Firebase: значок шестерёнки рядом с «Обзор проекта» → «Настройки проекта» → вкладка <b>«Сервисные аккаунты»</b> → кнопка <b>«Создать новый закрытый ключ»</b> → «Создать ключ». Скачается файл с расширением <code>.json</code>.</p>
-      <p>Откройте его в обычном Блокноте, скопируйте <b>весь</b> текст (от первой фигурной скобки до последней) и вставьте в секрет проекта <code>FIREBASE_SERVICE_ACCOUNT</code> (окно с полем ввода уже показано в чате poehali.dev).</p>
-      <div class="bad"><b>Этот файл даёт полный доступ к отправке уведомлений от вашего имени.</b> Никому его не отправляйте, не выкладывайте в GitHub и не присылайте в мессенджеры. Если файл утёк, в тех же «Сервисных аккаунтах» удалите ключ и создайте новый.</div>
-      <p>На своём сервере (не poehali.dev) вставьте тот же текст одной строкой в <code>/etc/trindelka.env</code>: <code>FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}</code>. Строка должна быть без переносов. Проще всего открыть файл в Блокноте, убрать переносы строк и вставить.</p></li>
-    <li><h4>Включите API отправки уведомлений</h4>
-      <p>Обычно он уже включён. Если уведомления не приходят, откройте <a href="https://console.cloud.google.com/apis/library/fcm.googleapis.com" target="_blank" rel="noopener">страницу Firebase Cloud Messaging API</a>, выберите свой проект сверху и нажмите «Включить» (Enable).</p></li>
-    <li><h4>Пересоберите приложение</h4>
-      <p>После добавления файла выполните сборку заново по разделу «Приложение для Android» (<code>npm run android:sync</code>, затем сборка APK). Без пересборки приложение продолжит работать, но уведомления не придут.</p></li>
-    <li><h4>Включите уведомления в приложении</h4>
-      <p>Установите новый APK, войдите, откройте «Профиль» → «Уведомления» и включите «Уведомления на устройстве». Телефон спросит разрешение (Android 13 и новее): нажмите «Разрешить». Закройте приложение и отправьте себе сообщение с другого аккаунта.</p></li>
-  </ol>
-
-  <div class="note"><b>Как это работает</b>
-    Приложение при входе получает от Google уникальный адрес телефона и отправляет его на сервер. Когда приходит сообщение или звонок, сервер просит Google доставить уведомление на этот адрес. Для звонков создан отдельный канал с высоким приоритетом: уведомление выскакивает сверху и вибрирует.
-  </div>
-  <div class="warn"><b>Ограничения</b>
-    <ul>
-      <li>На телефонах без сервисов Google (например, часть Huawei) уведомления через Firebase не работают.</li>
-      <li>Некоторые производители (Xiaomi, Huawei, Oppo, Samsung) агрессивно закрывают фоновые приложения. Если уведомления приходят с задержкой, в настройках телефона разрешите приложению «Трынделка» работу в фоне и автозапуск.</li>
-      <li>Входящий звонок при закрытом приложении приходит как обычное уведомление с кнопкой нажатия. Полноэкранный «звонок как в телефоне» на заблокированном экране не делался: он требует отдельной доработки.</li>
-      <li>Я не мог проверить это на настоящем телефоне и аккаунте Firebase. Отправка на сервере проверена на тестовом сервере Google с проверкой подписи, а само приложение нужно пройти руками.</li>
-    </ul>
-  </div>
-</section>
-
-<section id="more">
-  <h2>Группы, поиск GIF, смайлы, галочки, сессии</h2>
-
-  <h3>Групповые звонки</h3>
-  <ul>
-    <li>В любой группе в шапке есть кнопки группового звонка и видеозвонка. Звонок можно начать, пока никто другой его не начал; остальные участники видят в чате полосу «Идёт звонок · Присоединиться» и получают уведомление.</li>
-    <li>Одновременно в звонке могут быть до <b>6 человек</b>: при больше качество резко падает, потому что каждый телефон отправляет видео каждому. Седьмой участник увидит сообщение, что мест нет.</li>
-    <li>Звонок идёт напрямую между устройствами. Если у людей строгая сеть или мобильный интернет с закрытыми соединениями, часть людей может не слышать друг друга. Для этого нужен собственный TURN-сервер (раздел про звонки выше), в группах он важнее, чем в звонках один на один.</li>
-    <li>Когда выходит последний участник, в чате остаётся запись: «Групповой звонок · длительность · участников: N».</li>
-    <li>На слабых телефонах групповой видеозвонок на 5–6 человек будет греть устройство и тормозить. Для больших групп лучше голосовой звонок.</li>
-  </ul>
-
-  <h3>Живой поиск GIF</h3>
-  <p>В окне выбора на вкладке GIF поиск идёт по большой библиотеке сервиса KLIPY. Для работы нужен бесплатный ключ:</p>
-  <ol>
-    <li>Откройте <a href="https://partner.klipy.com/" target="_blank" rel="noopener">partner.klipy.com</a> и зарегистрируйтесь.</li>
-    <li>В разделе «API Keys» создайте платформу (название любое, например «Трынделка») и скопируйте ключ.</li>
-    <li>Вставьте его в секрет <code>KLIPY_API_KEY</code>. На своём сервере: строка <code>KLIPY_API_KEY=ваш_ключ</code> в <code>/etc/trindelka.env</code>.</li>
-  </ol>
-  <div class="warn"><b>Тестовый режим</b>
-    Пока ключ в тестовом режиме, работает до 100 запросов в час на весь мессенджер, этого мало для живых людей. В том же кабинете запросите «Production access»: тогда лимит снимается. Правила сервиса также требуют показывать надпись KLIPY рядом с GIF. Она уже есть под списком результатов.
-    Если ключ не указан или не принят, в окне остаются 12 встроенных GIF, ничего не ломается.
-  </div>
-
-  <h3>Смайлы ICQ</h3>
-  <p>Вкладка «ICQ» в окне смайлов: 23 классических смайла в стиле старых мессенджеров. Они нарисованы заново (оригинальные картинки ICQ защищены авторским правом, поэтому в проект не включены). Коды вроде <code>:-)</code>, <code>;)</code>, <code>:-D</code>, <code>:-P</code>, <code>8-)</code>, <code>XD</code>, <code>&lt;3</code> превращаются в смайл прямо в сообщении, если стоят отдельно, между пробелами или перед знаком препинания. В ссылках и времени (10:30) ничего не заменяется.</p>
-
-  <h3>Галочки доставки и прочтения</h3>
-  <ul>
-    <li>Одна серая галочка: сообщение отправлено. Две серые: собеседник был в сети после отправки. Две фиолетовые: прочитано.</li>
-    <li>В группах рядом с галочками число «прочитали/всего», например <b>2/5</b>. Если подержать курсор на галочках (или нажать), появится подсказка «Прочитали 2 из 5».</li>
-    <li>Участники, у которых в «Приватность» отключены отметки о прочтении, в подсчёт не входят и сами тоже не видят чужих отметок. Это общее правило мессенджера.</li>
-    <li>В группе показывается только число прочитавших. Списка «кто именно прочитал» нет.</li>
-  </ul>
-
-  <h3>Сохранение входа на 6 месяцев</h3>
-  <ul>
-    <li>После входа или регистрации человек остаётся авторизованным <b>6 месяцев</b>. Даже если закрыть браузер или приложение, вход не потребуется.</li>
-    <li>По истечении срока все запросы к серверу отвечают, что сеанс завершён. Приложение само закрывает вход и показывает экран входа с пояснением «прошло больше 6 месяцев».</li>
-    <li>Срок считается с последнего <b>входа по паролю</b>, а не с последнего захода в приложение. Тот, кто заходит каждый день, всё равно должен будет ввести пароль раз в полгода.</li>
-    <li>Тех, кто уже был в мессенджере до этого обновления, срок посчитан от дня обновления: они должны будут войти заново через 6 месяцев после него.</li>
-    <li>После смены пароля по ссылке из письма сеанс продлевается на новые 6 месяцев, а старые сеансы на других устройствах закрываются.</li>
-  </ul>
-  <div class="note"><b>Один аккаунт, один сеанс</b> Как и раньше, вход с нового устройства закрывает прошлый сеанс на старом. Это поведение я не менял.</div>
-
-  <h3>Что нужно сделать на своём сервере для этих функций</h3>
-  <ul>
-    <li>Применить новые файлы базы <code>V0017</code> (она добавляет таблицы звонков, токенов устройств и срок сеанса). Команда из части 1, шаг 6, подхватывает их автоматически.</li>
-    <li>Добавить в <code>/etc/trindelka.env</code> строки <code>KLIPY_API_KEY</code> и <code>FIREBASE_SERVICE_ACCOUNT</code> (см. выше), затем перезапустить службу: <code>systemctl restart trindelka</code>.</li>
-    <li>Обновить зависимости серверной части: <code>/var/www/trindelka/venv/bin/pip install -r /var/www/trindelka/app/deploy/requirements.txt</code>.</li>
-  </ul>
-</section>
-
-<section id="groups2">
-  <h2>Управление группами, фоны чатов, «кто прочитал», звонок на весь экран</h2>
-
-  <h3>Роли в группе</h3>
-  <div class="table-wrap"><table>
-    <tr><th>Что можно</th><th>Владелец</th><th>Администратор</th><th>Участник</th></tr>
-    <tr><td>Менять название, описание и фото группы</td><td>да</td><td>да</td><td>нет</td></tr>
-    <tr><td>Добавлять людей и ботов</td><td>да</td><td>да</td><td>нет</td></tr>
-    <tr><td>Удалять участников</td><td>да</td><td>только обычных участников</td><td>нет</td></tr>
-    <tr><td>Назначать и снимать администраторов</td><td>да</td><td>нет</td><td>нет</td></tr>
-    <tr><td>Передать группу другому человеку</td><td>да</td><td>нет</td><td>нет</td></tr>
-    <tr><td>Выйти из группы</td><td>да</td><td>да</td><td>да</td></tr>
-  </table></div>
-  <ul>
-    <li>Окно открывается кнопкой «Участники» в шапке группы. Вкладка «О группе»: фото, название, описание, кнопка «Покинуть группу». У каждого участника справа значок с действиями (видны владельцу).</li>
-    <li>Владелец всегда один. При передаче бывший владелец становится администратором.</li>
-    <li>Если владелец выходит из группы, права получает старший администратор, а если их нет, то самый давний участник.</li>
-    <li><b>Группы, созданные раньше этого обновления:</b> владельцем стал тот, кто вошёл в группу первым. Поменять это можно только передачей прав самим владельцем.</li>
-    <li>Фото группы: JPG, PNG или WebP до 3 МБ. Оно показывается в списке чатов и в шапке.</li>
-  </ul>
-
-  <h3>Фон чата</h3>
-  <ul>
-    <li>Кнопка с палитрой в шапке любого личного или группового чата. 14 готовых шаблонов (градиенты, узоры, светлые и тёмные), 10 однотонных цветов и своё фото (JPG, PNG, WebP до 5 МБ).</li>
-    <li><b>Фон личный.</b> Его видите только вы: у собеседника или других участников группы свой фон и они выбирают его сами. Это работает и в группе.</li>
-    <li>Текст и пузыри чужих сообщений сами подстраиваются под светлый или тёмный фон, чтобы читалось. На свои фото сообщения остаются читаемыми, но очень пёстрые снимки лучше не брать.</li>
-    <li>Фон хранится на сервере и подтягивается на всех ваших устройствах. Для своих фото нужна настроенная папка файлов (раздел «Перенос файлов»).</li>
-  </ul>
-
-  <h3>Кто прочитал сообщение</h3>
-  <ul>
-    <li>В группе нажмите на значок галочек со счётчиком под своим сообщением (например, <b>2/5</b>). Откроется список: кто прочитал, кто ещё нет.</li>
-    <li>Участники, отключившие «Отметки о прочтении» в приватности, вынесены в отдельную строку «Скрыли отметки»: неизвестно, видели ли они сообщение.</li>
-    <li>Список видит только автор сообщения.</li>
-  </ul>
-
-  <h3>Стандартный набор GIF</h3>
-  <p>К прежним 12 GIF добавлено 32 анимированных эмодзи (реакции, эмоции, настроение, любовь и праздники). Они лежат в папке <code>public/gifs/std</code> и работают без внешних сервисов и ключей. Это анимированные эмодзи Google Noto, их лицензия разрешает свободное использование в проекте (Apache 2.0).</p>
-
-  <h3>Входящий звонок на весь экран в Android-приложении</h3>
-  <p>Когда приложение закрыто, а телефон заблокирован, входящий звонок включает экран и открывается как обычный вызов: имя звонящего, кнопки «Принять» и «Отклонить», рингтон и вибрация. Это работает только в собранном APK, в браузере и на iPhone остаётся обычное уведомление.</p>
-  <ol>
-    <li>Всё, что нужно, уже настроено в проекте (нативный код в папке <code>android/app/src/main/java/ru/trindelka/messenger</code>). Дополнительных ключей не нужно, достаточно Firebase из предыдущего раздела.</li>
-    <li>Пересоберите приложение: <code>npm run android:sync</code>, затем сборка APK. Установите новую версию поверх старой.</li>
-    <li>Откройте приложение, войдите и в «Профиль → Уведомления» включите «Уведомления на устройстве». Телефон спросит разрешение на уведомления: нажмите «Разрешить».</li>
-    <li><b>Android 14 и новее:</b> разрешение «звонки на весь экран» нужно дать отдельно. Если оно не выдано, в том же экране «Уведомления» появится строка «Звонки на весь экран» с кнопкой «Разрешить». Без него звонок придёт как обычное всплывающее уведомление с кнопками.</li>
-    <li>Если звонящий отменил вызов или вы не успели ответить, уведомление исчезает само. Кнопка «Отклонить» завершает звонок сразу, даже не открывая приложение.</li>
-  </ol>
-  <div class="warn"><b>Что я не мог проверить</b>
-    Нативный код Android я написал, но не смог собрать и запустить: в среде нет Android SDK. Синтаксис проверен, а поведение на экране блокировки у разных производителей (Xiaomi, Huawei, Samsung, Oppo) отличается, там часто нужно отдельно разрешить показ поверх экрана блокировки и работу в фоне. Проверьте на своём телефоне и, если звонок не открывается на весь экран, напишите, на какой модели.
-  </div>
-</section>
-
-<section id="backup">
-  <h2>Ночное резервное копирование и восстановление</h2>
-  <p>На своём сервере (часть 1 инструкции) каждую ночь в 03:30 делается копия: вся база (пользователи, чаты, сообщения, опросы) и все загруженные файлы (аватары, фото, голосовые). Старше 14 дней копии удаляются сами. На poehali.dev резервные копии делает платформа, этот раздел только для вашего сервера.</p>
-
-  <h3>Включить за 4 минуты (VPS)</h3>
-  <div class="codebox"><pre><code>apt install -y postgresql-client openssl rsync
-chmod +x /var/www/trindelka/app/deploy/backup.sh /var/www/trindelka/app/deploy/restore.sh
-cp /var/www/trindelka/app/deploy/trindelka-backup.service /etc/systemd/system/
-cp /var/www/trindelka/app/deploy/trindelka-backup.timer /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now trindelka-backup.timer</code></pre></div>
-  <p>Проверьте, что таймер встал, и сразу сделайте первую копию вручную:</p>
-  <div class="codebox"><pre><code>systemctl list-timers trindelka-backup.timer
-systemctl start trindelka-backup.service
-journalctl -u trindelka-backup.service -n 20 --no-pager
-ls -lh /var/backups/trindelka</code></pre></div>
-  <p>В журнале должна быть строка «Готово» с размером файла. Копии лежат в <code>/var/backups/trindelka/trindelka-ДАТА.tar</code>, доступ к ним только у администратора сервера.</p>
-
-  <h3>Настройки (в <code>/etc/trindelka.env</code>)</h3>
-  <div class="table-wrap"><table>
-    <tr><th>Строка</th><th>Что делает</th></tr>
-    <tr><td><code>KEEP_DAYS=14</code></td><td>Сколько дней хранить копии на сервере.</td></tr>
-    <tr><td><code>BACKUP_PASSPHRASE=ваш_пароль</code></td><td>Шифрует копию (AES-256). Файл получит окончание <code>.tar.enc</code>. <b>Запишите пароль в надёжное место: без него копию не открыть.</b> Пока пароль не задан, копия не зашифрована и файл настроек (с вашими паролями и ключами) в неё <b>не кладётся</b>.</td></tr>
-    <tr><td><code>BACKUP_REMOTE=user@другой-сервер:/backups/</code></td><td>После создания копия отправляется на другой сервер через rsync (нужен доступ по SSH-ключу). Так вы не потеряете данные, если сломается сам сервер.</td></tr>
-    <tr><td><code>BACKUP_DIR=/путь</code></td><td>Другая папка для копий.</td></tr>
-  </table></div>
-  <div class="bad"><b>Копия на том же сервере не спасёт, если сервер пропадёт</b>
-    Обязательно настройте <code>BACKUP_REMOTE</code> или раз в неделю скачивайте свежий файл на свой компьютер программой WinSCP или FileZilla (по SFTP): папка <code>/var/backups/trindelka</code>.
-  </div>
-
-  <h3>Как восстановить из копии</h3>
-  <p>Подходит и для переезда на новый сервер: поставьте проект по части 1 до шага 6 (пустая база, без загрузки данных), затем:</p>
-  <div class="codebox"><pre><code>systemctl stop trindelka
-cd /var/www/trindelka/app/deploy
-./restore.sh /var/backups/trindelka/trindelka-ДАТА.tar
-systemctl start trindelka</code></pre></div>
-  <ul>
-    <li>Скрипт проверяет целостность копии: если файл повреждён, восстановление не начнётся.</li>
-    <li>Перед заменой базы он спрашивает подтверждение: нужно ввести слово <b>ДА</b>. Текущая база будет заменена целиком.</li>
-    <li>Для зашифрованной копии (<code>.tar.enc</code>) задайте пароль: <code>BACKUP_PASSPHRASE='пароль' ./restore.sh файл.tar.enc</code>.</li>
-    <li>Файлы (аватары, фото, голосовые) возвращаются в папку, указанную в <code>LOCAL_STORAGE_DIR</code>. Права на папку: <code>chown -R www-data:www-data /var/www/trindelka/files</code>.</li>
-    <li>Копию нужно проверять: раз в месяц восстановите её на тестовом сервере и убедитесь, что люди и сообщения на месте. Непроверенная копия может оказаться пустой.</li>
-  </ul>
-
-  <h3>Хостинг с ISPmanager</h3>
-  <ul>
-    <li>Если у вас нет доступа к системному планировщику (виртуальный хостинг), используйте встроенные резервные копии панели: «Резервные копии» включает и сайт, и базу данных. Включите ежедневное копирование базы PostgreSQL и папки <code>files</code>.</li>
-    <li>Если есть SSH и «Планировщик» (cron) в панели, добавьте задание на 03:30: <code>ENV_FILE=~/trindelka-app/deploy/.env BACKUP_DIR=~/backups sh ~/trindelka-app/deploy/backup.sh</code> (нужен установленный <code>pg_dump</code>).</li>
-    <li>На VPS с ISPmanager работает вариант для VPS выше.</li>
-  </ul>
-
-  <div class="warn"><b>Что проверено</b>
-    Я проверил цикл целиком на тестовой базе PostgreSQL: сделал копию, намеренно удалил сообщения, таблицу и файлы, восстановил, и всё вернулось, включая русский текст и эмодзи. Также проверено, что повреждённый архив отвергается, а отказ на вопрос «ДА» ничего не меняет. Работу ночного таймера systemd на реальном сервере я проверить не мог.
-  </div>
-  <div class="note"><b>Версии PostgreSQL</b>
-    Копию можно восстанавливать на сервере с версией PostgreSQL не старше той, где она сделана, либо такой же. Если на новом сервере версия старее, скрипт сам убирает из копии несовместимые строки настроек, но самый надёжный путь — ставить на новом сервере ту же или более новую версию.
-  </div>
-</section>
-
-<section id="social">
-  <h2>Стикеры, опросы, настроение и краткий профиль</h2>
-
-  <h3>Стикеры</h3>
-  <ul>
-    <li>В окне смайлов появилась вкладка «Стикеры»: 4 набора (зверята, еда, эмоции, праздник), всего 48 крупных картинок. Нажатие отправляет стикер сразу, он показывается в чате крупно, без пузыря.</li>
-    <li>Звёздочка в углу стикера сохраняет его в «Избранное» (вкладка со звездой слева). Избранное личное, хранится на сервере, до 60 штук.</li>
-    <li>Картинки лежат в папке <code>public/stickers</code> и входят в сборку сайта, внешние сервисы не нужны. Это эмодзи Google Noto (лицензия Apache 2.0), поэтому их можно использовать свободно, но своих авторских наборов среди них нет.</li>
-    <li>Добавить свой набор: положите PNG (до 256 пикселей) в новую папку и допишите набор в <code>src/components/messenger/stickers/stickerCatalog.ts</code>, а на сервере в проверку адресов в <code>backend/chats/index.py</code> (строка <code>STICKER_RE</code>). Если нужно, чтобы это сделал я, просто напишите.</li>
-  </ul>
-
-  <h3>Опросы в группах</h3>
-  <ul>
-    <li>В группе: скрепка → «Опрос». Вопрос до 300 символов, от 2 до 10 вариантов, галочка «Можно выбрать несколько».</li>
-    <li>Пока человек не проголосовал, он видит варианты. После голосования появляются проценты и полоски. Проценты считаются от числа проголосовавших людей, поэтому в опросе с несколькими ответами сумма может быть больше 100%.</li>
-    <li>Свой голос можно изменить («Изменить») или забрать. Опрос завершает его автор, администратор или владелец группы кнопкой «Завершить»: после этого голосовать нельзя, а результаты остаются.</li>
-    <li>Кнопка «Кто» показывает, кто как проголосовал. Опросы <b>не анонимные</b>: это видят все участники группы.</li>
-    <li>В личных чатах опросов нет, только в группах.</li>
-  </ul>
-
-  <h3>Настроение и «о себе»</h3>
-  <ul>
-    <li>«Профиль → Настроение и о себе»: эмодзи (12 готовых), короткая фраза до 80 символов и описание «о себе» до 200 символов.</li>
-    <li>Эмодзи и фраза видны в шапке личного чата рядом с именем и в списке участников группы. Описание «о себе» открывается в кратком профиле.</li>
-    <li>Видят их только те, у кого с вами есть общий чат.</li>
-  </ul>
-
-  <h3>Краткий профиль человека и группы</h3>
-  <ul>
-    <li><b>Человек:</b> нажмите на имя и фото в шапке личного чата, на аватар автора сообщения в группе или на участника в списке участников. Откроется карточка: фото, имя, логин, статус «в сети», настроение, «о себе», общие группы и кнопка «Написать».</li>
-    <li><b>Группа:</b> нажмите на название в шапке группы. Откроется карточка с фото, описанием, числом участников и вашей ролью, оттуда можно перейти к участникам и настройкам.</li>
-    <li>Если человек скрыл статус «в сети» в приватности, в карточке статус тоже скрыт.</li>
-  </ul>
-
-  <div class="note"><b>Для своего сервера</b>
-    Новые таблицы (опросы, избранные стикеры, настроение) создаёт файл базы <code>V0019</code>. Команда применения всех файлов из части 1, шаг 6, подхватывает его сама. Для старых данных ничего переносить не нужно.
-  </div>
+<h2>9. Что умеет мессенджер</h2>
+<p>Список в том порядке, в котором функции появлялись в мессенджере. Всё перечисленное уже работает, кроме отмеченных оговорок.</p>
+<ol>
+<li><b>Вход и профиль.</b> Регистрация и вход по почте и паролю. Вход держится 6 месяцев. Восстановление пароля по письму. Профиль: логин, имя, фамилия, фото, «настроение» (эмодзи и короткая фраза) и «о себе».</li>
+<li><b>Личные чаты.</b> Поиск человека по нику, имени или фамилии и переписка один на один. Закрепление чатов вверху списка. Выключатель уведомлений для каждого чата.</li>
+<li><b>Группы.</b> Создание групп с названием, фото и описанием. Роли: владелец, администратор, участник. Добавление и удаление людей, передача владения, выход из группы.</li>
+<li><b>Темы в группах.</b> Внутри группы можно создавать темы (отдельные ветки разговора) и закреплять важные.</li>
+<li><b>Текст и ответы.</b> Отправка текста, ответ на конкретное сообщение, смайлы ICQ и обычные эмодзи, ссылки.</li>
+<li><b>Изменение отправленного сообщения.</b> Свои текстовые сообщения, фото и файлы с подписью можно исправить: правый клик → «Изменить», кнопка-карандаш рядом с сообщением или стрелка вверх в пустом поле ввода. Появляется пометка «изменено». Опрос, стикер и GIF изменить нельзя.</li>
+<li><b>Удаление.</b> Своё сообщение удаляется у всех (остаётся пометка «сообщение удалено»). Чужое сообщение можно удалить только у себя: у отправителя оно сохраняется.</li>
+<li><b>Пересылка.</b> Пересылка одного сообщения в любой чат или группу с пометкой «переслано от».</li>
+<li><b>Выбор нескольких сообщений.</b> Кнопка-галочка в шапке чата, пункт «Выбрать» в меню сообщения или долгое нажатие на телефоне включают отметки. Выбранные сообщения можно сразу переслать или удалить.</li>
+<li><b>Меню по правому клику.</b> Правый клик по сообщению (на телефоне долгое нажатие) открывает меню мессенджера: реакции, ответить, копировать, изменить, переслать, закрепить, выбрать, удалить.</li>
+<li><b>Реакции.</b> Быстрые эмодзи-реакции на сообщения.</li>
+<li><b>Закрепление сообщения.</b> Любое сообщение можно закрепить сверху чата. Если закрепить опрос, он остаётся сверху с результатами в процентах, и за него можно голосовать без прокрутки.</li>
+<li><b>Поиск в переписке.</b> Лупа в шапке чата ищет слово в открытом чате, подсвечивает совпадения и листает их.</li>
+<li><b>Общий поиск.</b> Вкладка «Поиск» → «Сообщения» ищет по всем вашим чатам и группам. Есть фильтры: по чату, по отправителю и по датам. Слово подсвечивается, клик по результату открывает чат на нужном сообщении.</li>
+<li><b>Фото и файлы.</b> Отправка фото и документов (до 8 МБ), в том числе перетаскиванием в окно и вставкой из буфера обмена (Ctrl+V).</li>
+<li><b>Голосовые и кружки.</b> Запись голосовых сообщений и видеокружков. Голосовое можно расшифровать в текст (нужен ключ OpenAI).</li>
+<li><b>GIF.</b> Встроенные GIF и живой поиск по большой библиотеке (нужен ключ Klipy).</li>
+<li><b>Стикеры.</b> Готовые наборы (зверята, еда, эмоции, праздник), избранные стикеры и свои наборы из загруженных картинок: создать набор, добавить и удалить картинки, отправлять так же, как готовые.</li>
+<li><b>Опросы.</b> Опросы в группах: один или несколько вариантов, результаты в процентах, кто как проголосовал, завершение опроса автором или администратором.</li>
+<li><b>Пересылка опроса и ссылка.</b> Опрос можно переслать в другую группу (голоса общие) или скопировать ссылку: по ней голосуют и те, кто не состоит в исходной группе.</li>
+<li><b>Отложенная отправка.</b> Часы рядом с кнопкой отправки: выбрать дату и время, и сообщение уйдёт само. Можно планировать текст, фото, файлы и стикеры. Над полем ввода список запланированного: каждое сообщение можно изменить (текст и время) или отменить.</li>
+<li><b>Черновики.</b> Набранный, но не отправленный текст сохраняется отдельно для каждого чата и темы и возвращается после закрытия или сбоя.</li>
+<li><b>Статусы и галочки.</b> «В сети», «был(а) недавно», «печатает…», доставлено и прочитано. В группах видно, сколько человек прочитало, и можно открыть список «кто прочитал».</li>
+<li><b>Приватность.</b> Можно скрыть статус «в сети», индикатор «печатает», галочки прочтения и ограничить, кто может писать вам первым (все или только контакты).</li>
+<li><b>Уведомления.</b> Уведомления на устройстве (даже при закрытом сайте), «колокольчик» внутри приложения, звук, выключатель для каждого чата.</li>
+<li><b>Тихие часы.</b> Время «с / до» (например, 23:00–8:00): в эти часы сообщения приходят без звука и вибрации.</li>
+<li><b>Звонки.</b> Голосовые и видеозвонки один на один, а также групповые звонки в группах. Входящий звонок показывается поверх экрана.</li>
+<li><b>Фон чата.</b> Для каждого чата свой фон: готовые, однотонный цвет или своя картинка.</li>
+<li><b>Оформление.</b> Тёмная, светлая или системная тема, цветовой акцент, размер текста.</li>
+<li><b>Боты.</b> Магазин демонстрационных ботов (в том числе игра «Крокодил»). Они отвечают заготовленными фразами на самом сайте и не связаны с серверными функциями.</li>
+<li><b>Вкладка «Галерея».</b> Пока заглушка с цветными плитками: реальные медиафайлы чатов там не показываются.</li>
+</ol>
 </section>
 
 <section id="trouble">
-  <h2>11. Если что-то не работает</h2>
-  <div class="table-wrap"><table>
-    <tr><th>Что видите</th><th>Причина и что делать</th></tr>
-    <tr><td>Белая страница</td><td>Загружена не собранная папка <code>dist</code>, или файлы лежат во вложенной папке. В корне сайта должен быть <code>index.html</code> и папка <code>assets</code>.</td></tr>
-    <tr><td>Ошибка 502 Bad Gateway</td><td>Серверная часть не запущена. VPS: <code>systemctl status trindelka</code> и <code>journalctl -u trindelka -n 50 --no-pager</code>.</td></tr>
-    <tr><td>«Не удалось связаться с сервером» при входе</td><td>Запросы не доходят до <code>/api</code>. Откройте в браузере <code>/api/health</code>. Если там не JSON, значит не настроен nginx (шаг 11) или Python на хостинге. Также проверьте, что запускали <code>replace-api-urls.sh</code> <b>до</b> сборки.</td></tr>
-    <tr><td>Вход выдаёт ошибку 500</td><td>Неверный <code>DATABASE_URL</code> или не созданы таблицы. Смотрите журнал службы: там будет текст ошибки базы.</td></tr>
-    <tr><td>Ошибка про отсутствующую таблицу или схему</td><td>Не создана схема <code>t_p64541051_serge_chat_app</code> или не применены файлы из <code>db_migrations</code>.</td></tr>
-    <tr><td>Страница <code>/reset-password</code> даёт 404</td><td>Не настроено открытие внутренних адресов (часть 2, шаг 3, или блок <code>try_files</code> в nginx).</td></tr>
-    <tr><td>Письма не приходят</td><td>Проверьте <code>SMTP_*</code> в настройках. Для Яндекса и Gmail нужен пароль приложения. Порт 465 использует SSL, остальные порты — STARTTLS. Загляните в папку «Спам». Ошибки отправки пишутся в журнал службы.</td></tr>
-    <tr><td>Аватар или картинка не отображается</td><td>Проверьте <code>PUBLIC_FILES_URL</code> (схема <code>https://</code>, ваш домен, <code>/files</code> на конце без слеша), права на папку <code>files</code> и что <code>LOCAL_STORAGE_DIR</code> указывает на неё.</td></tr>
-    <tr><td>Загрузка файла выдаёт ошибку</td><td>Папка <code>files</code> недоступна для записи, либо файл больше лимита. Лимиты в проекте: до 8 МБ для фото и документов, до 6 МБ для голосовых и кружков. В nginx также стоит <code>client_max_body_size 25m</code>.</td></tr>
-    <tr><td>Не приходят уведомления при закрытом приложении</td><td>Проверьте, что сайт открыт по https://, что в профиле включён переключатель «Уведомления на устройстве» и что у чата переключатель не выключен. На iPhone сайт должен быть добавлен на экран «Домой». Серверу нужен выход на порт 443.</td></tr>
-    <tr><td>Звонок не соединяется или нет звука</td><td>Нужен https:// и разрешение на микрофон (камеру) в браузере. Если у собеседников строгая сеть, понадобится свой TURN-сервер (см. раздел про звонки).</td></tr>
-    <tr><td>Ночная копия не создаётся</td><td>Посмотрите журнал: <code>journalctl -u trindelka-backup.service -n 30 --no-pager</code>. Частые причины: не установлен <code>postgresql-client</code> (нет команды <code>pg_dump</code>), задан <code>BACKUP_PASSPHRASE</code>, но нет <code>openssl</code>, не хватает места на диске (<code>df -h</code>).</td></tr>
-    <tr><td>Звонок в Android приходит, но не открывается на весь экран</td><td>Android 14 и новее: в «Профиль → Уведомления» нажмите «Разрешить» в строке «Звонки на весь экран». На телефонах Xiaomi, Huawei, Oppo, Samsung в настройках приложения «Трынделка» включите «Показ поверх экрана блокировки», «Всплывающие окна» и автозапуск.</td></tr>
-    <tr><td>В Android-приложении не приходят уведомления</td><td>Проверьте по порядку: в проект добавлен файл <code>google-services.json</code> и приложение собрано заново после этого; в секрете <code>FIREBASE_SERVICE_ACCOUNT</code> лежит весь текст файла ключа; включён «Firebase Cloud Messaging API»; на телефоне разрешены уведомления и фоновая работа; в профиле включён переключатель «Уведомления на устройстве». После смены пароля или повторного входа его нужно включить снова.</td></tr>
-    <tr><td>Поиск GIF пишет «Ключ Klipy не принят»</td><td>Проверьте секрет <code>KLIPY_API_KEY</code>: ключ должен быть скопирован целиком, без пробелов. Если вы в тестовом режиме и превысили лимит 100 запросов в час, подождите или запросите Production access.</td></tr>
-    <tr><td>Не работает расшифровка голосовых</td><td>Не указан <code>OPENAI_API_KEY</code>, либо с сервера нет доступа к OpenAI. Остальные функции от этого не зависят.</td></tr>
-    <tr><td>Ошибка 402 Payment Required</td><td>Это ответ платформы poehali.dev: исчерпан лимит вызовов функций. Появляется только в сценарии Б (или пока сайт ещё ходит на poehali.dev). При работе на своём сервере не возникает.</td></tr>
-  </table></div>
+<h2>10. Если что-то не работает</h2>
+<div class="table-wrap"><table><tr><th>Что видите</th><th>Что делать</th></tr><tr><td>Сайт открывается, но входа нет, в консоли браузера ошибки про <code>functions.poehali.dev</code></td><td>Сайт собран без <code>VITE_API_BASE=/api</code>. Пересоберите по команде из раздела 3, шаг 8</td></tr><tr><td>502 Bad Gateway на главной</td><td>Не запущена служба сайта. <code>systemctl status trindelka-web</code> и <code>journalctl -u trindelka-web -n 50 --no-pager</code></td></tr><tr><td>502 или 404 на <code>/api/...</code></td><td>Не запущены функции. <code>systemctl status trindelka</code>, проверьте <code>curl http://127.0.0.1:8000/api/health</code></td></tr><tr><td>Ошибка при создании таблиц «relation ... does not exist»</td><td>Не задана переменная <code>PGOPTIONS</code> (раздел 3, шаг 6) или пропущен один из файлов. Примените файлы по порядку с начала</td></tr><tr><td>Служба сайта не стартует, пишет про версию Node</td><td>Нужен Node.js 22.12 или новее (<code>node -v</code>)</td></tr><tr><td>Запланированное сообщение не уходит</td><td>Проверьте таймер: <code>systemctl status trindelka-dispatch.timer</code> и в <code>/etc/trindelka.env</code> значение <code>SEND_MESSAGE_URL</code></td></tr><tr><td>Фото и аватары не показываются</td><td>Проверьте <code>PUBLIC_FILES_URL</code> (должен начинаться с https:// и вашего домена) и права на папку: <code>chown -R www-data:www-data /var/www/trindelka/files</code></td></tr><tr><td>Письмо восстановления не приходит</td><td>Проверьте данные SMTP; для Яндекса и Gmail нужен пароль приложения. Ошибки в <code>journalctl -u trindelka</code></td></tr><tr><td>Уведомления не приходят</td><td>Нужен HTTPS, разрешение в браузере и включённый выключатель в Профиль → Уведомления. На iPhone сайт должен быть на экране «Домой»</td></tr></table></div>
 </section>
 
 <section id="env">
-  <h2>12. Справочник: переменные настроек</h2>
-  <div class="table-wrap"><table>
-    <tr><th>Переменная</th><th>Обязательна</th><th>Для чего и пример</th></tr>
-    <tr><td><code>DATABASE_URL</code></td><td>да</td><td>Подключение к PostgreSQL: <code>postgresql://пользователь:пароль@127.0.0.1:5432/имя_базы</code></td></tr>
-    <tr><td><code>LOCAL_STORAGE_DIR</code></td><td>да, для хранения файлов на своём сервере</td><td>Папка для файлов: <code>/var/www/trindelka/files</code>. Если не задана, файлы пытаются уйти в S3-хранилище платформы.</td></tr>
-    <tr><td><code>PUBLIC_FILES_URL</code></td><td>да</td><td>Публичный адрес этой папки: <code>https://example.ru/files</code>. Сохраняется в базу как адрес картинок.</td></tr>
-    <tr><td><code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASSWORD</code></td><td>да, для писем</td><td>Исходящая почта. Без них не работает «Забыли пароль?».</td></tr>
-    <tr><td><code>SMTP_FROM_EMAIL</code></td><td>нет</td><td>Адрес отправителя. Если не указан, берётся <code>SMTP_USER</code>.</td></tr>
-    <tr><td><code>OPENAI_API_KEY</code></td><td>нет</td><td>Расшифровка голосовых в текст.</td></tr>
-    <tr><td><code>S3_ENDPOINT</code>, <code>S3_BUCKET</code>, <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code></td><td>нет</td><td>Только если вместо папки на сервере вы хотите хранить файлы в своём S3-хранилище (тогда не задавайте <code>LOCAL_STORAGE_DIR</code>, но задайте <code>PUBLIC_FILES_URL</code> — публичный адрес бакета).</td></tr>
-    <tr><td><code>ENV_FILE</code></td><td>нет</td><td>Путь к файлу настроек, если он лежит не в <code>deploy/.env</code>.</td></tr>
-  </table></div>
-  <div class="note"><b>Одно из правил безопасности</b>
-    Никогда не выкладывайте файл настроек в GitHub и не отправляйте его в чат или на почту. Если пароль всё-таки утёк, смените его в базе, у почтового сервиса и в файле настроек, затем перезапустите службу.
-  </div>
+<h2>11. Справочник: переменные настроек</h2>
+<p>Файл <code>/etc/trindelka.env</code>. Переменная <code>VITE_API_BASE</code> задаётся не здесь, а только в момент сборки сайта.</p>
+<div class="table-wrap"><table><tr><th>Переменная</th><th>Обязательна</th><th>Для чего</th></tr><tr><td><code>DATABASE_URL</code></td><td>да</td><td>Адрес вашей базы PostgreSQL</td></tr><tr><td><code>LOCAL_STORAGE_DIR</code></td><td>да</td><td>Папка для файлов на сервере</td></tr><tr><td><code>PUBLIC_FILES_URL</code></td><td>да</td><td>Публичный адрес папки с файлами</td></tr><tr><td><code>PUBLIC_SITE_URL</code></td><td>да</td><td>Адрес сайта (для ссылки в письме восстановления)</td></tr><tr><td><code>SEND_MESSAGE_URL</code></td><td>да</td><td>Внутренний адрес отправки сообщений для запланированных</td></tr><tr><td><code>SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM_EMAIL</code></td><td>да</td><td>Почта для писем восстановления пароля</td></tr><tr><td><code>OPENAI_API_KEY</code></td><td>нет</td><td>Расшифровка голосовых</td></tr><tr><td><code>KLIPY_API_KEY</code></td><td>нет</td><td>Живой поиск GIF</td></tr><tr><td><code>PUSH_CONTACT</code></td><td>нет</td><td>Почта для связи в уведомлениях</td></tr><tr><td><code>TURN_URL, TURN_USER, TURN_PASSWORD</code></td><td>нет</td><td>Свой TURN-сервер для звонков</td></tr><tr><td><code>FIREBASE_SERVICE_ACCOUNT</code></td><td>нет</td><td>Уведомления в Android-приложении</td></tr><tr><td><code>BACKUP_DIR, KEEP_DAYS, BACKUP_PASSPHRASE, BACKUP_REMOTE</code></td><td>нет</td><td>Настройки ночной резервной копии</td></tr></table></div>
 </section>
 
-<footer>Инструкция составлена по коду проекта «Трынделка». При сомнениях сделайте пробный запуск на тестовом домене.</footer>
-
+<footer>Инструкция актуальна для сайта на TanStack Start и базы до миграции V0021.</footer>
 </div>
 
 <script>

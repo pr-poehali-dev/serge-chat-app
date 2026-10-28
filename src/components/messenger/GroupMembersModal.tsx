@@ -7,9 +7,8 @@ import MembersTab from "./groupMembers/MembersTab";
 import { AddPeopleTab, AddBotsTab } from "./groupMembers/AddTabs";
 import GroupSettingsTab from "./groupMembers/GroupSettingsTab";
 import ConfirmDialog from "./groupMembers/ConfirmDialog";
+import { API_CHATS, API_AUTH } from "@/pages/index/config";
 
-const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
-const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
 
 interface GroupMembersModalProps {
   chat: Chat;

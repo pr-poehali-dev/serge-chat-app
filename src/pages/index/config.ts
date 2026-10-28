@@ -1,10 +1,13 @@
 export const CROCODILE_USERNAME = "crocodile_game_bot";
 
-export const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
-export const API_SEND = "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6";
-export const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
-export const API_TRANSCRIBE = "https://functions.poehali.dev/9c47e0da-18f9-4bab-96c3-0531023fb5cc";
-export const API_PUSH = "https://functions.poehali.dev/8415601d-6478-4ed7-947d-cfbee7dfbb93";
+const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined) || "").replace(/\/+$/, "");
+const apiUrl = (name: string, platformUrl: string) => (API_BASE ? `${API_BASE}/${name}` : platformUrl);
+
+export const API_CHATS = apiUrl("chats", "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb");
+export const API_SEND = apiUrl("send-message", "https://functions.poehali.dev/d2179cfe-604e-4dda-9a8e-94247336ffb6");
+export const API_AUTH = apiUrl("auth", "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b");
+export const API_TRANSCRIBE = apiUrl("transcribe", "https://functions.poehali.dev/9c47e0da-18f9-4bab-96c3-0531023fb5cc");
+export const API_PUSH = apiUrl("push", "https://functions.poehali.dev/8415601d-6478-4ed7-947d-cfbee7dfbb93");
 export const SESSION_STORAGE_KEY = "trindelka_session_id";
 export const SESSION_EXPIRED_KEY = "trindelka_session_expired";
 

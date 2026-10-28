@@ -3,10 +3,9 @@ import Icon from "@/components/ui/icon";
 import { Chat, Tab, AuthUser, NotificationItem, DirectoryUser, FoundMessage } from "../types";
 import GlobalSearch from "./GlobalSearch";
 import SettingsPanels, { SettingsSection } from "./SettingsPanels";
-import { API_CHATS } from "@/pages/index/config";
+import { API_CHATS, API_AUTH } from "@/pages/index/config";
 import { useAppearance } from "@/hooks/use-appearance";
 
-const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
 
 const GALLERY_ITEMS = [
   { id: 1, type: "photo", bg: "linear-gradient(135deg, #a855f7, #ec4899)" },
@@ -279,7 +278,7 @@ export default function MiscTabs({
             ))}
           </div>
           {searchMode === "messages" && authUser && onOpenFoundMessage && (
-            <GlobalSearch sessionId={authUser.sessionId} onOpenResult={onOpenFoundMessage} />
+            <GlobalSearch sessionId={authUser.sessionId} chats={chats} onOpenResult={onOpenFoundMessage} />
           )}
           {searchMode === "people" && (<>
           <div className="flex items-center gap-2 rounded-2xl bg-fg/[0.06] border border-fg/[0.08] px-3 py-3 mb-4">

@@ -1,0 +1,15 @@
+[Unit]
+Description=Trindelka website (server rendering)
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/trindelka/app/dist/server
+Environment=NODE_ENV=production
+ExecStart=/var/www/trindelka/app/node_modules/.bin/srvx serve --prod --host 127.0.0.1 --port 3000 --entry /var/www/trindelka/app/dist/server/server.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -171,12 +171,13 @@ def dispatch_due() -> dict:
     sent = []
     try:
         cur.execute(f"""
-            SELECT id, chat_id, topic_id, sender_id, text FROM {SCHEMA}.scheduled_messages
+            SELECT id, chat_id, topic_id, sender_id, text, kind, media_url, file_name, file_size
+            FROM {SCHEMA}.scheduled_messages
             WHERE status = 'pending' AND send_at <= %s
             ORDER BY send_at LIMIT 30 FOR UPDATE SKIP LOCKED
         """, (datetime.now(timezone.utc).replace(tzinfo=None),))
         rows = cur.fetchall()
-        for sid, chat_id, topic_id, sender_id, text in rows:
+        for sid, chat_id, topic_id, sender_id, text, kind, media_url, file_name, file_size in rows:
             cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_members WHERE chat_id = %s AND user_id = %s", (chat_id, sender_id))
             if not cur.fetchone():
                 cur.execute(f"UPDATE {SCHEMA}.scheduled_messages SET status = 'failed' WHERE id = %s", (sid,))
@@ -185,17 +186,18 @@ def dispatch_due() -> dict:
                 cur.execute(f"SELECT 1 FROM {SCHEMA}.chat_topics WHERE id = %s AND chat_id = %s", (topic_id, chat_id))
                 if not cur.fetchone():
                     topic_id = None
+            kind = kind or "text"
             cur.execute(f"""
-                INSERT INTO {SCHEMA}.messages (chat_id, sender_id, text, is_read, kind, topic_id)
-                VALUES (%s, %s, %s, false, 'text', %s) RETURNING id
-            """, (chat_id, sender_id, text, topic_id))
+                INSERT INTO {SCHEMA}.messages (chat_id, sender_id, text, is_read, kind, topic_id, media_url, file_name, file_size)
+                VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s) RETURNING id
+            """, (chat_id, sender_id, text, kind, topic_id, media_url, file_name, file_size))
             mid = cur.fetchone()[0]
             cur.execute(f"UPDATE {SCHEMA}.scheduled_messages SET status = 'sent', message_id = %s WHERE id = %s", (mid, sid))
-            sent.append((chat_id, sender_id, topic_id, text, mid))
+            sent.append((chat_id, sender_id, topic_id, text, mid, kind, file_name or ""))
         conn.commit()
-        for chat_id, sender_id, topic_id, text, mid in sent:
+        for chat_id, sender_id, topic_id, text, mid, kind, fname in sent:
             try:
-                notify_members(conn, cur, chat_id, sender_id, topic_id, "text", text, "", mid)
+                notify_members(conn, cur, chat_id, sender_id, topic_id, kind, text, fname, mid)
             except Exception as e:
                 print(f"notify scheduled failed: {type(e).__name__}: {e}")
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({"sent": len(sent)})}

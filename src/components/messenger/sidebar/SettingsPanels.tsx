@@ -6,8 +6,8 @@ import { AuthUser, Chat } from "../types";
 import { disablePush, enablePush, getExistingSubscription, pushSupport } from "@/lib/push";
 import { isNativeApp, startNativePush, stopNativePush } from "@/lib/nativePush";
 import { fullScreenAllowed, openFullScreenSettings } from "@/lib/callPrefs";
+import { API_CHATS } from "@/pages/index/config";
 
-const API_CHATS = "https://functions.poehali.dev/50b38462-4054-480e-85a6-3d1d593be5fb";
 const NOTIFY_KEY = "trindelka_notify_prefs";
 
 export type SettingsSection = "notifications" | "privacy" | "appearance";

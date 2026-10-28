@@ -1,8 +1,8 @@
 import { useState } from "react";
 import Icon from "@/components/ui/icon";
 import { AuthUser } from "./types";
+import { API_AUTH } from "@/pages/index/config";
 
-const API_AUTH = "https://functions.poehali.dev/85275f0b-0f01-4c18-9133-e7e903ca579b";
 
 interface AuthScreenProps {
   onAuthenticated: (user: AuthUser) => void;

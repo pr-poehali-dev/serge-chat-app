@@ -90,6 +90,8 @@ interface ChatAreaProps {
   scheduledItems?: ScheduledItem[];
   onScheduleMessage?: (whenMs: number) => Promise<string | null>;
   onCancelScheduled?: (id: number) => void;
+  onUpdateScheduled?: (id: number, patch: { text?: string; whenMs?: number }) => Promise<string | null>;
+  onScheduleSticker?: (path: string, whenMs: number) => Promise<string | null>;
   foundFocus?: { messageId: number; query: string; nonce: number } | null;
 }
 
@@ -168,6 +170,8 @@ export default function ChatArea({
   scheduledItems,
   onScheduleMessage,
   onCancelScheduled,
+  onUpdateScheduled,
+  onScheduleSticker,
   foundFocus,
 }: ChatAreaProps) {
   const [selectMode, setSelectMode] = useState(false);
@@ -222,6 +226,18 @@ export default function ChatArea({
     setSelectedIds((prev) => prev.filter((id) => messages.some((m) => m.id === id && !m.removed)));
   }, [messages]);
 
+  const editLast = () => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (!m.out || m.removed || m.id >= 1e12 || m.poll) continue;
+      const text = m.text || "";
+      const plain = !m.kind || m.kind === "text" || m.kind === "image" || m.kind === "file";
+      if (!plain || /^(\/stickers\/|\S+\.gif$)/i.test(text.trim())) continue;
+      onEdit?.(m);
+      return;
+    }
+  };
+
   const toggleSelect = (id: number) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const startSelect = (id: number) => {
@@ -233,13 +249,23 @@ export default function ChatArea({
     setSelectedIds([]);
   };
 
+  const [localJump, setLocalJump] = useState<{ id: number; nonce: number } | null>(null);
+
   useEffect(() => {
     if (!foundFocus) return;
-    pendingFocusRef.current = foundFocus.messageId;
     setSelectMode(false);
+    if (!foundFocus.query.trim()) {
+      pendingFocusRef.current = null;
+      setLocalJump({ id: foundFocus.messageId, nonce: foundFocus.nonce });
+      return;
+    }
+    pendingFocusRef.current = foundFocus.messageId;
     setSearchOpen(true);
     setSearchQuery(foundFocus.query);
   }, [foundFocus?.nonce]);
+
+  const effectiveJump =
+    localJump && (!jumpRequest || localJump.nonce >= jumpRequest.nonce) ? localJump : jumpRequest;
 
   useEffect(() => {
     const target = pendingFocusRef.current;
@@ -296,6 +322,11 @@ export default function ChatArea({
             onBack={onBack}
             onToggleSearch={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
             searchOpen={searchOpen}
+            onStartSelectMode={
+              (onForwardSelected || onDeleteSelected) && messages.some((m) => !m.removed && m.id < 1e12)
+                ? () => (selectMode ? exitSelect() : (setSelectMode(true), setSelectedIds([])))
+                : undefined
+            }
           />
 
           {searchOpen && (
@@ -352,7 +383,7 @@ export default function ChatArea({
               onPinMessage ? (m) => onPinMessage(pinned?.id === m.id ? null : m.id) : undefined
             }
             onForward={onForward}
-            jumpRequest={jumpRequest}
+            jumpRequest={effectiveJump}
             onOpenReadBy={onOpenReadBy}
             onVotePoll={onVotePoll}
             onClosePoll={onClosePoll}
@@ -422,6 +453,9 @@ export default function ChatArea({
             scheduledItems={scheduledItems}
             onScheduleMessage={onScheduleMessage}
             onCancelScheduled={onCancelScheduled}
+            onUpdateScheduled={onUpdateScheduled}
+            onScheduleSticker={onScheduleSticker}
+            onEditLast={onEdit ? editLast : undefined}
           />
           )}
         </>

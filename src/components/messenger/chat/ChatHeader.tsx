@@ -21,6 +21,7 @@ interface ChatHeaderProps {
   onBack?: () => void;
   onToggleSearch?: () => void;
   searchOpen?: boolean;
+  onStartSelectMode?: () => void;
 }
 
 export default function ChatHeader({
@@ -42,6 +43,7 @@ export default function ChatHeader({
   onBack,
   onToggleSearch,
   searchOpen,
+  onStartSelectMode,
 }: ChatHeaderProps) {
   return (
     <>
@@ -146,6 +148,16 @@ export default function ChatHeader({
                 }`}
               >
                 <Icon name="Search" size={16} />
+              </button>
+            )}
+            {onStartSelectMode && (
+              <button
+                onClick={onStartSelectMode}
+                title="Выбрать сообщения"
+                aria-label="Выбрать сообщения"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-fg/40 hover:text-fg/80 hover:bg-fg/[0.06] transition-all"
+              >
+                <Icon name="CheckSquare" size={16} />
               </button>
             )}
             {onOpenBackground && (

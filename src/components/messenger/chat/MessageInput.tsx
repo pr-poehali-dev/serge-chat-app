@@ -48,6 +48,9 @@ interface MessageInputProps {
   scheduledItems?: ScheduledItem[];
   onScheduleMessage?: (whenMs: number) => Promise<string | null>;
   onCancelScheduled?: (id: number) => void;
+  onUpdateScheduled?: (id: number, patch: { text?: string; whenMs?: number }) => Promise<string | null>;
+  onScheduleSticker?: (path: string, whenMs: number) => Promise<string | null>;
+  onEditLast?: () => void;
 }
 
 export default function MessageInput({
@@ -88,6 +91,9 @@ export default function MessageInput({
   scheduledItems = [],
   onScheduleMessage,
   onCancelScheduled,
+  onUpdateScheduled,
+  onScheduleSticker,
+  onEditLast,
 }: MessageInputProps) {
   const [recordingActive, setRecordingActive] = useState(false);
   const hasDraft = inputText.trim().length > 0 || attachments.length > 0 || !!editingMessage;
@@ -109,7 +115,9 @@ export default function MessageInput({
           </div>
         )}
 
-        {onCancelScheduled && <ScheduledList items={scheduledItems} onCancel={onCancelScheduled} />}
+        {onCancelScheduled && onUpdateScheduled && (
+          <ScheduledList items={scheduledItems} onCancel={onCancelScheduled} onUpdate={onUpdateScheduled} />
+        )}
 
         {(replyTo || editingMessage) && (
           <div className="mb-2 flex items-center gap-3 rounded-xl bg-fg/[0.05] border-l-2 border-purple-400 px-3 py-2 animate-fade-in">
@@ -220,6 +228,7 @@ export default function MessageInput({
             setInputText={setInputText}
             onPickGif={onSendGif}
             onPickSticker={onSendSticker}
+            onScheduleSticker={onScheduleSticker}
             sessionId={sessionId}
           />
 
@@ -245,6 +254,11 @@ export default function MessageInput({
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   sendMessage();
+                  return;
+                }
+                if (e.key === "ArrowUp" && !inputText && !editingMessage && attachments.length === 0 && onEditLast) {
+                  e.preventDefault();
+                  onEditLast();
                 }
               }}
               style={{ maxHeight: "120px" }}
@@ -260,7 +274,7 @@ export default function MessageInput({
             />
           )}
 
-          {onScheduleMessage && inputText.trim().length > 0 && attachments.length === 0 && !editingMessage && !recordingActive && (
+          {onScheduleMessage && (inputText.trim().length > 0 || attachments.length > 0) && !editingMessage && !recordingActive && (
             <SchedulePopover onSchedule={onScheduleMessage} />
           )}
 

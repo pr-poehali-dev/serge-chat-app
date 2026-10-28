@@ -172,6 +172,15 @@ export interface ScheduledItem {
   topicId: number | null;
   text: string;
   sendAtMs: number;
+  kind?: "text" | "image" | "file";
+  mediaUrl?: string | null;
+  fileName?: string | null;
+}
+
+export interface ScheduleDraft {
+  kind: "text" | "image" | "file";
+  text: string;
+  file?: File;
 }
 
 export interface CustomSticker {

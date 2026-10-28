@@ -245,6 +245,28 @@
       "body": {
         "poll_id": 1
       }
+    },
+    {
+      "name": "Edit scheduled without session returns 401",
+      "method": "POST",
+      "path": "/?action=edit-scheduled",
+      "expectedStatus": 401,
+      "body": {
+        "id": 1,
+        "text": "x"
+      }
+    },
+    {
+      "name": "Search senders without session returns 401",
+      "method": "GET",
+      "path": "/?action=search-senders",
+      "expectedStatus": 401
+    },
+    {
+      "name": "Search messages without session returns 401",
+      "method": "GET",
+      "path": "/?action=search-messages&q=test",
+      "expectedStatus": 401
     }
   ]
 }

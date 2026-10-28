@@ -137,10 +137,31 @@ export default function Index() {
 
   const scheduled = useScheduled({ authUser, authHeaders, chatId: realChatId, topicId: bg.activeTopicId });
   const scheduleFromInput = async (whenMs: number): Promise<string | null> => {
-    const err = await scheduled.schedule(composer.inputText, whenMs);
-    if (!err) composer.setInputText("");
-    return err;
+    const caption = composer.inputText.trim();
+    const files = composer.attachments;
+    if (files.length === 0) {
+      const err = await scheduled.schedule({ kind: "text", text: caption }, whenMs);
+      if (!err) composer.setInputText("");
+      return err;
+    }
+    for (let i = 0; i < files.length; i++) {
+      const att = files[i];
+      if (!att.file) return "Не удалось прочитать файл";
+      const err = await scheduled.schedule(
+        { kind: att.type.startsWith("image/") ? "image" : "file", text: i === 0 ? caption : "", file: att.file },
+        whenMs + i
+      );
+      if (err) {
+        composer.setAttachments(files.slice(i));
+        if (i > 0) composer.setInputText("");
+        return err;
+      }
+    }
+    composer.setAttachments([]);
+    composer.setInputText("");
+    return null;
   };
+  const scheduleSticker = (path: string, whenMs: number) => scheduled.schedule({ kind: "text", text: path }, whenMs);
 
   useDraft({
     userId: authUser?.id ?? null,
@@ -339,6 +360,8 @@ export default function Index() {
         scheduledItems={realChatId ? scheduled.items : undefined}
         onScheduleMessage={realChatId ? scheduleFromInput : undefined}
         onCancelScheduled={realChatId ? scheduled.cancel : undefined}
+        onUpdateScheduled={realChatId ? scheduled.update : undefined}
+        onScheduleSticker={realChatId ? scheduleSticker : undefined}
         foundFocus={foundFocus}
       />
       )}

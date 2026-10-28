@@ -1,11 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Icon from "@/components/ui/icon";
 import { API_CHATS } from "@/pages/index/config";
-import { FoundMessage } from "../types";
+import { Chat, FoundMessage } from "../types";
 
 interface GlobalSearchProps {
   sessionId: string;
+  chats: Chat[];
   onOpenResult: (found: FoundMessage, query: string) => void;
+}
+
+interface Sender {
+  id: number;
+  name: string;
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -30,26 +36,58 @@ function Highlight({ text, query }: { text: string; query: string }) {
   return <>{parts}</>;
 }
 
-export default function GlobalSearch({ sessionId, onOpenResult }: GlobalSearchProps) {
+const selectClass =
+  "w-full rounded-xl border border-fg/[0.08] bg-fg/[0.06] px-2.5 py-2 text-xs text-fg/85 outline-none focus:border-purple-500/40";
+
+export default function GlobalSearch({ sessionId, chats, onOpenResult }: GlobalSearchProps) {
   const [query, setQuery] = useState("");
+  const [chatId, setChatId] = useState("");
+  const [senderId, setSenderId] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [senders, setSenders] = useState<Sender[]>([]);
   const [results, setResults] = useState<FoundMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [searchedFor, setSearchedFor] = useState("");
+  const [searched, setSearched] = useState<{ q: string; key: string } | null>(null);
+
+  const realChats = useMemo(() => chats.filter((c) => c.id > 0 && !c.isBot), [chats]);
+  const activeFilters = [chatId, senderId, dateFrom, dateTo].filter(Boolean).length;
+  const dateError = dateFrom && dateTo && dateFrom > dateTo ? "Дата «с» позже даты «по»" : "";
+  const hasFilter = activeFilters > 0;
+  const canSearch = (query.trim().length >= 2 || hasFilter) && !dateError;
+  const filterKey = [chatId, senderId, dateFrom, dateTo].join("|");
 
   useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
+    if (!filtersOpen || senders.length > 0) return;
+    let alive = true;
+    fetch(`${API_CHATS}?action=search-senders`, { headers: { "X-Session-Id": sessionId } })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => alive && setSenders(d.senders || []))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [filtersOpen, sessionId]);
+
+  useEffect(() => {
+    if (!canSearch) {
       setResults([]);
       setLoading(false);
       setError("");
-      setSearchedFor("");
+      setSearched(null);
       return;
     }
     setLoading(true);
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      fetch(`${API_CHATS}?action=search-messages&q=${encodeURIComponent(q)}`, { headers: { "X-Session-Id": sessionId } })
+      const params = new URLSearchParams({ action: "search-messages", q: query.trim(), tz: String(-new Date().getTimezoneOffset()) });
+      if (chatId) params.set("chat_id", chatId);
+      if (senderId) params.set("sender_id", senderId);
+      if (dateFrom) params.set("date_from", dateFrom);
+      if (dateTo) params.set("date_to", dateTo);
+      fetch(`${API_CHATS}?${params.toString()}`, { headers: { "X-Session-Id": sessionId } })
         .then(async (r) => {
           const d = await r.json().catch(() => ({}));
           if (cancelled) return;
@@ -59,7 +97,7 @@ export default function GlobalSearch({ sessionId, onOpenResult }: GlobalSearchPr
           } else {
             setError("");
             setResults(d.results || []);
-            setSearchedFor(q);
+            setSearched({ q: query.trim(), key: filterKey });
           }
         })
         .catch(() => !cancelled && setError("Не удалось связаться с сервером"))
@@ -69,11 +107,20 @@ export default function GlobalSearch({ sessionId, onOpenResult }: GlobalSearchPr
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, sessionId]);
+  }, [query, filterKey, sessionId, canSearch]);
+
+  const resetFilters = () => {
+    setChatId("");
+    setSenderId("");
+    setDateFrom("");
+    setDateTo("");
+  };
+
+  const highlightQuery = searched?.q || query.trim();
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2 rounded-2xl border border-fg/[0.08] bg-fg/[0.06] px-3 py-3">
+      <div className="mb-2 flex items-center gap-2 rounded-2xl border border-fg/[0.08] bg-fg/[0.06] px-3 py-3">
         <Icon name="MessageSquareText" size={16} className="text-purple-400" />
         <input
           className="flex-1 bg-transparent text-sm text-fg/80 outline-none placeholder:text-fg/25"
@@ -89,20 +136,83 @@ export default function GlobalSearch({ sessionId, onOpenResult }: GlobalSearchPr
         )}
       </div>
 
+      <div className="mb-3 flex items-center justify-between gap-2 px-1">
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
+            filtersOpen || hasFilter ? "text-purple-300" : "text-fg/45 hover:text-fg/70"
+          }`}
+        >
+          <Icon name="SlidersHorizontal" size={13} />
+          Фильтры{hasFilter ? `: ${activeFilters}` : ""}
+        </button>
+        {hasFilter && (
+          <button type="button" onClick={resetFilters} className="text-[11px] text-fg/40 underline-offset-2 hover:text-fg/70 hover:underline">
+            Сбросить
+          </button>
+        )}
+      </div>
+
+      {filtersOpen && (
+        <div className="mb-3 space-y-2 rounded-2xl border border-fg/[0.06] bg-fg/[0.04] p-3 animate-fade-in">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-fg/45">Чат или группа</span>
+            <select value={chatId} onChange={(e) => setChatId(e.target.value)} className={selectClass}>
+              <option value="">Все чаты</option>
+              {realChats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.isGroup ? "Группа: " : ""}
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-fg/45">Отправитель</span>
+            <select value={senderId} onChange={(e) => setSenderId(e.target.value)} className={selectClass}>
+              <option value="">Любой</option>
+              {senders.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-medium text-fg/45">Дата с</span>
+              <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} className={selectClass} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-medium text-fg/45">Дата по</span>
+              <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} className={selectClass} />
+            </label>
+          </div>
+          {dateError && <p className="text-xs text-red-400">{dateError}</p>}
+        </div>
+      )}
+
       {error && <p className="px-1 pb-2 text-xs text-red-400">{error}</p>}
 
-      {query.trim().length < 2 ? (
+      {!canSearch ? (
         <p className="px-2 py-6 text-center text-xs leading-relaxed text-fg/30">
-          Поиск идёт по всем вашим чатам и группам. Введите хотя бы две буквы.
+          Поиск идёт по всем вашим чатам и группам. Введите хотя бы две буквы или выберите фильтр.
         </p>
-      ) : results.length === 0 && !loading && !error && searchedFor === query.trim() ? (
+      ) : results.length === 0 && !loading && !error && searched && searched.key === filterKey ? (
         <p className="py-6 text-center text-xs text-fg/30">Ничего не найдено</p>
       ) : (
         <div className="space-y-1">
+          {results.length > 0 && (
+            <p className="px-1 pb-1 text-[11px] text-fg/30">
+              Найдено: {results.length}
+              {results.length >= 40 ? " (показаны первые 40, уточните запрос)" : ""}
+            </p>
+          )}
           {results.map((r) => (
             <button
               key={r.messageId}
-              onClick={() => onOpenResult(r, searchedFor || query.trim())}
+              onClick={() => onOpenResult(r, highlightQuery)}
               className="block w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:bg-fg/[0.06]"
             >
               <span className="flex items-center justify-between gap-2">
@@ -115,7 +225,7 @@ export default function GlobalSearch({ sessionId, onOpenResult }: GlobalSearchPr
               </span>
               <span className="mt-0.5 block text-[11px] text-fg/40">{r.senderName}</span>
               <span className="mt-0.5 block break-words text-xs leading-snug text-fg/65 line-clamp-3">
-                <Highlight text={r.snippet} query={searchedFor || query} />
+                <Highlight text={r.snippet} query={highlightQuery} />
               </span>
             </button>
           ))}
